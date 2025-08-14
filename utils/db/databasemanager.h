@@ -31,18 +31,17 @@ public:
     // Check-in: tạo bản ghi mới khi thẻ rảnh
     // Trả về 1 nếu thành công, -2 nếu đang gửi, -1 nếu lỗi
     Q_INVOKABLE CheckInResult checkIn(const QString &rfid,
-                                      const QString &plateFront,
-                                      const QString &plateRear,
-                                      const QByteArray &frontImage,
-                                      const QByteArray &rearImage) override;
+                                      const QString &plate,
+                                      const QByteArray &image1,
+                                      const QByteArray &image2) override;
 
     // Check-out: so sánh biển số (trước/sau) với bản ghi đang mở
     // Trả về 1 nếu khớp và cập nhật thành công; 0 nếu không khớp; -2 nếu không có phiên mở; -1 nếu lỗi
     Q_INVOKABLE CheckOutResult checkOut(const QString &rfid,
-                                        const QString &plateFront,
-                                        const QString &plateRear,
-                                        const QByteArray &frontImage,
-                                        const QByteArray &rearImage) override;
+                                        const QString &plate) override;
+    Q_INVOKABLE QVariantMap fetchOpenSession(const QString &rfid) override;
+    Q_INVOKABLE CheckOutResult checkOutRfidOnly(const QString &rfid, QString *checkoutTimeOut) override;
+    Q_INVOKABLE bool deleteClosedSessions(const QString &rfid) override;
 
 private:
     QSqlDatabase DB_Connection;
@@ -50,19 +49,13 @@ private:
     // Khởi tạo lược đồ V2 nguyên khối (idempotent)
     bool ensureSchema();
     // Truy vấn bản ghi đang mở (nếu có)
-    std::optional<ParkingRecord> findOpenByRfid(const QString &encodedRfid);
-    // Tạo mới bản ghi check-in
-    bool insertRecord(const ParkingRecord &rec);
-    // Cập nhật bản ghi khi check-out
-    bool updateCheckoutById(int id, qint64 checkoutTime,
-                            const QString &frontPath,
-                            const QString &rearPath);
+    std::optional<QVariantMap> findOpenByRfid(const QString &encodedRfid);
     // Mã hóa/che mờ đơn giản cho trường nhạy cảm (RFID, biển số) – có thể thay bằng mã hóa thực tế
     QString encodeText(const QString &plain) const;
     // Chuẩn hóa chuỗi để đặt tên file an toàn
     QString sanitizeForFile(const QString &s) const;
-    // Lưu ảnh JPEG ra đĩa, trả về đường dẫn
-    QString saveJpeg(const QByteArray &bytes, const QString &role, const QString &rfid, qint64 ts) const;
+    // Tạo timestamp dạng TEXT (ISO 8601)
+    QString nowIso8601() const;
 };
 
 #endif // DATABASEMANAGER_H

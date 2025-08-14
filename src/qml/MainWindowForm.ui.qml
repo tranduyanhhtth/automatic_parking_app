@@ -30,7 +30,7 @@ Item {
                 color: "black"
                 Text {
                     anchors.centerIn: parent
-                    text: "AUTOMATIC PARKING"
+                    text: "BÃI ĐỖ XE TỰ ĐỘNG"
                     font.bold: true
                     font.pixelSize: 32
                     color: "white"
@@ -175,7 +175,7 @@ Item {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             text: " BIỂN SỐ XE: "
-                            font.pixelSize: 22
+                            font.pixelSize: 18
                             font.bold: true
                         }
                     }
@@ -188,8 +188,8 @@ Item {
                         Text {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: " TỔNG SỐ XE: "
-                            font.pixelSize: 22
+                            text: " TỔNG SỐ XE: " + app.openCount
+                            font.pixelSize: 18
                             font.bold: true
                         }
                     }
@@ -202,8 +202,8 @@ Item {
                         Text {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: " THỜI GIAN VÀO: "
-                            font.pixelSize: 22
+                            text: " THỜI GIAN VÀO: " + (app.checkInTime || "")
+                            font.pixelSize: 18
                             font.bold: true
                         }
                     }
@@ -216,8 +216,8 @@ Item {
                         Text {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: " THỜI GIAN RA: "
-                            font.pixelSize: 22
+                            text: " THỜI GIAN RA: " + (app.checkOutTime || "")
+                            font.pixelSize: 18
                             font.bold: true
                         }
                     }
@@ -230,8 +230,8 @@ Item {
                         Text {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
-                            text: " ID THẺ: "
-                            font.pixelSize: 22
+                            text: " ID THẺ: " + (app.lastRfid || "")
+                            font.pixelSize: 18
                             font.bold: true
                         }
                     }
@@ -245,7 +245,7 @@ Item {
                             anchors.left: parent.left
                             anchors.verticalCenter: parent.verticalCenter
                             text: " TIỀN: "
-                            font.pixelSize: 22
+                            font.pixelSize: 18
                             font.bold: true
                         }
                     }
@@ -254,37 +254,95 @@ Item {
                         height: 180
                         spacing: 20
                         Layout.fillWidth: true
+                        // Log khu vực: hiển thị debugLog từ cardReader
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 120
+                            color: "#111"
+                            radius: 4
+                            border.color: "#444"
+                            ColumnLayout {
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                spacing: 4
+                                Text {
+                                    text: "HID LOG"
+                                    color: "#ccc"
+                                    font.pixelSize: 14
+                                    font.bold: true
+                                }
+                                ListView {
+                                    id: hidLogView
+                                    Layout.fillWidth: true
+                                    Layout.fillHeight: true
+                                    model: hidLogModel
+                                    delegate: Text {
+                                        text: model.display
+                                        font.pixelSize: 12
+                                        color: "#9f9"
+                                        wrapMode: Text.NoWrap
+                                    }
+                                }
+                                ListModel {
+                                    id: hidLogModel
+                                }
+                                Connections {
+                                    target: cardReader
+                                    function onDebugLog(msg) {
+                                        hidLogModel.append({
+                                                               "display": Qt.formatTime(
+                                                                              new Date(),
+                                                                              "hh:mm:ss") + " "
+                                                                          + msg
+                                                           })
+                                        if (hidLogModel.count > 200)
+                                            hidLogModel.remove(
+                                                        0,
+                                                        hidLogModel.count - 200)
+                                        hidLogView.positionViewAtEnd()
+                                    }
+                                }
+                            }
+                        }
 
                         RowLayout {
                             Button {
                                 id: btnCongVao
+                                width: 237
                                 height: 60
                                 text: "CỔNG VÀO"
                                 font.pixelSize: 18
                                 Layout.fillWidth: true
+                                background: Rectangle {
+                                    radius: 4
+                                    color: app.gateMode === 0 ? "#2d6cdf" : "#555"
+                                }
+                                onClicked: app.gateMode = 0
                             }
 
                             Button {
                                 id: btnCongRa
+                                width: 237
                                 height: 60
+                                x: 236.5
                                 text: "CỔNG RA"
                                 font.pixelSize: 18
                                 Layout.fillWidth: true
+
+                                background: Rectangle {
+                                    radius: 4
+                                    color: app.gateMode === 1 ? "#c95020" : "#555"
+                                }
+                                onClicked: app.gateMode = 1
                             }
                         }
 
                         Button {
                             height: 60
-                            text: "THÊM"
+                            text: "MỞ"
                             font.pixelSize: 18
                             Layout.fillWidth: true
-                        }
-
-                        Button {
-                            height: 60
-                            text: "XÓA"
-                            font.pixelSize: 18
-                            Layout.fillWidth: true
+                            // onClicked: app.deleteClosed(app.lastRfid)
                         }
                     }
                 }

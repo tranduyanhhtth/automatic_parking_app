@@ -21,9 +21,13 @@ class CardReader;
 class ParkingController : public QObject
 {
     Q_OBJECT
-    Q_PROPERTY(QString plateFront READ plateFront NOTIFY plateFrontChanged)
-    Q_PROPERTY(QString plateRear READ plateRear NOTIFY plateRearChanged)
+    Q_PROPERTY(QString plate READ plate NOTIFY plateChanged)
     Q_PROPERTY(QString message READ message NOTIFY messageChanged)
+    Q_PROPERTY(QString lastRfid READ lastRfid NOTIFY lastRfidChanged)
+    Q_PROPERTY(QString checkInTime READ checkInTime NOTIFY timesChanged)
+    Q_PROPERTY(QString checkOutTime READ checkOutTime NOTIFY timesChanged)
+    Q_PROPERTY(int gateMode READ gateMode WRITE setGateMode NOTIFY gateModeChanged) // 0: Entrance, 1: Exit
+    Q_PROPERTY(int openCount READ openCount NOTIFY openCountChanged)
 public:
     explicit ParkingController(ICameraSnapshotProvider *cam,
                                IParkingRepository *db,
@@ -32,17 +36,34 @@ public:
                                ICardReader *reader,
                                QObject *parent = nullptr);
 
-    QString plateFront() const { return m_plateFront; }
-    QString plateRear() const { return m_plateRear; }
+    QString plate() const { return m_plate; }
     QString message() const { return m_message; }
+    QString lastRfid() const { return m_lastRfid; }
+    QString checkInTime() const { return m_checkInTime; }
+    QString checkOutTime() const { return m_checkOutTime; }
+    int gateMode() const { return m_gateMode; }
+    void setGateMode(int m)
+    {
+        if (m_gateMode != m)
+        {
+            m_gateMode = m;
+            emit gateModeChanged();
+        }
+    }
+    int openCount() const { return m_openCount; }
 
 public slots:
     Q_INVOKABLE void simulateSwipe(const QString &rfid);
+    Q_INVOKABLE void deleteClosed(const QString &rfid); // Xóa bản ghi đã đóng của RFID
+    Q_INVOKABLE void refreshOpenCount();
 
 signals:
-    void plateFrontChanged();
-    void plateRearChanged();
+    void plateChanged();
     void messageChanged();
+    void lastRfidChanged();
+    void timesChanged();
+    void gateModeChanged();
+    void openCountChanged();
 
 private slots:
     void onRfidScanned(const QString &rfid);
@@ -54,9 +75,13 @@ private:
     IOcr *m_ocr{nullptr};
     ICardReader *m_reader{nullptr};
 
-    QString m_plateFront;
-    QString m_plateRear;
+    QString m_plate;
     QString m_message;
+    QString m_lastRfid;
+    QString m_checkInTime;
+    QString m_checkOutTime;
+    int m_gateMode = 0;
+    int m_openCount = 0;
 };
 
 #endif // PARKINGCONTROLLER_H

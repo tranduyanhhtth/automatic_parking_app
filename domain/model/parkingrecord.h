@@ -5,7 +5,7 @@
 #include <QSqlQuery>
 #include <QVariant>
 
-// Mô hình dữ liệu cho 1 bản ghi bãi đỗ xe (V2)
+// Mô hình dữ liệu cho 1 bản ghi bãi đỗ xe
 class ParkingRecord
 {
 public:

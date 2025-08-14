@@ -34,15 +34,12 @@ bool DatabaseManager::ensureSchema()
         CREATE TABLE IF NOT EXISTS parking_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             rfid TEXT NOT NULL,
-            plate_front TEXT NOT NULL,
-            plate_rear TEXT NOT NULL,
-            checkin_time INTEGER NOT NULL,
-            checkout_time INTEGER,
-            checkin_front_image_path TEXT,
-            checkin_rear_image_path TEXT,
-            checkout_front_image_path TEXT,
-            checkout_rear_image_path TEXT,
-            status INTEGER NOT NULL DEFAULT 0
+            plate TEXT NOT NULL,
+            checking_time TEXT NOT NULL,
+            checkout_time TEXT,
+            checkin_image1 BLOB,
+            checkin_image2 BLOB,
+            status TEXT NOT NULL
         )
     )";
     if (!q.exec(ddl))
@@ -86,48 +83,32 @@ QString DatabaseManager::sanitizeForFile(const QString &s) const
     return r;
 }
 
-QString DatabaseManager::saveJpeg(const QByteArray &bytes, const QString &role, const QString &rfid, qint64 ts) const
+QString DatabaseManager::nowIso8601() const
 {
-    if (bytes.isEmpty())
-        return QString();
-    const QString baseDir = QCoreApplication::applicationDirPath() + "/../../assets/captures"; // lưu cạnh thư mục assets
-    QDir().mkpath(baseDir);
-    const QString file = QString("%1/%2_%3_%4.jpg").arg(baseDir, sanitizeForFile(rfid)).arg(role).arg(QString::number(ts));
-    QFile f(file);
-    if (f.open(QIODevice::WriteOnly))
-    {
-        f.write(bytes);
-        f.close();
-        return QDir::toNativeSeparators(file);
-    }
-    return QString();
+    return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
 }
 
 CheckInResult DatabaseManager::checkIn(const QString &rfid,
-                                       const QString &plateFront,
-                                       const QString &plateRear,
-                                       const QByteArray &frontImage,
-                                       const QByteArray &rearImage)
+                                       const QString &plate,
+                                       const QByteArray &image1,
+                                       const QByteArray &image2)
 {
     if (hasOpenSession(rfid))
         return CheckInResult::AlreadyOpen; // Đang gửi – không cho check-in
-    const qint64 now = QDateTime::currentSecsSinceEpoch();
     const QString encRfid = encodeText(rfid);
-    const QString encFront = encodeText(plateFront);
-    const QString encRear = encodeText(plateRear);
-    const QString frontPath = saveJpeg(frontImage, "checkin_front", rfid, now);
-    const QString rearPath = saveJpeg(rearImage, "checkin_rear", rfid, now);
+    const QString encPlate = encodeText(plate);
+    const QString nowTxt = nowIso8601();
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        INSERT INTO parking_log (rfid, plate_front, plate_rear, checkin_time, checkin_front_image_path, checkin_rear_image_path, status)
-        VALUES(:rfid, :pf, :pr, :ts, :pff, :prf, 0)
+        INSERT INTO parking_log (rfid, plate, checking_time, checkin_image1, checkin_image2, status)
+        VALUES(:rfid, :plate, :ts, :img1, :img2, :st)
     )");
     q.bindValue(":rfid", encRfid);
-    q.bindValue(":pf", encFront);
-    q.bindValue(":pr", encRear);
-    q.bindValue(":ts", now);
-    q.bindValue(":pff", frontPath);
-    q.bindValue(":prf", rearPath);
+    q.bindValue(":plate", encPlate);
+    q.bindValue(":ts", nowTxt);
+    q.bindValue(":img1", image1);
+    q.bindValue(":img2", image2);
+    q.bindValue(":st", QStringLiteral("in"));
     if (!q.exec())
     {
         qWarning() << "checkIn error:" << q.lastError().text();
@@ -137,12 +118,8 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
 }
 
 CheckOutResult DatabaseManager::checkOut(const QString &rfid,
-                                         const QString &plateFront,
-                                         const QString &plateRear,
-                                         const QByteArray &frontImage,
-                                         const QByteArray &rearImage)
+                                         const QString &plate)
 {
-    const qint64 now = QDateTime::currentSecsSinceEpoch();
     const QString encRfid = encodeText(rfid);
     auto openRec = findOpenByRfid(encRfid);
     if (!openRec.has_value())
@@ -150,83 +127,102 @@ CheckOutResult DatabaseManager::checkOut(const QString &rfid,
         qWarning() << "checkOut: no open session";
         return CheckOutResult::NoOpen;
     }
-    const int id = openRec->id;
-    const QString encFrontSaved = openRec->plateFront;
-    const QString encRearSaved = openRec->plateRear;
-    const QString encFrontNow = encodeText(plateFront);
-    const QString encRearNow = encodeText(plateRear);
-    const bool matched = (encFrontSaved == encFrontNow) && (encRearSaved == encRearNow);
+    const int id = openRec->value("id").toInt();
+    const QString encPlateSaved = openRec->value("plate").toString();
+    const QString encPlateNow = encodeText(plate);
+    const bool matched = (encPlateSaved == encPlateNow);
     if (!matched)
         return CheckOutResult::NotMatched; // Không khớp biển số – từ chối
 
-    const QString frontPath = saveJpeg(frontImage, "checkout_front", rfid, now);
-    const QString rearPath = saveJpeg(rearImage, "checkout_rear", rfid, now);
-    if (!updateCheckoutById(id, now, frontPath, rearPath))
+    QSqlQuery q(DB_Connection);
+    q.prepare(R"(
+        UPDATE parking_log SET
+            checkout_time = :ts,
+            status = :st
+        WHERE id = :id
+    )");
+    q.bindValue(":ts", nowIso8601());
+    q.bindValue(":st", QStringLiteral("out"));
+    q.bindValue(":id", id);
+    if (!q.exec())
+    {
+        qWarning() << "checkout update error:" << q.lastError().text();
         return CheckOutResult::Error;
+    }
     return CheckOutResult::OkMatched;
 }
 
-std::optional<ParkingRecord> DatabaseManager::findOpenByRfid(const QString &encodedRfid)
+std::optional<QVariantMap> DatabaseManager::findOpenByRfid(const QString &encodedRfid)
 {
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        SELECT id, rfid, plate_front, plate_rear, checkin_time, checkout_time,
-               checkin_front_image_path, checkin_rear_image_path,
-               checkout_front_image_path, checkout_rear_image_path, status
+        SELECT id, rfid, plate, checking_time, checkout_time,
+               status
         FROM parking_log
         WHERE rfid = :rfid AND checkout_time IS NULL
         ORDER BY id DESC LIMIT 1
     )");
     q.bindValue(":rfid", encodedRfid);
     if (q.exec() && q.next())
-        return ParkingRecord::fromQueryRow(q);
+    {
+        QVariantMap m;
+        m.insert("id", q.value("id"));
+        m.insert("rfid", q.value("rfid"));
+        m.insert("plate", q.value("plate"));
+        m.insert("checking_time", q.value("checking_time"));
+        m.insert("checkout_time", q.value("checkout_time"));
+        m.insert("status", q.value("status"));
+        return m;
+    }
     return std::nullopt;
 }
 
-bool DatabaseManager::insertRecord(const ParkingRecord &rec)
+QVariantMap DatabaseManager::fetchOpenSession(const QString &rfid)
 {
-    QSqlQuery q(DB_Connection);
-    q.prepare(R"(
-        INSERT INTO parking_log (
-            rfid, plate_front, plate_rear, checkin_time,
-            checkin_front_image_path, checkin_rear_image_path, status
-        ) VALUES(:rfid, :pf, :pr, :ts, :pff, :prf, :st)
-    )");
-    q.bindValue(":rfid", rec.rfid);
-    q.bindValue(":pf", rec.plateFront);
-    q.bindValue(":pr", rec.plateRear);
-    q.bindValue(":ts", rec.checkinTime);
-    q.bindValue(":pff", rec.checkinFrontImagePath);
-    q.bindValue(":prf", rec.checkinRearImagePath);
-    q.bindValue(":st", rec.status);
-    if (!q.exec())
-    {
-        qWarning() << "insertRecord error:" << q.lastError().text();
-        return false;
-    }
-    return true;
+    const QString enc = encodeText(rfid);
+    auto rec = findOpenByRfid(enc);
+    if (!rec.has_value())
+        return {};
+    QVariantMap m;
+    m.insert("id", rec->value("id"));
+    m.insert("rfid", rfid);
+    m.insert("checking_time", rec->value("checking_time"));
+    m.insert("status", rec->value("status"));
+    return m;
 }
 
-bool DatabaseManager::updateCheckoutById(int id, qint64 checkoutTime,
-                                         const QString &frontPath,
-                                         const QString &rearPath)
+CheckOutResult DatabaseManager::checkOutRfidOnly(const QString &rfid, QString *checkoutTimeOut)
 {
+    const QString encRfid = encodeText(rfid);
+    auto openRec = findOpenByRfid(encRfid);
+    if (!openRec.has_value())
+        return CheckOutResult::NoOpen;
+    const int id = openRec->value("id").toInt();
+    const QString ts = nowIso8601();
     QSqlQuery q(DB_Connection);
-    q.prepare(R"(
-        UPDATE parking_log SET
-            checkout_time = :ts,
-            checkout_front_image_path = :pff,
-            checkout_rear_image_path = :prf,
-            status = 1
-        WHERE id = :id
-    )");
-    q.bindValue(":ts", checkoutTime);
-    q.bindValue(":pff", frontPath);
-    q.bindValue(":prf", rearPath);
+    q.prepare("UPDATE parking_log SET checkout_time = :ts, status = :st WHERE id = :id");
+    q.bindValue(":ts", ts);
+    q.bindValue(":st", QStringLiteral("out"));
     q.bindValue(":id", id);
     if (!q.exec())
     {
-        qWarning() << "updateCheckoutById error:" << q.lastError().text();
+        qWarning() << "checkOutRfidOnly error:" << q.lastError().text();
+        return CheckOutResult::Error;
+    }
+    if (checkoutTimeOut)
+        *checkoutTimeOut = ts;
+    return CheckOutResult::OkMatched;
+}
+
+bool DatabaseManager::deleteClosedSessions(const QString &rfid)
+{
+    const QString encRfid = encodeText(rfid);
+    QSqlQuery q(DB_Connection);
+    q.prepare("DELETE FROM parking_log WHERE rfid = :rfid AND checkout_time IS NOT NULL");
+    q.bindValue(":rfid", encRfid);
+    if (!q.exec())
+    {
+        qWarning() << "deleteClosedSessions error:" << q.lastError().text();
         return false;
     }
     return true;
