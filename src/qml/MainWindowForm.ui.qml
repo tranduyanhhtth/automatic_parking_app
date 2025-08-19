@@ -380,7 +380,6 @@ Item {
                                     radius: 4
                                     color: app.gateMode === 0 ? "#2d6cdf" : "#555"
                                 }
-                                // handled in MainWindow.qml
                             }
 
                             Button {
@@ -396,7 +395,6 @@ Item {
                                     radius: 4
                                     color: app.gateMode === 1 ? "#c95020" : "#555"
                                 }
-                                // handled in MainWindow.qml
                             }
                         }
 
