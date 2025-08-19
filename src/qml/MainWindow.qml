@@ -176,7 +176,7 @@ Item {
         width: parent.width
         height: visible ? 60 : 0
         anchors.top: parent.top
-        color: "#88000000"
+        color: "#D04CAF50"
         visible: false
         opacity: 0
         z: 9999
