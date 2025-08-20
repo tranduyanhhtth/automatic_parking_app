@@ -24,6 +24,11 @@ Item {
     property alias tfCam2: tfCam2
     property alias tfCom: tfCom
     property alias cbBaud: cbBaud
+    CheckBox {
+        id: cbHwDecode
+        text: "Dùng GPU (hardware decode)"
+        checked: settings.useHardwareDecode
+    }
     property alias miCamera: miCamera
     property alias miBarrier: miBarrier
     property alias miExit: miExit
@@ -149,8 +154,8 @@ Item {
                             anchors.fill: parent
                             fillMode: Image.PreserveAspectFit
                             cache: false
-                            source: app.gateMode === 1
-                                    && app.exitReviewAvailable ? app.exitImage1DataUrl : cameraManager.inputSnapshotDataUrl
+                            source: app.gateMode === 1 ? (app.exitReviewAvailable ? app.exitImage1DataUrl : "")
+                                                       : (cameraManager.inputSnapshotDataUrl || "")
                         }
                     }
 
@@ -206,8 +211,8 @@ Item {
                             anchors.fill: parent
                             fillMode: Image.PreserveAspectFit
                             cache: false
-                            source: app.gateMode === 1
-                                    && app.exitReviewAvailable ? app.exitImage2DataUrl : cameraManager.outputSnapshotDataUrl
+                            source: app.gateMode === 1 ? (app.exitReviewAvailable ? app.exitImage2DataUrl : "")
+                                                       : (cameraManager.outputSnapshotDataUrl || "")
                         }
                     }
 
@@ -443,6 +448,15 @@ Item {
                 id: tfCam2
                 text: settings.camera2Url
                 Layout.preferredWidth: 520
+            }
+            Label {
+                text: qsTr("OCR.Space API Key (optional)")
+            }
+            TextField {
+                id: tfOcrKey
+                text: settings.ocrSpaceApiKey
+                Layout.preferredWidth: 520
+                echoMode: TextInput.Normal
             }
         }
     }

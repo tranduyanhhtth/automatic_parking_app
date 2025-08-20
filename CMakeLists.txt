@@ -4,7 +4,7 @@ project(smart_parking_system VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort)
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort Network)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -59,9 +59,14 @@ set_target_properties(appsmart_parking_system PROPERTIES
 )
 
 target_link_libraries(appsmart_parking_system
-    PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort
+    PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network
     PRIVATE onnxruntime
 )
+
+# Windows: link D3D11/DXGI for GPU availability detection
+if (WIN32)
+    target_link_libraries(appsmart_parking_system PRIVATE d3d11 dxgi)
+endif()
 
 # Sao chép ONNX Runtime DLL vào thư mục build
 set(ONNXRUNTIME_DLL "${ONNXRUNTIME_DIR}/lib/onnxruntime.dll")

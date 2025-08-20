@@ -4,6 +4,10 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QByteArray>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QEventLoop>
+#include <QTimer>
 #include "domain/ports/iocr.h"
 #include "domain/ports/iparkingrepository.h"
 
@@ -30,6 +34,9 @@ private:
     YoloOnnxDetectorImpl *m_detector{nullptr};
     bool m_detectorReady{false};
     IParkingRepository *m_repo{nullptr};
+    // OCR.Space HTTP client
+    QString ocrSpaceApiKeyFromSettings() const;
+    QString ocrSpaceRecognize(const QByteArray &jpegBytes, int timeoutMs = 6000) const;
 };
 
 #endif // OCRPROCESSOR_H

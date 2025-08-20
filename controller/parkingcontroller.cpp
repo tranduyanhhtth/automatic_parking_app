@@ -22,51 +22,46 @@ ParkingController::ParkingController(ICameraSnapshotProvider *cam,
 void ParkingController::onRfidScanned(const QString &rfid)
 {
     const QString normRfid = normalizeRfid(rfid);
-    m_lastRfid = normRfid;
-    emit lastRfidChanged();
+    // Cổng ra: chỉ cập nhật lastRfid khi thẻ có phiên mở; cổng vào cập nhật khi check-in hợp lệ
     if (!m_cam || !m_db || !m_barrier)
         return; // OCR có thể tạm thời null
-
-    // Chỉ chụp ảnh + OCR ở cổng vào. Cổng ra dùng ảnh/giờ lưu trong DB.
-    QByteArray img1;
-    QByteArray img2;
-    QString detectedPlate;
-    if (m_gateMode == 0)
-    {
-        img1 = m_cam->captureInputSnapshot(85);
-        img2 = m_cam->captureOutputSnapshot(85);
-        if (m_ocr)
-        {
-            const QVariantMap res = m_ocr->recognizePlates(img1, img2);
-            detectedPlate = res.value("front").toString();
-            if (detectedPlate.isEmpty())
-                detectedPlate = res.value("rear").toString();
-            // HID log OCR ở cổng vào
-            if (auto hid = qobject_cast<QObject *>(m_reader))
-            {
-                const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
-                                        .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
-                QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
-            }
-        }
-    }
 
     // Giao dịch DB + điều khiển barrier
     if (m_gateMode == 0) // Cổng vào
     {
-        // Chặn quẹt liên tiếp cùng một thẻ quá nhanh
-        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-        if (!m_lastEntranceRfid.isEmpty() && m_lastEntranceRfid == normRfid && (nowMs - m_lastEntranceMs) < m_entranceRepeatBlockMs)
-            return;
-        m_lastEntranceRfid = normRfid;
-        m_lastEntranceMs = nowMs;
-
         if (m_db->hasOpenSession(normRfid))
         {
-            m_message = QStringLiteral("Thẻ đã vào – chưa ra");
+            m_message = QStringLiteral("Thẻ đang sử dụng");
+            emit messageChanged();
+            emit showToast(m_message);
+            // Không cập nhật lastRfid, không chụp ảnh, không OCR
+            return;
         }
         else
         {
+            // Từ đây thẻ chắc chắn chưa sử dụng -> tiến hành chụp ảnh và OCR
+            QByteArray img1 = m_cam->captureInputSnapshot(85);
+            QByteArray img2 = m_cam->captureOutputSnapshot(85);
+            QString detectedPlate;
+            if (m_ocr)
+            {
+                const QVariantMap res = m_ocr->recognizePlates(img1, img2);
+                detectedPlate = res.value("front").toString();
+                if (detectedPlate.isEmpty())
+                    detectedPlate = res.value("rear").toString();
+                // HID log OCR ở cổng vào
+                if (auto hid = qobject_cast<QObject *>(m_reader))
+                {
+                    const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
+                                            .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
+                    QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
+                }
+            }
+
+            // Cập nhật lastRfid cho UI khi thực sự tiến hành check-in
+            m_lastRfid = normRfid;
+            emit lastRfidChanged();
+
             m_plate = detectedPlate;
             emit plateChanged();
             const CheckInResult ok = m_db->checkIn(normRfid, m_plate, img1, img2);
@@ -107,12 +102,12 @@ void ParkingController::onRfidScanned(const QString &rfid)
                         QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
                     }
                 }
-
-                // Không tự động mở barrier – độc lập với check-in/out
             }
             else if (ok == CheckInResult::AlreadyOpen)
             {
-                m_message = QStringLiteral("Thẻ đang gửi, không thể check-in");
+                m_message = QStringLiteral("Thẻ đang sử dụng");
+                emit messageChanged();
+                emit showToast(m_message);
             }
             else
             {
@@ -128,18 +123,25 @@ void ParkingController::onRfidScanned(const QString &rfid)
 
         if (!m_db->hasOpenSession(normRfid))
         {
-            // Không tạo phiên mới tại cổng ra; dọn hiển thị
-            m_exitImg1.clear();
-            m_exitImg2.clear();
-            emit exitReviewChanged();
-            m_checkOutTime.clear();
-            emit timesChanged();
+            // // Không tạo phiên mới tại cổng ra; dọn hiển thị
+            // m_exitImg1.clear();
+            // m_exitImg2.clear();
+            // emit exitReviewChanged();
+            // m_checkInTime.clear();
+            // m_checkOutTime.clear();
+            // emit timesChanged();
+            // m_plate.clear();
+            // emit plateChanged();
+            // m_lastRfid.clear();
+            // emit lastRfidChanged();
+            // Thông báo: thẻ chưa được được sử dụng
+            emit showToast(QStringLiteral("Thẻ chưa được được sử dụng"));
             // Cho phép quẹt lại ngay
             if (auto hid = qobject_cast<QObject *>(m_reader))
                 QMetaObject::invokeMethod(hid, "resetDebounce", Qt::QueuedConnection);
             return;
         }
-
+        /***************************************************************************************************/
         // // Có phiên mở -> so khớp bằng AI từ CAMERA HIỆN TẠI
         // // (Nạp ảnh DB để review UI nếu muốn)
         // loadExitReview(normRfid);
@@ -195,8 +197,10 @@ void ParkingController::onRfidScanned(const QString &rfid)
         //     emit messageChanged();
         //     return;
         // }
-
-        // Có phiên mở -> nạp ảnh DB để review UI
+        /***************************************************************************************************/
+        // Có phiên mở -> cập nhật lastRfid và nạp ảnh DB để review UI
+        m_lastRfid = normRfid;
+        emit lastRfidChanged();
         loadExitReview(normRfid);
 
         // Kết thúc phiên theo RFID ngay lập tức
@@ -278,6 +282,11 @@ bool ParkingController::approveAndOpenBarrier()
     // Cổng ra: bắt buộc thẻ có trong DB
     if (m_lastRfid.isEmpty() || !m_db)
         return false;
+    if (!m_db->hasOpenSession(normalizeRfid(m_lastRfid)))
+    {
+        emit showToast(QStringLiteral("Thẻ chưa được được sử dụng"));
+        return false;
+    }
     QString coTime;
     const CheckOutResult r = m_db->checkOutRfidOnly(normalizeRfid(m_lastRfid), &coTime);
     if (r == CheckOutResult::OkMatched)
