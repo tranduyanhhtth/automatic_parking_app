@@ -34,13 +34,6 @@ bool HidKeyboardCardReader::eventFilter(QObject *obj, QEvent *event)
 
 void HidKeyboardCardReader::processKey(int key, const QString &text)
 {
-    const qint64 now = QDateTime::currentMSecsSinceEpoch();
-    // Nếu khoảng cách giữa 2 phím quá dài > 2s thì reset buffer
-    if (m_lastEmitMs > 0 && (now - m_lastEmitMs) > 2000 && m_buffer.size() > 0)
-    {
-        m_buffer.clear();
-        emit debugLog(QStringLiteral("[HID] Buffer timeout reset"));
-    }
     if (key == Qt::Key_Return || key == Qt::Key_Enter)
     {
         finalize();
@@ -65,21 +58,10 @@ void HidKeyboardCardReader::finalize()
     if (m_buffer.size() >= m_minLength)
     {
         const QString current = m_buffer.trimmed();
-        const bool sameAsLast = (current == m_lastValue);
-        if (!sameAsLast || (now - m_lastEmitMs) >= m_debounceMs)
-        {
-            emit debugLog(QStringLiteral("[HID] RFID complete '%1'").arg(current));
-            emit rfidScanned(current);
-            m_lastEmitMs = now;
-            m_lastValue = current;
-        }
-        else
-        {
-            emit debugLog(QStringLiteral("[HID] Debounced duplicate ignored '%1' (%2ms < %3ms)")
-                              .arg(current)
-                              .arg(now - m_lastEmitMs)
-                              .arg(m_debounceMs));
-        }
+        emit debugLog(QStringLiteral("[HID] RFID complete '%1'").arg(current));
+        emit rfidScanned(current);
+        m_lastEmitMs = now;
+        m_lastValue = current;
     }
     m_buffer.clear();
 }

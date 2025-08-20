@@ -54,7 +54,7 @@ private:
     QString m_buffer;
     bool m_enabled = true;
     int m_minLength = 4;
-    int m_debounceMs = 800;
+    int m_debounceMs = 0;
     qint64 m_lastEmitMs = 0;
     QString m_lastValue;
 };

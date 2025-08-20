@@ -57,13 +57,72 @@ public:
             if (auto hid = qobject_cast<QObject *>(m_reader))
                 QMetaObject::invokeMethod(hid, "resetDebounce", Qt::QueuedConnection);
 
-            // Khi chuyển sang CỔNG RA (1), xóa RFID trước đó để bắt buộc quẹt thẻ mới
+            // Khi chuyển sang CỔNG RA (1)
             if (m_gateMode == 1)
             {
+                // Xóa snapshot xem trước
+                if (m_cam)
+                    m_cam->clearSnapshots();
                 if (!m_lastRfid.isEmpty())
                 {
                     m_lastRfid.clear();
                     emit lastRfidChanged();
+                }
+                if (!m_plate.isEmpty())
+                {
+                    m_plate.clear();
+                    emit plateChanged();
+                }
+                if (!m_message.isEmpty())
+                {
+                    m_message.clear();
+                    emit messageChanged();
+                }
+                if (!m_checkInTime.isEmpty() || !m_checkOutTime.isEmpty())
+                {
+                    m_checkInTime.clear();
+                    m_checkOutTime.clear();
+                    emit timesChanged();
+                }
+                if (!m_exitImg1.isEmpty() || !m_exitImg2.isEmpty())
+                {
+                    m_exitImg1.clear();
+                    m_exitImg2.clear();
+                    emit exitReviewChanged();
+                }
+            }
+            // Khi chuyển sang CỔNG VÀO (0)
+            else if (m_gateMode == 0)
+            {
+                // Xóa snapshot xem trước
+                if (m_cam)
+                    m_cam->clearSnapshots();
+                if (!m_lastRfid.isEmpty())
+                {
+                    m_lastRfid.clear();
+                    emit lastRfidChanged();
+                }
+                if (!m_plate.isEmpty())
+                {
+                    m_plate.clear();
+                    emit plateChanged();
+                }
+                if (!m_message.isEmpty())
+                {
+                    m_message.clear();
+                    emit messageChanged();
+                }
+                if (!m_checkInTime.isEmpty() || !m_checkOutTime.isEmpty())
+                {
+                    m_checkInTime.clear();
+                    m_checkOutTime.clear();
+                    emit timesChanged();
+                }
+                if (!m_exitImg1.isEmpty() || !m_exitImg2.isEmpty())
+                {
+                    m_exitImg1.clear();
+                    m_exitImg2.clear();
+                    emit exitReviewChanged();
                 }
             }
         }

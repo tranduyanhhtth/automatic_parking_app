@@ -11,6 +11,13 @@
 #include <QVector>
 #include <QCoreApplication>
 #include <QDir>
+#include <QNetworkAccessManager>
+#include <QNetworkRequest>
+#include <QHttpMultiPart>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QSettings>
 
 OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
     : QObject(parent)
@@ -62,6 +69,64 @@ QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
             rsc.push_back(s);
         result.insert("frontScores", fsc);
         result.insert("rearScores", rsc);
+        // Gắn OCR.Space vào các hộp lớn nhất để nhận diện biển số
+        auto pickLargest = [](const QVector<QRectF> &boxes) -> int
+        {
+            if (boxes.isEmpty())
+                return -1;
+            qreal bestA = -1;
+            int best = -1;
+            for (int i = 0; i < boxes.size(); ++i)
+            {
+                qreal a = boxes[i].width() * boxes[i].height();
+                if (a > bestA)
+                {
+                    bestA = a;
+                    best = i;
+                }
+            }
+            return best;
+        };
+
+        auto cropJpeg = [](const QByteArray &jpeg, const QRectF &rect) -> QByteArray
+        {
+            if (jpeg.isEmpty() || rect.isEmpty())
+                return {};
+            QImage img;
+            img.loadFromData(jpeg, "JPG");
+            if (img.isNull())
+                return {};
+            QRect r = rect.toAlignedRect().intersected(img.rect());
+            if (r.isEmpty())
+                return {};
+            QImage cropped = img.copy(r);
+            QByteArray out;
+            QBuffer buf(&out);
+            buf.open(QIODevice::WriteOnly);
+            cropped.save(&buf, "JPG", 92);
+            return out;
+        };
+
+        const QString apiKey = ocrSpaceApiKeyFromSettings();
+        if (!apiKey.isEmpty())
+        {
+            int fi = pickLargest(fBoxes);
+            if (fi >= 0)
+            {
+                QByteArray cj = cropJpeg(frontImage, fBoxes[fi]);
+                QString txt = ocrSpaceRecognize(cj);
+                if (!txt.trimmed().isEmpty())
+                    result.insert("front", txt.trimmed());
+            }
+            int ri = pickLargest(rBoxes);
+            if (ri >= 0)
+            {
+                QByteArray cj = cropJpeg(rearImage, rBoxes[ri]);
+                QString txt = ocrSpaceRecognize(cj);
+                if (!txt.trimmed().isEmpty())
+                    result.insert("rear", txt.trimmed());
+            }
+        }
     }
 
     return result;
@@ -83,12 +148,97 @@ QString OCRProcessor::processOpenSessionAndUpdatePlate(const QString &rfid)
     QByteArray img1 = m.value("image1").toByteArray();
     QByteArray img2 = m.value("image2").toByteArray();
 
-    // TẠM THỜI: chưa có OCR ký tự => KHÔNG sinh placeholder; chỉ lưu 'unknown' nếu không có text
-    QString plate; // remain empty if no char OCR
+    // Thử cho cả hai ảnh
+    QString plate;
+    QVariantMap tmp = recognizePlates(img1, img2);
+    QString f = tmp.value("front").toString();
+    QString r = tmp.value("rear").toString();
+    if (!f.trimmed().isEmpty())
+        plate = f.trimmed();
+    else if (!r.trimmed().isEmpty())
+        plate = r.trimmed();
     if (plate.isEmpty())
         plate = QStringLiteral("unknown");
 
     if (!db->updatePlateForOpenSession(rfid, plate))
         return QString();
     return plate;
+}
+
+QString OCRProcessor::ocrSpaceApiKeyFromSettings() const
+{
+    QSettings s("Multimodel-AIThings", "smart_parking_system");
+    return s.value("ocrSpaceApiKey").toString();
+}
+
+QString OCRProcessor::ocrSpaceRecognize(const QByteArray &jpegBytes, int timeoutMs) const
+{
+    if (jpegBytes.isEmpty())
+        return {};
+    const QString apiKey = ocrSpaceApiKeyFromSettings();
+    if (apiKey.isEmpty())
+        return {};
+
+    QNetworkAccessManager nam;
+    QHttpMultiPart *multi = new QHttpMultiPart(QHttpMultiPart::FormDataType);
+
+    QHttpPart keyPart;
+    keyPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=apikey"));
+    keyPart.setBody(apiKey.toUtf8());
+    QHttpPart languagePart;
+    languagePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=language"));
+    languagePart.setBody("eng");
+    QHttpPart isOverlayPart;
+    isOverlayPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=isOverlayRequired"));
+    isOverlayPart.setBody("false");
+    QHttpPart scalePart;
+    scalePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=scale"));
+    scalePart.setBody("true");
+    QHttpPart filePart;
+    filePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=image"));
+    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
+    filePart.setBody(jpegBytes);
+
+    multi->append(keyPart);
+    multi->append(languagePart);
+    multi->append(isOverlayPart);
+    multi->append(scalePart);
+    multi->append(filePart);
+
+    QNetworkRequest req(QUrl("https://api.ocr.space/parse/image"));
+    auto reply = nam.post(req, multi);
+    multi->setParent(reply);
+
+    QEventLoop loop;
+    QTimer timer;
+    timer.setSingleShot(true);
+    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+    timer.start(timeoutMs);
+    loop.exec();
+    if (timer.isActive() == false)
+    {
+        reply->abort();
+        reply->deleteLater();
+        return {};
+    }
+    if (reply->error() != QNetworkReply::NoError)
+    {
+        reply->deleteLater();
+        return {};
+    }
+    const QByteArray resp = reply->readAll();
+    reply->deleteLater();
+
+    QJsonParseError jerr{};
+    const QJsonDocument doc = QJsonDocument::fromJson(resp, &jerr);
+    if (jerr.error != QJsonParseError::NoError || !doc.isObject())
+        return {};
+    const QJsonObject root = doc.object();
+    const QJsonArray parsed = root.value("ParsedResults").toArray();
+    if (parsed.isEmpty())
+        return {};
+    const QJsonObject first = parsed.first().toObject();
+    const QString text = first.value("ParsedText").toString();
+    return text;
 }
