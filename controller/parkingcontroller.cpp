@@ -6,6 +6,7 @@
 #include "domain/ports/icardreader.h"
 #include <QDateTime>
 #include <QBuffer>
+#include <QRegularExpression>
 
 ParkingController::ParkingController(ICameraSnapshotProvider *cam,
                                      IParkingRepository *db,
@@ -22,6 +23,15 @@ ParkingController::ParkingController(ICameraSnapshotProvider *cam,
 void ParkingController::onRfidScanned(const QString &rfid)
 {
     const QString normRfid = normalizeRfid(rfid);
+    // Log mapping nếu có thay đổi để dễ chẩn đoán (ví dụ reader thêm site code '65')
+    if (m_reader && normRfid != rfid)
+    {
+        if (auto hid = qobject_cast<QObject *>(m_reader))
+        {
+            const QString msg = QStringLiteral("[HID] RFID raw '%1' -> normalized '%2'").arg(rfid, normRfid);
+            QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
+        }
+    }
     // Cổng ra: chỉ cập nhật lastRfid khi thẻ có phiên mở; cổng vào cập nhật khi check-in hợp lệ
     if (!m_cam || !m_db || !m_barrier)
         return; // OCR có thể tạm thời null
@@ -43,20 +53,20 @@ void ParkingController::onRfidScanned(const QString &rfid)
             QByteArray img1 = m_cam->captureInputSnapshot(85);
             QByteArray img2 = m_cam->captureOutputSnapshot(85);
             QString detectedPlate;
-            if (m_ocr)
-            {
-                const QVariantMap res = m_ocr->recognizePlates(img1, img2);
-                detectedPlate = res.value("front").toString();
-                if (detectedPlate.isEmpty())
-                    detectedPlate = res.value("rear").toString();
-                // HID log OCR ở cổng vào
-                if (auto hid = qobject_cast<QObject *>(m_reader))
-                {
-                    const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
-                                            .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
-                    QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
-                }
-            }
+            // if (m_ocr)
+            // {
+            //     const QVariantMap res = m_ocr->recognizePlates(img1, img2);
+            //     detectedPlate = res.value("front").toString();
+            //     if (detectedPlate.isEmpty())
+            //         detectedPlate = res.value("rear").toString();
+            //     // HID log OCR ở cổng vào
+            //     if (auto hid = qobject_cast<QObject *>(m_reader))
+            //     {
+            //         const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
+            //                                 .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
+            //         QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
+            //     }
+            // }
 
             // Cập nhật lastRfid cho UI khi thực sự tiến hành check-in
             m_lastRfid = normRfid;
@@ -68,8 +78,8 @@ void ParkingController::onRfidScanned(const QString &rfid)
             if (ok == CheckInResult::Ok)
             {
                 m_message = QStringLiteral("Check-in thành công");
-                // Set giờ vào tức thời rồi đồng bộ lại từ DB nếu có
-                m_checkInTime = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+                // Set giờ vào tức thời (LOCAL) rồi đồng bộ lại từ DB nếu có
+                m_checkInTime = QDateTime::currentDateTime().toString(Qt::ISODate);
                 auto open = m_db->fetchOpenSession(normRfid);
                 const QString dbTime = open.value("checkin_time").toString();
                 if (!dbTime.isEmpty())
@@ -210,7 +220,7 @@ void ParkingController::onRfidScanned(const QString &rfid)
         {
             m_message = QStringLiteral("Check-out thành công");
             if (checkoutTime.isEmpty())
-                checkoutTime = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+                checkoutTime = QDateTime::currentDateTime().toString(Qt::ISODate);
             m_checkOutTime = checkoutTime;
             emit timesChanged();
 
@@ -310,7 +320,20 @@ void ParkingController::manualOpenBarrier()
 
 QString ParkingController::normalizeRfid(const QString &r) const
 {
-    QString s = r;
-    s = s.trimmed();
+    static const QRegularExpression kReLeadingNonAlnum(QStringLiteral("^[^A-Za-z0-9]+"));
+    static const QRegularExpression kReTrailingNonAlnum(QStringLiteral("[^A-Za-z0-9]+$"));
+    static const QRegularExpression kReWhitespace(QStringLiteral("\\s+"));
+    static const QRegularExpression kReDigitsOnly(QStringLiteral("^[0-9]+$"));
+
+    QString s = r.trimmed();
+    // Bỏ các ký tự dẫn/đuôi không phải chữ-số (ví dụ ';', '%', '?')
+    s.remove(kReLeadingNonAlnum);
+    s.remove(kReTrailingNonAlnum);
+    // Xóa khoảng trắng giữa chừng nếu có và chuẩn hóa HOA
+    s.remove(kReWhitespace);
+    s = s.toUpper();
+    // Nếu toàn là số và dài hơn 10, lấy 10 số cuối (loại bỏ facility/site code ở đầu)
+    if (kReDigitsOnly.match(s).hasMatch() && s.size() > 10)
+        s = s.right(10);
     return s;
 }
