@@ -85,7 +85,8 @@ QString DatabaseManager::sanitizeForFile(const QString &s) const
 
 QString DatabaseManager::nowIso8601() const
 {
-    return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    // Dùng giờ LOCAL để đồng bộ với overlay thời gian in trên ảnh từ camera
+    return QDateTime::currentDateTime().toString(Qt::ISODate);
 }
 
 CheckInResult DatabaseManager::checkIn(const QString &rfid,

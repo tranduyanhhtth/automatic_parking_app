@@ -14,9 +14,10 @@ Item {
         anchors.fill: parent
     }
 
-    // Retry backoff state for auto-reconnect
+    // Trạng thái quay lại với thời gian chờ tự động kết nối
     property int cam1RetryMs: 1000
     property int cam2RetryMs: 1000
+
     Timer {
         id: cam1Retry; interval: window.cam1RetryMs; repeat: false
         onTriggered: {
@@ -108,14 +109,12 @@ Item {
         return base + '?' + items.join('&')
     }
 
-    // Only restart stream if URL changed or player isn't in a good state
+    // Chỉ khởi động lại cam khi url thay đổi hoặc luồng stream không ổn
     function setSourceIfChanged(player, url) {
         var cur = normalizeUrl(player.source)
         var tgt = normalizeUrl(url)
-        var okState = (player.mediaStatus === MediaPlayer.LoadedMedia
-                       || player.mediaStatus === MediaPlayer.BufferedMedia)
+        var okState = (player.mediaStatus === MediaPlayer.LoadedMedia || player.mediaStatus === MediaPlayer.BufferedMedia)
         if (cur === tgt && okState) {
-            // Ensure audio track stays disabled if supported
             if (player.activeAudioTrack !== undefined)
                 player.activeAudioTrack = -1
             return
@@ -124,15 +123,14 @@ Item {
     }
 
     function isHealthy(player) {
-        return player.mediaStatus === MediaPlayer.LoadedMedia
-                || player.mediaStatus === MediaPlayer.BufferedMedia
+        return player.mediaStatus === MediaPlayer.LoadedMedia || player.mediaStatus === MediaPlayer.BufferedMedia
     }
 
     function loadCongVao() {
         var u1 = applyRtspOptions(settings.camera1Url)
         var u2 = applyRtspOptions(settings.camera2Url)
-    var changed1 = normalizeUrl(camera1.source) !== normalizeUrl(u1)
-    var changed2 = normalizeUrl(camera2.source) !== normalizeUrl(u2)
+        var changed1 = normalizeUrl(camera1.source) !== normalizeUrl(u1)
+        var changed2 = normalizeUrl(camera2.source) !== normalizeUrl(u2)
         if (changed1 || changed2) {
             cam1Retry.stop(); cam2Retry.stop();
             window.cam1RetryMs = 1000; window.cam2RetryMs = 1000
@@ -141,14 +139,11 @@ Item {
         setSourceIfChanged(camera2, u2)
     }
 
-    // Bind sinks on startup; most apps don’t change sinks at runtime
-
     function loadCongRa() {
-        // For now, reuse; could be separate settings if needed
         var u1 = applyRtspOptions(settings.camera1Url)
         var u2 = applyRtspOptions(settings.camera2Url)
-    var changed1 = normalizeUrl(camera1.source) !== normalizeUrl(u1)
-    var changed2 = normalizeUrl(camera2.source) !== normalizeUrl(u2)
+        var changed1 = normalizeUrl(camera1.source) !== normalizeUrl(u1)
+        var changed2 = normalizeUrl(camera2.source) !== normalizeUrl(u2)
         if (changed1 || changed2) {
             cam1Retry.stop(); cam2Retry.stop();
             window.cam1RetryMs = 1000; window.cam2RetryMs = 1000
@@ -193,20 +188,19 @@ Item {
     function formatIsoLocal(iso) {
         if (!iso)
             return ""
+        // Chuỗi lưu trong DB là ISO (local, không có 'Z'), coi như local time
         var d = new Date(iso)
         if (isNaN(d))
             return iso
         return Qt.formatDateTime(d, "dd/MM/yyyy HH:mm:ss")
     }
 
-    // Reload cameras if settings change
     Connections {
         target: settings
-    function onCamera1UrlChanged() { app.gateMode === 1 ? loadCongRa() : loadCongVao() }
-    function onCamera2UrlChanged() { app.gateMode === 1 ? loadCongRa() : loadCongVao() }
+        function onCamera1UrlChanged() { app.gateMode === 1 ? loadCongRa() : loadCongVao() }
+        function onCamera2UrlChanged() { app.gateMode === 1 ? loadCongRa() : loadCongVao() }
     }
 
-    // Auto-recover when CameraManager detects no frames
     Connections {
         target: cameraManager
         function onInputStreamStalled() {
@@ -300,10 +294,9 @@ Item {
         function onAccepted() {
             settings.camera1Url = form.tfCam1.text
             settings.camera2Url = form.tfCam2.text
-            settings.ocrSpaceApiKey = form.tfOcrKey.text
+            // settings.ocrSpaceApiKey = form.tfOcrKey.text
             settings.useHardwareDecode = form.cbHwDecode.checked
             settings.save()
-            // Re-apply camera sources using the new preference
             app.gateMode === 1 ? loadCongRa() : loadCongVao()
         }
     }
@@ -395,7 +388,6 @@ Item {
     Connections {
         target: app
         function onGateModeChanged() {
-            // If sources already match targets, skip reload. Only cancel retries if both are healthy.
             if (sourcesMatchSettings()) {
                 if (isHealthy(camera1) && isHealthy(camera2)) {
                     cam1Retry.stop(); cam2Retry.stop();

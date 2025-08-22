@@ -42,10 +42,11 @@ void HidKeyboardCardReader::processKey(int key, const QString &text)
     if (!text.isEmpty())
     {
         // CR10E gửi ký tự ASCII số/ chữ in HOA
-        // Lọc bỏ ký tự điều khiển
+        // Lọc bỏ ký tự điều khiển và cả các ký tự không phải chữ/số ở đầu
         for (QChar c : text)
         {
-            if (c.isPrint())
+            // Chỉ chấp nhận chữ và số để tránh ký tự thừa như ';', '%', ...
+            if (c.isLetterOrNumber())
                 m_buffer.append(c);
         }
         emit debugLog(QStringLiteral("[HID] Key '%1' buffer='%2'").arg(text, m_buffer));

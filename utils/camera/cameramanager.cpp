@@ -29,7 +29,7 @@ CameraManager::CameraManager(QObject *parent)
         m_lastOutputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_outputStalled) { m_outputStalled = false; } });
 
-    // Watchdog: detect stalls (>3s no frames)
+    // Watchdog: phát hiện đứng hình (>3s no frames)
     m_watchdog.setInterval(1000);
     connect(&m_watchdog, &QTimer::timeout, this, [this]()
             {

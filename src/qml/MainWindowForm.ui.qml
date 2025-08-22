@@ -154,8 +154,7 @@ Item {
                             anchors.fill: parent
                             fillMode: Image.PreserveAspectFit
                             cache: false
-                            source: app.gateMode === 1 ? (app.exitReviewAvailable ? app.exitImage1DataUrl : "")
-                                                       : (cameraManager.inputSnapshotDataUrl || "")
+                            source: app.gateMode === 1 ? (app.exitReviewAvailable ? app.exitImage1DataUrl : "") : (cameraManager.inputSnapshotDataUrl || "")
                         }
                     }
 
@@ -211,8 +210,7 @@ Item {
                             anchors.fill: parent
                             fillMode: Image.PreserveAspectFit
                             cache: false
-                            source: app.gateMode === 1 ? (app.exitReviewAvailable ? app.exitImage2DataUrl : "")
-                                                       : (cameraManager.outputSnapshotDataUrl || "")
+                            source: app.gateMode === 1 ? (app.exitReviewAvailable ? app.exitImage2DataUrl : "") : (cameraManager.outputSnapshotDataUrl || "")
                         }
                     }
 
@@ -449,15 +447,15 @@ Item {
                 text: settings.camera2Url
                 Layout.preferredWidth: 520
             }
-            Label {
-                text: qsTr("OCR.Space API Key (optional)")
-            }
-            TextField {
-                id: tfOcrKey
-                text: settings.ocrSpaceApiKey
-                Layout.preferredWidth: 520
-                echoMode: TextInput.Normal
-            }
+            // Label {
+            //     text: qsTr("OCR.Space API Key (optional)")
+            // }
+            // TextField {
+            //     id: tfOcrKey
+            //     text: settings.ocrSpaceApiKey
+            //     Layout.preferredWidth: 520
+            //     echoMode: TextInput.Normal
+            // }
         }
     }
 
