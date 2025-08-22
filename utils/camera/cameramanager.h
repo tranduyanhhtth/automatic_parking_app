@@ -9,6 +9,9 @@
 #include <QElapsedTimer>
 #include <QTimer>
 
+class GStreamerPlayer;
+class VideoFrameProducer;
+
 class CameraManager : public QObject, public ICameraSnapshotProvider
 {
     Q_OBJECT
@@ -33,6 +36,11 @@ public slots:
     // Chụp ảnh hiện tại (JPEG) từ mỗi camera;
     Q_INVOKABLE QByteArray captureInputSnapshot(int quality = 85) override;
     Q_INVOKABLE QByteArray captureOutputSnapshot(int quality = 85) override;
+
+    // Khởi động/dừng GStreamer
+    Q_INVOKABLE bool startInputStream(const QString &url);
+    Q_INVOKABLE bool startOutputStream(const QString &url);
+    Q_INVOKABLE void stopStreams();
 
     // Xóa dữ liệu xem trước để UI trống ảnh ngay lập tức
     Q_INVOKABLE void clearSnapshots() override
@@ -80,4 +88,10 @@ private:
     bool m_inputStalled{false};
     bool m_outputStalled{false};
     QTimer m_watchdog;
+
+    // GStreamer pipeline holders
+    GStreamerPlayer *m_gstIn{nullptr};
+    GStreamerPlayer *m_gstOut{nullptr};
+    VideoFrameProducer *m_inProducer{nullptr};
+    VideoFrameProducer *m_outProducer{nullptr};
 };

@@ -21,15 +21,13 @@ Item {
     Timer {
         id: cam1Retry; interval: window.cam1RetryMs; repeat: false
         onTriggered: {
-            var u1 = applyRtspOptions(settings.camera1Url)
-            setSourceAndRestart(camera1, u1)
+            cameraManager.startInputStream(settings.camera1Url)
         }
     }
     Timer {
         id: cam2Retry; interval: window.cam2RetryMs; repeat: false
         onTriggered: {
-            var u2 = applyRtspOptions(settings.camera2Url)
-            setSourceAndRestart(camera2, u2)
+            cameraManager.startOutputStream(settings.camera2Url)
         }
     }
 
@@ -41,23 +39,7 @@ Item {
         }
     }
 
-    // Players for two RTSP cameras
-    MediaPlayer {
-        id: camera1
-        videoOutput: form.inputVideoOutput
-        audioOutput: null
-        autoPlay: false
-        // Gợi ý độ trễ thấp cho các luồng mạng
-        property bool lowLatency: true
-    }
-    MediaPlayer {
-        id: camera2
-        videoOutput: form.outputVideoOutput
-        audioOutput: null
-        autoPlay: false
-        // Gợi ý độ trễ thấp cho các luồng mạng
-        property bool lowLatency: true
-    }
+    // Không còn dùng MediaPlayer FFmpeg; VideoOutput vẫn nhận QVideoSink từ CameraManager
 
     // Default: load entrance cameras (.45 and .46)
     Component.onCompleted: {
@@ -66,22 +48,16 @@ Item {
             cameraManager.setInputVideoSink(form.inputVideoOutput.videoSink)
         if (form.outputVideoOutput && form.outputVideoOutput.videoSink)
             cameraManager.setOutputVideoSink(form.outputVideoOutput.videoSink)
-        loadCongVao()
+            
+        // Khởi động GStreamer với URL hiện tại
+        cameraManager.startInputStream(settings.camera1Url)
+        cameraManager.startOutputStream(settings.camera2Url)
         // Feed formatted times to the UI form (no logic inside .ui.qml)
         form.timeInText = formatIsoLocal(app.checkInTime)
         form.timeOutText = formatIsoLocal(app.checkOutTime)
     }
 
-    function setSourceAndRestart(player, url) {
-        // Fully reset the backend to avoid stuck state when reusing same URL
-        player.stop()
-        player.source = "" // force detach
-        player.source = url
-        // Try to disable audio track entirely if supported by backend
-        if (player.activeAudioTrack !== undefined)
-            player.activeAudioTrack = -1
-        player.play()
-    }
+    // setSourceAndRestart/player logic đã bỏ khi chuyển sang GStreamer
 
     function sourceToString(src) {
         if (!src)
@@ -110,16 +86,11 @@ Item {
     }
 
     // Chỉ khởi động lại cam khi url thay đổi hoặc luồng stream không ổn
-    function setSourceIfChanged(player, url) {
-        var cur = normalizeUrl(player.source)
-        var tgt = normalizeUrl(url)
-        var okState = (player.mediaStatus === MediaPlayer.LoadedMedia || player.mediaStatus === MediaPlayer.BufferedMedia)
-        if (cur === tgt && okState) {
-            if (player.activeAudioTrack !== undefined)
-                player.activeAudioTrack = -1
-            return
-        }
-        setSourceAndRestart(player, tgt)
+    function setSourceIfChanged(url1, url2) {
+        // Với GStreamer, nếu URL thay đổi thì dừng và start lại
+        cameraManager.stopStreams()
+        cameraManager.startInputStream(url1)
+        cameraManager.startOutputStream(url2)
     }
 
     function isHealthy(player) {
@@ -129,33 +100,17 @@ Item {
     function loadCongVao() {
         var u1 = applyRtspOptions(settings.camera1Url)
         var u2 = applyRtspOptions(settings.camera2Url)
-        var changed1 = normalizeUrl(camera1.source) !== normalizeUrl(u1)
-        var changed2 = normalizeUrl(camera2.source) !== normalizeUrl(u2)
-        if (changed1 || changed2) {
-            cam1Retry.stop(); cam2Retry.stop();
-            window.cam1RetryMs = 1000; window.cam2RetryMs = 1000
-        }
-        setSourceIfChanged(camera1, u1)
-        setSourceIfChanged(camera2, u2)
+    setSourceIfChanged(u1, u2)
     }
 
     function loadCongRa() {
         var u1 = applyRtspOptions(settings.camera1Url)
         var u2 = applyRtspOptions(settings.camera2Url)
-        var changed1 = normalizeUrl(camera1.source) !== normalizeUrl(u1)
-        var changed2 = normalizeUrl(camera2.source) !== normalizeUrl(u2)
-        if (changed1 || changed2) {
-            cam1Retry.stop(); cam2Retry.stop();
-            window.cam1RetryMs = 1000; window.cam2RetryMs = 1000
-        }
-        setSourceIfChanged(camera1, u1)
-        setSourceIfChanged(camera2, u2)
+    setSourceIfChanged(u1, u2)
     }
     function sourcesMatchSettings() {
-        var u1 = applyRtspOptions(settings.camera1Url)
-        var u2 = applyRtspOptions(settings.camera2Url)
-        return normalizeUrl(camera1.source) === normalizeUrl(u1)
-               && normalizeUrl(camera2.source) === normalizeUrl(u2)
+    // Với GStreamer, coi như luôn cần khởi động lại khi URL thực sự đổi (đã xử lý ở setSourceIfChanged)
+    return true
     }
 
     // Bổ sung tùy chọn RTSP cho độ ổn định/độ trễ thấp nếu thiếu trong URL
@@ -217,53 +172,7 @@ Item {
     }
 
     // Tự động reconnect khi luồng báo lỗi hoặc bị Stalled
-    Connections {
-        target: camera1
-        function onErrorChanged() {
-            // backoff tới tối đa 10s
-            window.cam1RetryMs = Math.min(window.cam1RetryMs * 2, 10000)
-            if (form && form.hidLogModel)
-                form.hidLogModel.append({"display": Qt.formatTime(new Date(), "hh:mm:ss") + " cam1 error: " + camera1.error + " " + camera1.errorString})
-            cam1Retry.restart()
-        }
-        function onMediaStatusChanged() {
-            if (camera1.mediaStatus === MediaPlayer.StalledMedia || camera1.mediaStatus === MediaPlayer.InvalidMedia) {
-                window.cam1RetryMs = Math.min(window.cam1RetryMs * 2, 10000)
-                if (form && form.hidLogModel)
-                    form.hidLogModel.append({"display": Qt.formatTime(new Date(), "hh:mm:ss") + " cam1 status: " + camera1.mediaStatus})
-                cam1Retry.restart()
-            } else if (camera1.mediaStatus === MediaPlayer.LoadedMedia || camera1.mediaStatus === MediaPlayer.BufferedMedia) {
-                window.cam1RetryMs = 1000
-                if (camera1.activeAudioTrack !== undefined)
-                    camera1.activeAudioTrack = -1
-                if (form && form.hidLogModel)
-                    form.hidLogModel.append({"display": Qt.formatTime(new Date(), "hh:mm:ss") + " cam1 status: OK"})
-            }
-        }
-    }
-    Connections {
-        target: camera2
-        function onErrorChanged() {
-            window.cam2RetryMs = Math.min(window.cam2RetryMs * 2, 10000)
-            if (form && form.hidLogModel)
-                form.hidLogModel.append({"display": Qt.formatTime(new Date(), "hh:mm:ss") + " cam2 error: " + camera2.error + " " + camera2.errorString})
-            cam2Retry.restart()
-        }
-        function onMediaStatusChanged() {
-            if (camera2.mediaStatus === MediaPlayer.StalledMedia || camera2.mediaStatus === MediaPlayer.InvalidMedia) {
-                window.cam2RetryMs = Math.min(window.cam2RetryMs * 2, 10000)
-                if (form && form.hidLogModel)
-                    form.hidLogModel.append({"display": Qt.formatTime(new Date(), "hh:mm:ss") + " cam2 status: " + camera2.mediaStatus})
-                cam2Retry.restart()
-            } else if (camera2.mediaStatus === MediaPlayer.LoadedMedia || camera2.mediaStatus === MediaPlayer.BufferedMedia) {
-                window.cam2RetryMs = 1000
-                if (camera2.activeAudioTrack !== undefined)
-                    camera2.activeAudioTrack = -1
-                if (form && form.hidLogModel)
-                    form.hidLogModel.append({"display": Qt.formatTime(new Date(), "hh:mm:ss") + " cam2 status: OK"})
-            }
-        }
-    }
+    // Bỏ kết nối theo dõi MediaPlayer vì đã chuyển sang GStreamer
 
     Connections {
         target: form.btnSettings

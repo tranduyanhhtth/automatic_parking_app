@@ -4,6 +4,8 @@
 #include <QImage>
 #include <QBuffer>
 #include <QDateTime>
+#include "utils/gstreamer/gstreamerplayer.h"
+#include "utils/gstreamer/videoframeproducer.h"
 
 static QImage ensureFormat(const QImage &src)
 {
@@ -41,6 +43,12 @@ CameraManager::CameraManager(QObject *parent)
             if (!m_outputStalled) { m_outputStalled = true; emit outputStreamStalled(); }
         } });
     m_watchdog.start();
+
+    // Prepare GStreamer producers
+    m_inProducer = new VideoFrameProducer(this);
+    m_outProducer = new VideoFrameProducer(this);
+    m_inProducer->setVideoSink(m_inputSink);
+    m_outProducer->setVideoSink(m_outputSink);
 }
 
 void CameraManager::setInputVideoSink(QVideoSink *sink)
@@ -57,6 +65,8 @@ void CameraManager::setInputVideoSink(QVideoSink *sink)
         m_lastInputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_inputStalled) { m_inputStalled = false; } });
     emit inputVideoSinkChanged();
+    if (m_inProducer)
+        m_inProducer->setVideoSink(m_inputSink);
 }
 
 void CameraManager::setOutputVideoSink(QVideoSink *sink)
@@ -73,6 +83,8 @@ void CameraManager::setOutputVideoSink(QVideoSink *sink)
         m_lastOutputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_outputStalled) { m_outputStalled = false; } });
     emit outputVideoSinkChanged();
+    if (m_outProducer)
+        m_outProducer->setVideoSink(m_outputSink);
 }
 
 QByteArray CameraManager::encodeJpeg(const QImage &img, int quality)
@@ -114,4 +126,39 @@ QByteArray CameraManager::captureOutputSnapshot(int quality)
     m_outputSnapshotDataUrl = makeDataUrl(bytes);
     emit outputSnapshotChanged();
     return bytes;
+}
+
+bool CameraManager::startInputStream(const QString &url)
+{
+    if (!m_gstIn)
+    {
+        m_gstIn = new GStreamerPlayer(this);
+        // Prefer hardware decode if available (Windows: d3d11h264dec)
+        m_gstIn->setPreferHardwareDecode(true);
+        connect(m_gstIn, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
+                {
+            if (m_inProducer) m_inProducer->pushImage(img); });
+    }
+    return m_gstIn->start(url);
+}
+
+bool CameraManager::startOutputStream(const QString &url)
+{
+    if (!m_gstOut)
+    {
+        m_gstOut = new GStreamerPlayer(this);
+        m_gstOut->setPreferHardwareDecode(true);
+        connect(m_gstOut, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
+                {
+            if (m_outProducer) m_outProducer->pushImage(img); });
+    }
+    return m_gstOut->start(url);
+}
+
+void CameraManager::stopStreams()
+{
+    if (m_gstIn)
+        m_gstIn->stop();
+    if (m_gstOut)
+        m_gstOut->stop();
 }

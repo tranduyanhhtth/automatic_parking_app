@@ -6,6 +6,25 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort Network)
 
+# GStreamer
+if (WIN32)
+    # Cho phép người dùng chỉ định prefix GStreamer thủ công (mặc định Program Files)
+    set(GSTREAMER_ROOT "C:/Program Files/gstreamer/1.0/msvc_x86_64" CACHE PATH "GStreamer MSVC 64-bit prefix")
+    if (EXISTS "${GSTREAMER_ROOT}/bin/pkg-config.exe")
+        # Trỏ pkg-config executable về đúng bản đi kèm GStreamer
+        set(PKG_CONFIG_EXECUTABLE "${GSTREAMER_ROOT}/bin/pkg-config.exe" CACHE FILEPATH "pkg-config for GStreamer" FORCE)
+    endif()
+    # Nếu IDE không thấy biến môi trường, set nội bộ cho CMake quá trình configure
+    if (EXISTS "${GSTREAMER_ROOT}/lib/pkgconfig")
+        set(ENV{PKG_CONFIG_PATH} "${GSTREAMER_ROOT}/lib/pkgconfig;${GSTREAMER_ROOT}/share/pkgconfig")
+    endif()
+endif()
+
+find_package(PkgConfig QUIET)
+if (PkgConfig_FOUND)
+    pkg_check_modules(GSTREAMER QUIET IMPORTED_TARGET gstreamer-1.0 gstreamer-app-1.0 gstreamer-video-1.0)
+endif()
+
 qt_standard_project_setup(REQUIRES 6.8)
 
 qt_add_executable(appsmart_parking_system
@@ -24,6 +43,8 @@ qt_add_qml_module(appsmart_parking_system
 
     SOURCES
         utils/camera/cameramanager.h utils/camera/cameramanager.cpp
+        utils/gstreamer/gstreamerplayer.h utils/gstreamer/gstreamerplayer.cpp
+        utils/gstreamer/videoframeproducer.h
         utils/db/databasemanager.h utils/db/databasemanager.cpp
         utils/config/settings.h utils/config/settings.cpp
         utils/io_card/hidkeyboardcardreader.h utils/io_card/hidkeyboardcardreader.cpp
@@ -62,6 +83,36 @@ target_link_libraries(appsmart_parking_system
     PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network
     PRIVATE onnxruntime
 )
+
+# Link GStreamer if available via pkg-config
+if (TARGET PkgConfig::GSTREAMER)
+    target_link_libraries(appsmart_parking_system PRIVATE PkgConfig::GSTREAMER)
+elseif (GSTREAMER_FOUND)
+    target_include_directories(appsmart_parking_system PRIVATE ${GSTREAMER_INCLUDE_DIRS})
+    target_link_libraries(appsmart_parking_system PRIVATE ${GSTREAMER_LIBRARIES})
+else()
+    # Fallback thủ công trên Windows nếu biết GSTREAMER_ROOT
+    if (WIN32 AND EXISTS "${GSTREAMER_ROOT}")
+        message(STATUS "Fallback: link GStreamer thủ công từ ${GSTREAMER_ROOT}")
+        target_include_directories(appsmart_parking_system PRIVATE
+            "${GSTREAMER_ROOT}/include/gstreamer-1.0"
+            "${GSTREAMER_ROOT}/include"
+            "${GSTREAMER_ROOT}/include/glib-2.0"
+            "${GSTREAMER_ROOT}/lib/glib-2.0/include"
+        )
+        target_link_directories(appsmart_parking_system PRIVATE "${GSTREAMER_ROOT}/lib")
+        target_link_libraries(appsmart_parking_system PRIVATE
+            gstapp-1.0
+            gstbase-1.0
+            gstreamer-1.0
+            gobject-2.0
+            glib-2.0
+            intl
+        )
+    else()
+        message(FATAL_ERROR "pkg-config không tìm được gstreamer-1.0/app.")
+    endif()
+endif()
 
 # Windows: link D3D11/DXGI for GPU availability detection
 if (WIN32)

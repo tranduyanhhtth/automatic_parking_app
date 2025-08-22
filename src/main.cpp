@@ -24,13 +24,7 @@
 
 int main(int argc, char *argv[])
 {
-    // Configure Qt Multimedia (FFmpeg) for low-latency RTSP before creating the app
-    qputenv("QT_MEDIA_BACKEND", QByteArray("ffmpeg"));
-    qputenv("QT_FFMPEG_RTSP_TRANSPORT", QByteArray("tcp"));
-    qputenv("QT_FFMPEG_MAX_DELAY", QByteArray("100000"));   // 100ms
-    qputenv("QT_FFMPEG_BUFFER_SIZE", QByteArray("524288")); // 512KB
-    qputenv("QT_FFMPEG_ANALYZE_DURATION", QByteArray("0"));
-    qputenv("QT_FFMPEG_PROBE_SIZE", QByteArray("32768"));
+    // Sử dụng GStreamer để stream, không cần cấu hình biến môi trường FFmpeg
 
     QGuiApplication app(argc, argv);
 
@@ -42,19 +36,14 @@ int main(int argc, char *argv[])
     auto cameraManager = new CameraManager(&app);
 
     auto settings = new SettingsManager(&app);
-    // Hint FFmpeg/Qt to use hardware decoding when available (D3D11VA on Windows)
+    // Tuỳ chọn: vẫn có thể dùng decode hardware trong GStreamer (cấu hình trong pipeline nếu cần)
     if (settings->useHardwareDecode())
     {
-        // These envs are advisory; Qt may ignore unknown keys
-        qputenv("QT_MEDIA_FFMPEG_HWACCEL", QByteArray("d3d11va"));
-        qputenv("QT_FFMPEG_HWACCEL", QByteArray("d3d11va"));
-        qputenv("QT_MEDIA_USE_HARDWARE_DECODER", QByteArray("1"));
+        // Chưa bật mặc định trong pipeline; có thể thay decodebin bằng d3d11h264dec nếu cần
     }
     else
     {
-        qunsetenv("QT_MEDIA_FFMPEG_HWACCEL");
-        qunsetenv("QT_FFMPEG_HWACCEL");
-        qputenv("QT_MEDIA_USE_HARDWARE_DECODER", QByteArray("0"));
+        // Không thay đổi gì ở đây
     }
 
     auto db = new DatabaseManager(&app);
