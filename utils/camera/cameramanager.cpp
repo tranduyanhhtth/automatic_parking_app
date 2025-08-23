@@ -138,6 +138,10 @@ bool CameraManager::startInputStream(const QString &url)
         connect(m_gstIn, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
             if (m_inProducer) m_inProducer->pushImage(img); });
+        connect(m_gstIn, &GStreamerPlayer::errorOccured, this, [](const QString &msg)
+                { qWarning() << "[GStreamer In]" << msg; });
+        connect(m_gstIn, &GStreamerPlayer::stateChanged, this, [](const QString &s)
+                { qInfo() << "[GStreamer In] state" << s; });
     }
     return m_gstIn->start(url);
 }
@@ -151,6 +155,10 @@ bool CameraManager::startOutputStream(const QString &url)
         connect(m_gstOut, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
             if (m_outProducer) m_outProducer->pushImage(img); });
+        connect(m_gstOut, &GStreamerPlayer::errorOccured, this, [](const QString &msg)
+                { qWarning() << "[GStreamer Out]" << msg; });
+        connect(m_gstOut, &GStreamerPlayer::stateChanged, this, [](const QString &s)
+                { qInfo() << "[GStreamer Out] state" << s; });
     }
     return m_gstOut->start(url);
 }

@@ -2,6 +2,7 @@
 #include <QObject>
 #include <QSerialPort>
 #include <QString>
+#include <QTimer>
 #include <QByteArray>
 #include "domain/ports/ibarrier.h"
 
@@ -28,6 +29,8 @@ public:
 public slots:
     Q_INVOKABLE void open() override;
     Q_INVOKABLE void close() override;
+    // Generate a momentary pulse: turn relay ON, then OFF after ms milliseconds (default 300ms)
+    Q_INVOKABLE void pulse(int ms = 300);
     Q_INVOKABLE bool connectPort();
     Q_INVOKABLE void disconnectPort();
     Q_INVOKABLE void setBaudRate(int baud);

@@ -47,13 +47,22 @@ qt_add_qml_module(appsmart_parking_system
         utils/gstreamer/videoframeproducer.h
         utils/db/databasemanager.h utils/db/databasemanager.cpp
         utils/config/settings.h utils/config/settings.cpp
-        utils/io_card/hidkeyboardcardreader.h utils/io_card/hidkeyboardcardreader.cpp
+        utils/io_card/windows_rawinput_router.h utils/io_card/windows_rawinput_router.cpp
+        utils/io_card/hidkeyboardcardreader_device.h utils/io_card/hidkeyboardcardreader_device.cpp
         utils/io_barrier/usbrelaybarrier.h utils/io_barrier/usbrelaybarrier.cpp
         utils/ocr/ocrprocessor.h utils/ocr/ocrprocessor.cpp
+        utils/ocr/tesseract_ocr.h utils/ocr/tesseract_ocr.cpp
         utils/ocr/yolo_onnx_detector.h utils/ocr/yolo_onnx_detector.cpp
         controller/parkingcontroller.h controller/parkingcontroller.cpp
         domain/ports/icardreader.h
         domain/model/parkingrecord.h
+)
+
+# Ensure Qt MOC/UIC/RCC are enabled for this target
+set_target_properties(appsmart_parking_system PROPERTIES
+    AUTOMOC ON
+    AUTOUIC ON
+    AUTORCC ON
 )
 
 ### --- ONNX Runtime --- ###
@@ -83,6 +92,49 @@ target_link_libraries(appsmart_parking_system
     PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network
     PRIVATE onnxruntime
 )
+
+# Tùy chọn: tích hợp Tesseract OCR (dùng vcpkg + MSVC x64)
+option(ENABLE_TESSERACT "Bật Tesseract OCR" ON)
+if (ENABLE_TESSERACT)
+    set(HAVE_TESSERACT ON)
+    target_compile_definitions(appsmart_parking_system PRIVATE HAVE_TESSERACT)
+    # Liên kết duy nhất từ thư mục vendor lib/tesseract trong source (không dùng vcpkg/TESSERACT_ROOT)
+    set(TESSERACT_VENDOR_DIR "${CMAKE_SOURCE_DIR}/lib/tesseract")
+    # Chọn đúng biến thể theo cấu hình: Debug dùng hậu tố 'd', Release không
+    set(TESSERACT_VENDOR_TESSERACT_LIB_DEBUG "tesseract55d")
+    set(TESSERACT_VENDOR_TESSERACT_LIB_RELEASE "tesseract55")
+    set(TESSERACT_VENDOR_LEPTONICA_LIB_DEBUG "leptonica-1.85.0d")
+    set(TESSERACT_VENDOR_LEPTONICA_LIB_RELEASE "leptonica-1.85.0")
+    if (EXISTS "${TESSERACT_VENDOR_DIR}/include" AND EXISTS "${TESSERACT_VENDOR_DIR}/lib")
+        message(STATUS "Liên kết Tesseract từ vendor: ${TESSERACT_VENDOR_DIR}")
+        target_include_directories(appsmart_parking_system PRIVATE
+            "${TESSERACT_VENDOR_DIR}/include"
+            "${TESSERACT_VENDOR_DIR}/include/tesseract"
+            "${TESSERACT_VENDOR_DIR}/include/leptonica"
+        )
+        # Ưu tiên lib theo cấu hình: nếu có thư mục debug/lib thì dùng cho Debug, ngược lại fallback lib/
+        target_link_directories(appsmart_parking_system PRIVATE
+            "$<IF:$<CONFIG:Debug>,${TESSERACT_VENDOR_DIR}/debug/lib,${TESSERACT_VENDOR_DIR}/lib>"
+            "${TESSERACT_VENDOR_DIR}/lib"
+        )
+        target_link_libraries(appsmart_parking_system PRIVATE
+            $<$<CONFIG:Debug>:${TESSERACT_VENDOR_TESSERACT_LIB_DEBUG};${TESSERACT_VENDOR_LEPTONICA_LIB_DEBUG}>
+            $<$<NOT:$<CONFIG:Debug>>:${TESSERACT_VENDOR_TESSERACT_LIB_RELEASE};${TESSERACT_VENDOR_LEPTONICA_LIB_RELEASE}>
+        )
+    else()
+        message(FATAL_ERROR "Không tìm thấy vendor Tesseract tại ${TESSERACT_VENDOR_DIR}. Vui lòng đặt include/ và lib/ đúng vị trí.")
+    endif()
+endif()
+
+if (WIN32 AND ENABLE_TESSERACT)
+    # Sao chép DLL Tesseract theo cấu hình (tránh trộn Debug/Release)
+    set(TESSERACT_VENDOR_DIR "${CMAKE_SOURCE_DIR}/lib/tesseract")
+    add_custom_command(TARGET appsmart_parking_system POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "$<IF:$<CONFIG:Debug>,${TESSERACT_VENDOR_DIR}/debug/bin,${TESSERACT_VENDOR_DIR}/bin>"
+        "$<TARGET_FILE_DIR:appsmart_parking_system>"
+    COMMENT "Copy vendor tesseract DLLs for $<CONFIG> to output")
+endif()
 
 # Link GStreamer if available via pkg-config
 if (TARGET PkgConfig::GSTREAMER)
@@ -114,9 +166,9 @@ else()
     endif()
 endif()
 
-# Windows: link D3D11/DXGI for GPU availability detection
+# Windows: link D3D11/DXGI for GPU availability detection and user32 for Raw Input
 if (WIN32)
-    target_link_libraries(appsmart_parking_system PRIVATE d3d11 dxgi)
+    target_link_libraries(appsmart_parking_system PRIVATE d3d11 dxgi user32)
 endif()
 
 # Sao chép ONNX Runtime DLL vào thư mục build

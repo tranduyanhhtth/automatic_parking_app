@@ -15,6 +15,21 @@ GStreamerPlayer::GStreamerPlayer(QObject *parent) : QObject(parent)
         gst_init(nullptr, nullptr);
         inited.storeRelease(1);
     }
+
+    // Timers
+    m_retryTimer.setSingleShot(true);
+    connect(&m_retryTimer, &QTimer::timeout, this, [this]()
+            {
+        // Always execute attempt on our own thread
+        startAttempt(m_attempt); });
+    m_noFrameTimer.setSingleShot(true);
+    connect(&m_noFrameTimer, &QTimer::timeout, this, [this]()
+            {
+        if (!m_firstFrameSeen) {
+            emit errorOccured(QStringLiteral("No frames received – retrying"));
+            // Ensure retry happens on our thread
+            scheduleRetry(1500);
+        } });
 }
 
 GStreamerPlayer::~GStreamerPlayer()
@@ -31,27 +46,96 @@ void GStreamerPlayer::cleanup()
         m_pipeline = nullptr;
         m_appsink = nullptr;
     }
+    // Stop timers on our thread
+    QMetaObject::invokeMethod(this, [this]()
+                              { m_noFrameTimer.stop(); m_retryTimer.stop(); }, Qt::QueuedConnection);
 }
 
 bool GStreamerPlayer::start(const QString &rtspUrl)
 {
     stop();
     m_url = rtspUrl;
+    if (rtspUrl.trimmed().isEmpty())
+    {
+        emit errorOccured(QStringLiteral("RTSP URL is empty"));
+        return false;
+    }
+    m_attempt = 0;
+    m_firstFrameSeen = false;
+    return startAttempt(m_attempt);
+}
 
-    // Build pipeline: prefer hardware decoder when available
+void GStreamerPlayer::stop()
+{
+    cleanup();
+    emit stateChanged(QStringLiteral("STOPPED"));
+}
+
+bool GStreamerPlayer::startAttempt(int attempt)
+{
+    teardownPipeline();
+    if (!buildPipelineForAttempt(attempt))
+    {
+        emit errorOccured(QStringLiteral("Failed to build pipeline (attempt %1)").arg(attempt));
+        return false;
+    }
+
+    GstBus *bus = gst_element_get_bus(m_pipeline);
+    gst_bus_add_watch(bus, &GStreamerPlayer::onBusMessage, this);
+    gst_object_unref(bus);
+
+    gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
+    emit stateChanged(QStringLiteral("PLAYING"));
+    m_firstFrameSeen = false;
+    armNoFrameTimer(3000);
+    return true;
+}
+
+void GStreamerPlayer::teardownPipeline()
+{
+    if (m_pipeline)
+    {
+        gst_element_set_state(m_pipeline, GST_STATE_NULL);
+        gst_object_unref(m_pipeline);
+        m_pipeline = nullptr;
+        m_appsink = nullptr;
+    }
+}
+
+bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
+{
+    // attempt 0: uridecodebin (codec agnostic), attempt 1: explicit rtspsrc+h264
     bool useHw = m_preferHwDecode;
 #ifdef _WIN32
-    useHw = useHw && hasElement("d3d11h264dec");
+    const bool hasD3D11 = hasElement("d3d11h264dec") && hasElement("d3d11convert") && hasElement("d3d11download");
+    useHw = useHw && hasD3D11;
 #else
-    // Extend for other platforms/codecs if needed
+    const bool hasD3D11 = false;
 #endif
-    QByteArray decoder = useHw ? QByteArray("d3d11h264dec !") : QByteArray("decodebin !");
-    // Force RGBA at appsink to simplify mapping to QImage
-    QByteArray pipeStr = QByteArray("rtspsrc location=") + rtspUrl.toUtf8() +
-                         QByteArray(" latency=0 protocols=tcp drop-on-late=true ! ") +
-                         QByteArray("rtpjitterbuffer drop-on-late=true do-lost=true latency=0 ! ") +
-                         QByteArray("rtph264depay ! queue max-size-buffers=1 leaky=downstream ! ") +
-                         decoder + QByteArray(" videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
+    QString qUrl = m_url;
+    qUrl.replace("\"", "\\\"");
+    QByteArray quotedUrl = QByteArray("\"") + qUrl.toUtf8() + QByteArray("\"");
+
+    QByteArray pipeStr;
+    if (attempt == 0)
+    {
+        // uridecodebin handles rtsp:// gracefully and picks depay/parse/decoder
+        pipeStr = QByteArray("uridecodebin uri=") + quotedUrl +
+                  QByteArray(" ! videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
+    }
+    else
+    {
+        QByteArray decoder;
+#ifdef _WIN32
+        if (useHw && hasD3D11)
+            decoder = QByteArray("d3d11h264dec ! d3d11convert ! d3d11download !");
+        else
+#endif
+            decoder = QByteArray("decodebin !");
+        pipeStr = QByteArray("rtspsrc location=") + quotedUrl +
+                  QByteArray(" protocols=tcp latency=0 ! rtph264depay ! h264parse ! queue max-size-buffers=1 leaky=downstream ! ") +
+                  decoder + QByteArray(" videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
+    }
 
     GError *err = nullptr;
     m_pipeline = gst_parse_launch(pipeStr.constData(), &err);
@@ -78,20 +162,24 @@ bool GStreamerPlayer::start(const QString &rtspUrl)
     GstAppSinkCallbacks cbs = {};
     cbs.new_sample = &GStreamerPlayer::onNewSample;
     gst_app_sink_set_callbacks(GST_APP_SINK(m_appsink), &cbs, this, nullptr);
-
-    GstBus *bus = gst_element_get_bus(m_pipeline);
-    gst_bus_add_watch(bus, &GStreamerPlayer::onBusMessage, this);
-    gst_object_unref(bus);
-
-    gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
-    emit stateChanged(QStringLiteral("PLAYING"));
     return true;
 }
 
-void GStreamerPlayer::stop()
+void GStreamerPlayer::armNoFrameTimer(int ms)
 {
-    cleanup();
-    emit stateChanged(QStringLiteral("STOPPED"));
+    // Start timer on our own thread to avoid cross-thread warnings
+    QMetaObject::invokeMethod(this, [this, ms]()
+                              { m_noFrameTimer.start(ms); }, Qt::QueuedConnection);
+}
+
+void GStreamerPlayer::scheduleRetry(int ms)
+{
+    // Queue teardown and retry on our own thread
+    QMetaObject::invokeMethod(this, [this, ms]()
+                              {
+        teardownPipeline();
+        m_attempt = (m_attempt + 1) % 2; // alternate attempts 0 and 1
+        m_retryTimer.start(ms); }, Qt::QueuedConnection);
 }
 
 GstFlowReturn GStreamerPlayer::onNewSample(GstAppSink *sink, gpointer user_data)
@@ -103,7 +191,19 @@ GstFlowReturn GStreamerPlayer::onNewSample(GstAppSink *sink, gpointer user_data)
     QImage img = sampleToImage(sample);
     gst_sample_unref(sample);
     if (!img.isNull())
+    {
+        if (!self->m_firstFrameSeen)
+        {
+            // Flip flag and stop timer on the QObject's thread
+            QMetaObject::invokeMethod(self, [self]()
+                                      {
+                self->m_firstFrameSeen = true;
+                self->m_noFrameTimer.stop();
+                emit self->stateChanged(QStringLiteral("FIRST_FRAME")); }, Qt::QueuedConnection);
+        }
+        // Emit frame (Qt will queue across threads if needed)
         emit self->newFrame(img);
+    }
     return GST_FLOW_OK;
 }
 
@@ -124,11 +224,13 @@ gboolean GStreamerPlayer::onBusMessage(GstBus *bus, GstMessage *message, gpointe
         if (debug)
             g_free(debug);
         emit self->errorOccured(msg);
+        self->scheduleRetry(1500);
         break;
     }
     case GST_MESSAGE_EOS:
     {
         emit self->stateChanged(QStringLiteral("EOS"));
+        self->scheduleRetry(1000);
         break;
     }
     default:

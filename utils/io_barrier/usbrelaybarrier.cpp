@@ -1,5 +1,6 @@
 #include "usbrelaybarrier.h"
 #include <QSerialPortInfo>
+#include <QTimer>
 
 UsbRelayBarrier::UsbRelayBarrier(QObject *parent) : QObject(parent)
 {
@@ -74,7 +75,7 @@ bool UsbRelayBarrier::sendCommand(const QByteArray &bytes)
         setError(QStringLiteral("Write failed: %1").arg(m_port.errorString()));
         return false;
     }
-    if (!m_port.waitForBytesWritten(200))
+    if (!m_port.waitForBytesWritten(500))
     {
         setError(QStringLiteral("Timeout writing command"));
         return false;
@@ -94,6 +95,18 @@ void UsbRelayBarrier::close()
     static const QByteArray offCmd = QByteArray::fromHex("A00100A1");
     if (sendCommand(offCmd))
         emit barrierClosed();
+}
+
+void UsbRelayBarrier::pulse(int ms)
+{
+    // Ensure port is connected first to avoid delays inside timer
+    if (!m_port.isOpen())
+        connectPort();
+    open();
+    // Use singleShot tied to this QObject to guarantee delivery on the right thread
+    int delay = (ms < 10) ? 10 : ms;
+    QTimer::singleShot(delay, this, [this]
+                       { close(); });
 }
 
 void UsbRelayBarrier::setError(const QString &err)

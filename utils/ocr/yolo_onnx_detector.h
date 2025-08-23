@@ -30,6 +30,6 @@ private:
     // Inference parameters (adapt to your model export)
     int m_inputW{640};
     int m_inputH{640};
-    float m_confThreshold{0.25f};
+    float m_confThreshold{0.5f};
     float m_nmsThreshold{0.45f};
 };

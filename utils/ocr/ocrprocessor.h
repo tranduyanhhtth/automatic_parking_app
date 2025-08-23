@@ -4,12 +4,9 @@
 #include <QVariant>
 #include <QVariantMap>
 #include <QByteArray>
-#include <QNetworkAccessManager>
-#include <QNetworkReply>
-#include <QEventLoop>
-#include <QTimer>
 #include "domain/ports/iocr.h"
 #include "domain/ports/iparkingrepository.h"
+class TesseractOcr;
 
 class YoloOnnxDetectorImpl; // forward declaration to avoid leaking ONNX headers
 class IParkingRepository;   // forward declaration for DI pointer
@@ -34,9 +31,10 @@ private:
     YoloOnnxDetectorImpl *m_detector{nullptr};
     bool m_detectorReady{false};
     IParkingRepository *m_repo{nullptr};
-    // OCR.Space HTTP client
-    QString ocrSpaceApiKeyFromSettings() const;
-    QString ocrSpaceRecognize(const QByteArray &jpegBytes, int timeoutMs = 6000) const;
+    TesseractOcr *m_tess{nullptr};
+    // Try to auto-initialize Tesseract from common locations if settings are missing
+    void tryAutoInitTesseract();
+    QString tesseractRecognize(const QByteArray &jpegBytes) const;
 };
 
 #endif // OCRPROCESSOR_H

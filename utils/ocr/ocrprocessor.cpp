@@ -11,13 +11,43 @@
 #include <QVector>
 #include <QCoreApplication>
 #include <QDir>
-#include <QNetworkAccessManager>
-#include <QNetworkRequest>
-#include <QHttpMultiPart>
-#include <QJsonDocument>
-#include <QJsonObject>
-#include <QJsonArray>
 #include <QSettings>
+#include <QLibrary>
+#include <QFileInfo>
+#include <QFile>
+#include "utils/ocr/tesseract_ocr.h"
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <tlhelp32.h>
+static QStringList listLoadedModulesMatching(const QStringList &patterns)
+{
+    QStringList result;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
+    if (snap == INVALID_HANDLE_VALUE)
+        return result;
+    MODULEENTRY32 me;
+    me.dwSize = sizeof(me);
+    if (Module32First(snap, &me))
+    {
+        do
+        {
+            QString modName = QString::fromWCharArray(me.szModule);
+            QString modPath = QString::fromWCharArray(me.szExePath);
+            for (const QString &p : patterns)
+            {
+                if (modName.contains(p, Qt::CaseInsensitive))
+                {
+                    result << (modName + QStringLiteral(" => ") + modPath);
+                    break;
+                }
+            }
+        } while (Module32Next(snap, &me));
+    }
+    CloseHandle(snap);
+    return result;
+}
+#endif
 
 OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
     : QObject(parent)
@@ -28,6 +58,62 @@ OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
     m_detectorReady = m_detector && m_detector->isReady();
     qInfo() << "OCR: model path resolved to" << modelPath
             << ", detector ready =" << m_detectorReady;
+
+    // Optional: initialize local Tesseract if enabled in settings
+    QSettings s("Multimodel-AIThings", "smart_parking_system");
+    const bool enableTess = s.value("tesseract/enable", false).toBool();
+    if (enableTess)
+    {
+#ifdef Q_OS_WIN
+        // Ensure DLLs are discoverable on Windows
+        const QString appDir = QCoreApplication::applicationDirPath();
+        const QString vendorBin = QStringLiteral("d:/smart_parking_system/lib/tesseract/bin");
+        const QString vendorBinDebug = QStringLiteral("d:/smart_parking_system/lib/tesseract/debug/bin");
+        const QString pathNow = qEnvironmentVariable("PATH");
+        QStringList prepend;
+        if (!appDir.isEmpty())
+            prepend << appDir;
+#ifdef QT_DEBUG
+        if (QDir(vendorBinDebug).exists())
+            prepend << vendorBinDebug; // Prefer debug/bin in Debug builds
+#else
+        if (QDir(vendorBin).exists())
+            prepend << vendorBin; // Use release bin in Release builds
+#endif
+        if (!prepend.isEmpty())
+        {
+            const QString newPath = prepend.join(';') + QLatin1Char(';') + pathNow;
+            qputenv("PATH", newPath.toUtf8());
+        }
+#endif // Q_OS_WIN
+
+        // Initialize Tesseract
+        const QString tessParent = s.value("tesseract/tessdataParent", QStringLiteral("d:/smart_parking_system/lib/tesseract")).toString();
+        const QString tessLang = s.value("tesseract/lang", QStringLiteral("eng")).toString();
+        if (!tessParent.isEmpty())
+            qputenv("TESSDATA_PREFIX", QFile::encodeName(tessParent));
+
+        m_tess = new TesseractOcr(this);
+        bool ok = m_tess->init(tessParent, tessLang);
+        if (!ok && tessLang != QStringLiteral("eng"))
+        {
+            ok = m_tess->init(tessParent, QStringLiteral("eng"));
+        }
+        if (!ok)
+        {
+            qWarning() << "OCR backend [tesseract]: NOT READY (init failed)";
+            m_tess->deleteLater();
+            m_tess = nullptr;
+        }
+        else
+        {
+            qInfo() << "Tesseract initialized.";
+        }
+    }
+
+    // Try auto-init from common locations if still not ready
+    tryAutoInitTesseract();
+    qInfo() << "OCR backend [tesseract] ready =" << (m_tess && m_tess->isReady());
 }
 
 QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
@@ -36,6 +122,14 @@ QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
     QVariantMap result;
     result.insert("front", QString());
     result.insert("rear", QString());
+    result.insert("backend", QString());
+    result.insert("detectorReady", m_detectorReady);
+    result.insert("frontBoxCount", 0);
+    result.insert("rearBoxCount", 0);
+
+    const bool canTess = (m_tess && m_tess->isReady());
+    const QString usedBackend = canTess ? QStringLiteral("tesseract") : QStringLiteral("none");
+    result.insert("backend", usedBackend);
 
     if (m_detectorReady && m_detector)
     {
@@ -62,6 +156,9 @@ QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
 
         result.insert("frontBoxes", mkBoxes(fBoxes));
         result.insert("rearBoxes", mkBoxes(rBoxes));
+        result.insert("frontBoxCount", fBoxes.size());
+        result.insert("rearBoxCount", rBoxes.size());
+        qInfo() << "OCR: detector ready; frontBoxes=" << fBoxes.size() << "rearBoxes=" << rBoxes.size() << ", backend=" << usedBackend;
         QVariantList fsc, rsc;
         for (float s : fScores)
             fsc.push_back(s);
@@ -69,7 +166,7 @@ QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
             rsc.push_back(s);
         result.insert("frontScores", fsc);
         result.insert("rearScores", rsc);
-        // Gắn OCR.Space vào các hộp lớn nhất để nhận diện biển số
+        // Chọn hộp lớn nhất để nhận diện biển số
         auto pickLargest = [](const QVector<QRectF> &boxes) -> int
         {
             if (boxes.isEmpty())
@@ -107,24 +204,56 @@ QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
             return out;
         };
 
-        const QString apiKey = ocrSpaceApiKeyFromSettings();
-        if (!apiKey.isEmpty())
+        if (canTess)
         {
             int fi = pickLargest(fBoxes);
             if (fi >= 0)
             {
                 QByteArray cj = cropJpeg(frontImage, fBoxes[fi]);
-                QString txt = ocrSpaceRecognize(cj);
+                QString txt = tesseractRecognize(cj);
                 if (!txt.trimmed().isEmpty())
+                {
+                    qInfo() << "OCR: front plate=" << txt.trimmed();
                     result.insert("front", txt.trimmed());
+                }
             }
             int ri = pickLargest(rBoxes);
             if (ri >= 0)
             {
                 QByteArray cj = cropJpeg(rearImage, rBoxes[ri]);
-                QString txt = ocrSpaceRecognize(cj);
+                QString txt = tesseractRecognize(cj);
                 if (!txt.trimmed().isEmpty())
+                {
+                    qInfo() << "OCR: rear plate=" << txt.trimmed();
                     result.insert("rear", txt.trimmed());
+                }
+            }
+        }
+    }
+    else
+    {
+        qWarning() << "OCR: detector not ready; skipping detection and trying direct OCR";
+    }
+
+    // Fallback: if no plate text found yet, try OCR on whole images
+    if ((result.value("front").toString().isEmpty() || result.value("rear").toString().isEmpty()) && canTess)
+    {
+        if (result.value("front").toString().isEmpty() && !frontImage.isEmpty())
+        {
+            QString txt = tesseractRecognize(frontImage);
+            if (!txt.trimmed().isEmpty())
+            {
+                qInfo() << "OCR: fallback whole front image =>" << txt.trimmed();
+                result.insert("front", txt.trimmed());
+            }
+        }
+        if (result.value("rear").toString().isEmpty() && !rearImage.isEmpty())
+        {
+            QString txt = tesseractRecognize(rearImage);
+            if (!txt.trimmed().isEmpty())
+            {
+                qInfo() << "OCR: fallback whole rear image =>" << txt.trimmed();
+                result.insert("rear", txt.trimmed());
             }
         }
     }
@@ -165,80 +294,35 @@ QString OCRProcessor::processOpenSessionAndUpdatePlate(const QString &rfid)
     return plate;
 }
 
-QString OCRProcessor::ocrSpaceApiKeyFromSettings() const
+QString OCRProcessor::tesseractRecognize(const QByteArray &jpegBytes) const
 {
-    QSettings s("Multimodel-AIThings", "smart_parking_system");
-    return s.value("ocrSpaceApiKey").toString();
+    if (!m_tess || !m_tess->isReady())
+        return {};
+    return m_tess->recognize(jpegBytes);
 }
 
-QString OCRProcessor::ocrSpaceRecognize(const QByteArray &jpegBytes, int timeoutMs) const
+void OCRProcessor::tryAutoInitTesseract()
 {
-    if (jpegBytes.isEmpty())
-        return {};
-    const QString apiKey = ocrSpaceApiKeyFromSettings();
-    if (apiKey.isEmpty())
-        return {};
-
-    QNetworkAccessManager nam;
-    QHttpMultiPart *multi = new QHttpMultiPart(QHttpMultiPart::FormDataType);
-
-    QHttpPart keyPart;
-    keyPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=apikey"));
-    keyPart.setBody(apiKey.toUtf8());
-    QHttpPart languagePart;
-    languagePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=language"));
-    languagePart.setBody("eng");
-    QHttpPart isOverlayPart;
-    isOverlayPart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=isOverlayRequired"));
-    isOverlayPart.setBody("false");
-    QHttpPart scalePart;
-    scalePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=scale"));
-    scalePart.setBody("true");
-    QHttpPart filePart;
-    filePart.setHeader(QNetworkRequest::ContentDispositionHeader, QVariant("form-data; name=image"));
-    filePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant("image/jpeg"));
-    filePart.setBody(jpegBytes);
-
-    multi->append(keyPart);
-    multi->append(languagePart);
-    multi->append(isOverlayPart);
-    multi->append(scalePart);
-    multi->append(filePart);
-
-    QNetworkRequest req(QUrl("https://api.ocr.space/parse/image"));
-    auto reply = nam.post(req, multi);
-    multi->setParent(reply);
-
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    timer.start(timeoutMs);
-    loop.exec();
-    if (timer.isActive() == false)
+#ifdef HAVE_TESSERACT
+    if (m_tess && m_tess->isReady())
+        return;
+    // Chỉ thử các đường dẫn vendor-relative
+    const QString appDir = QCoreApplication::applicationDirPath();
+    // Nếu chạy từ build dir, vendor ở d:/smart_parking_system/lib/tesseract
+    const QString vendorAbs = QStringLiteral("d:/smart_parking_system/lib/tesseract");
+    const QStringList candidates = {vendorAbs, QDir(appDir).absolutePath()};
+    for (const QString &parent : candidates)
     {
-        reply->abort();
-        reply->deleteLater();
-        return {};
+        if (!QDir(parent).exists())
+            continue;
+        TesseractOcr *t = new TesseractOcr(this);
+        if (t->init(parent, QStringLiteral("eng")))
+        {
+            m_tess = t;
+            qInfo() << "Tesseract auto-initialized at" << parent;
+            return;
+        }
+        t->deleteLater();
     }
-    if (reply->error() != QNetworkReply::NoError)
-    {
-        reply->deleteLater();
-        return {};
-    }
-    const QByteArray resp = reply->readAll();
-    reply->deleteLater();
-
-    QJsonParseError jerr{};
-    const QJsonDocument doc = QJsonDocument::fromJson(resp, &jerr);
-    if (jerr.error != QJsonParseError::NoError || !doc.isObject())
-        return {};
-    const QJsonObject root = doc.object();
-    const QJsonArray parsed = root.value("ParsedResults").toArray();
-    if (parsed.isEmpty())
-        return {};
-    const QJsonObject first = parsed.first().toObject();
-    const QString text = first.value("ParsedText").toString();
-    return text;
+#endif
 }
