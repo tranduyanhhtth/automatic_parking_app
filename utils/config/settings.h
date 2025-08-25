@@ -13,7 +13,6 @@ class SettingsManager : public QObject
     Q_PROPERTY(int barrier1Baud READ barrier1Baud WRITE setBarrier1Baud NOTIFY barrier1BaudChanged)
     Q_PROPERTY(QString barrier2Port READ barrier2Port WRITE setBarrier2Port NOTIFY barrier2PortChanged)
     Q_PROPERTY(int barrier2Baud READ barrier2Baud WRITE setBarrier2Baud NOTIFY barrier2BaudChanged)
-    Q_PROPERTY(bool useHardwareDecode READ useHardwareDecode WRITE setUseHardwareDecode NOTIFY useHardwareDecodeChanged)
     // Windows: phân biệt đầu đọc thẻ theo thiết bị HID cụ thể
     Q_PROPERTY(QString entranceReaderPath READ entranceReaderPath WRITE setEntranceReaderPath NOTIFY entranceReaderPathChanged)
     Q_PROPERTY(QString exitReaderPath READ exitReaderPath WRITE setExitReaderPath NOTIFY exitReaderPathChanged)
@@ -28,7 +27,6 @@ public:
     int barrier1Baud() const { return m_barrier1Baud; }
     QString barrier2Port() const { return m_barrier2Port; }
     int barrier2Baud() const { return m_barrier2Baud; }
-    bool useHardwareDecode() const { return m_useHwDecode; }
     QString entranceReaderPath() const { return m_entranceReaderPath; }
     QString exitReaderPath() const { return m_exitReaderPath; }
 
@@ -43,7 +41,6 @@ public slots:
     void setBarrier1Baud(int baud);
     void setBarrier2Port(const QString &port);
     void setBarrier2Baud(int baud);
-    void setUseHardwareDecode(bool v);
     void setEntranceReaderPath(const QString &p);
     void setExitReaderPath(const QString &p);
 
@@ -56,7 +53,6 @@ signals:
     void barrier1BaudChanged();
     void barrier2PortChanged();
     void barrier2BaudChanged();
-    void useHardwareDecodeChanged();
     void entranceReaderPathChanged();
     void exitReaderPathChanged();
 
@@ -69,7 +65,6 @@ private:
     int m_barrier1Baud = 9600;
     QString m_barrier2Port;
     int m_barrier2Baud = 9600;
-    bool m_useHwDecode = true;
     QString m_entranceReaderPath;
     QString m_exitReaderPath;
 };

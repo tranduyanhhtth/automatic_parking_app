@@ -17,7 +17,6 @@ public:
 
     Q_INVOKABLE bool start(const QString &rtspUrl);
     Q_INVOKABLE void stop();
-    void setPreferHardwareDecode(bool on) { m_preferHwDecode = on; }
 
 signals:
     void newFrame(const QImage &frame);
@@ -39,7 +38,7 @@ private:
     GstElement *m_pipeline{nullptr};
     GstElement *m_appsink{nullptr};
     QString m_url;
-    bool m_preferHwDecode{true};
+    bool m_preferHwDecode{true}; // kept internal; auto-selected by element availability
 
     // Resilience
     int m_attempt{0};

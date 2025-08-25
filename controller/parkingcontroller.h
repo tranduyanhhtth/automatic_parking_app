@@ -41,6 +41,8 @@ class ParkingController : public QObject
     Q_PROPERTY(int gateMode READ gateMode WRITE setGateMode NOTIFY gateModeChanged) // 0: Cổng vào, 1: Cổng ra
     Q_PROPERTY(int lane READ lane WRITE setLane NOTIFY laneChanged)                 // 0: Làn 1, 1: Làn 2
     Q_PROPERTY(int openCount READ openCount NOTIFY openCountChanged)
+    // Dual mode: 0 Mixed (Lane1=IN, Lane2=OUT), 1 AllEntrance, 2 AllExit
+    Q_PROPERTY(int dualMode READ dualMode WRITE setDualMode NOTIFY dualModeChanged)
     // mở bằng cơm
     Q_PROPERTY(QString exitImage1DataUrl READ exitImage1DataUrl NOTIFY exitReviewChanged)
     Q_PROPERTY(QString exitImage2DataUrl READ exitImage2DataUrl NOTIFY exitReviewChanged)
@@ -195,6 +197,7 @@ public:
             QMetaObject::invokeMethod(hid2, "resetDebounce", Qt::QueuedConnection);
     }
     int openCount() const { return m_openCount; }
+    int dualMode() const { return m_dualMode; }
     // mở bằng cơm
     QString exitImage1DataUrl() const { return m_exitImg1; }
     QString exitImage2DataUrl() const { return m_exitImg2; }
@@ -208,6 +211,51 @@ public slots:
     // Dự phòng: luôn mở barrier (không động tới DB)
     Q_INVOKABLE void manualOpenBarrier();
     Q_INVOKABLE void manualCloseBarrier();
+    Q_INVOKABLE void setDualMode(int mode)
+    {
+        if (mode < 0 || mode > 2)
+            mode = 0;
+        if (m_dualMode == mode)
+            return;
+        m_dualMode = mode;
+        emit dualModeChanged();
+        // Clear transient UI and reset debounce on mode change
+        if (m_cam1)
+            m_cam1->clearSnapshots();
+        if (m_cam2)
+            m_cam2->clearSnapshots();
+        if (!m_lastRfid.isEmpty())
+        {
+            m_lastRfid.clear();
+            emit lastRfidChanged();
+        }
+        if (!m_plate.isEmpty())
+        {
+            m_plate.clear();
+            emit plateChanged();
+        }
+        if (!m_message.isEmpty())
+        {
+            m_message.clear();
+            emit messageChanged();
+        }
+        if (!m_checkInTime.isEmpty() || !m_checkOutTime.isEmpty())
+        {
+            m_checkInTime.clear();
+            m_checkOutTime.clear();
+            emit timesChanged();
+        }
+        if (!m_exitImg1.isEmpty() || !m_exitImg2.isEmpty())
+        {
+            m_exitImg1.clear();
+            m_exitImg2.clear();
+            emit exitReviewChanged();
+        }
+        if (auto hid1 = qobject_cast<QObject *>(m_readerEntrance))
+            QMetaObject::invokeMethod(hid1, "resetDebounce", Qt::QueuedConnection);
+        if (auto hid2 = qobject_cast<QObject *>(m_readerExit))
+            QMetaObject::invokeMethod(hid2, "resetDebounce", Qt::QueuedConnection);
+    }
 
 signals:
     void plateChanged();
@@ -224,6 +272,7 @@ signals:
     void showToast(const QString &message);
     // Debug logging hook for UI HID LOG overlay
     void debugLog(const QString &message);
+    void dualModeChanged();
 
 private slots:
     void onEntranceRfidScanned(const QString &rfid);
@@ -247,6 +296,7 @@ private:
     int m_gateMode = 0;
     int m_lane = 0;
     int m_openCount = 0;
+    int m_dualMode = 0; // 0 mixed, 1 all entrance, 2 all exit
     // Chặn quẹt liên tiếp cùng một thẻ trong thời gian ngắn
     QString m_lastEntranceRfid;
     qint64 m_lastEntranceMs = 0;
@@ -272,6 +322,10 @@ private:
     QString normalizeRfid(const QString &r) const;
     inline ICameraSnapshotProvider *currentCam() const { return m_lane == 0 ? m_cam1 : m_cam2; }
     inline IBarrier *currentBarrier() const { return m_lane == 0 ? m_barrier1 : m_barrier2; }
+    inline ICameraSnapshotProvider *camForLane(int lane) const { return lane == 0 ? m_cam1 : m_cam2; }
+    inline IBarrier *barrierForLane(int lane) const { return lane == 0 ? m_barrier1 : m_barrier2; }
+    void processEntranceRfid(const QString &normRfid, int laneIdx);
+    void processExitRfid(const QString &normRfid, int laneIdx);
     // Helper cho QML
 public:
     QString entrancePlate() const { return m_entrancePlate; }

@@ -6,26 +6,21 @@
 
 TesseractOcr::TesseractOcr(QObject *parent) : QObject(parent)
 {
-#ifdef HAVE_TESSERACT
     m_api = new tesseract::TessBaseAPI();
-#endif
 }
 
 TesseractOcr::~TesseractOcr()
 {
-#ifdef HAVE_TESSERACT
     if (m_api)
     {
         m_api->End();
         delete m_api;
         m_api = nullptr;
     }
-#endif
 }
 
 bool TesseractOcr::init(const QString &tessdataParent, const QString &lang)
 {
-#ifdef HAVE_TESSERACT
     if (!m_api)
         return false;
     const QString absParent = QDir(tessdataParent).absolutePath();
@@ -86,18 +81,12 @@ bool TesseractOcr::init(const QString &tessdataParent, const QString &lang)
     qInfo() << "Tesseract ready. Version=" << QString::fromUtf8(m_api->Version())
             << ", datapath/TESSDATA_PREFIX=" << qEnvironmentVariable("TESSDATA_PREFIX");
     return true;
-#else
-    Q_UNUSED(tessdataParent)
-    Q_UNUSED(lang)
-    return false;
-#endif
 }
 
 QString TesseractOcr::recognize(const QByteArray &imageBytes) const
 {
     if (!m_ready || imageBytes.isEmpty())
         return {};
-#ifdef HAVE_TESSERACT
     // Read Pix from memory
     const l_uint8 *dataPtr = reinterpret_cast<const l_uint8 *>(imageBytes.constData());
     size_t dataSize = static_cast<size_t>(imageBytes.size());
@@ -112,7 +101,4 @@ QString TesseractOcr::recognize(const QByteArray &imageBytes) const
     QString res = QString::fromUtf8(outText).trimmed();
     delete[] outText;
     return res;
-#else
-    return {};
-#endif
 }

@@ -12,42 +12,8 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QSettings>
-#include <QLibrary>
-#include <QFileInfo>
 #include <QFile>
 #include "utils/ocr/tesseract_ocr.h"
-
-#ifdef Q_OS_WIN
-#include <windows.h>
-#include <tlhelp32.h>
-static QStringList listLoadedModulesMatching(const QStringList &patterns)
-{
-    QStringList result;
-    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, GetCurrentProcessId());
-    if (snap == INVALID_HANDLE_VALUE)
-        return result;
-    MODULEENTRY32 me;
-    me.dwSize = sizeof(me);
-    if (Module32First(snap, &me))
-    {
-        do
-        {
-            QString modName = QString::fromWCharArray(me.szModule);
-            QString modPath = QString::fromWCharArray(me.szExePath);
-            for (const QString &p : patterns)
-            {
-                if (modName.contains(p, Qt::CaseInsensitive))
-                {
-                    result << (modName + QStringLiteral(" => ") + modPath);
-                    break;
-                }
-            }
-        } while (Module32Next(snap, &me));
-    }
-    CloseHandle(snap);
-    return result;
-}
-#endif
 
 OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
     : QObject(parent)
@@ -59,60 +25,47 @@ OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
     qInfo() << "OCR: model path resolved to" << modelPath
             << ", detector ready =" << m_detectorReady;
 
-    // Optional: initialize local Tesseract if enabled in settings
-    QSettings s("Multimodel-AIThings", "smart_parking_system");
-    const bool enableTess = s.value("tesseract/enable", false).toBool();
-    if (enableTess)
+    // Initialize Tesseract since ENABLE_TESSERACT is ON in CMake
+    // Đảm bảo các DLLs có thể được phát hiện
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QString vendorBin = QStringLiteral("d:/smart_parking_system/lib/tesseract/bin");
+    const QString vendorBinDebug = QStringLiteral("d:/smart_parking_system/lib/tesseract/debug/bin");
+    const QString pathNow = qEnvironmentVariable("PATH");
+    QStringList prepend;
+    if (!appDir.isEmpty())
+        prepend << appDir;
+    if (QDir(vendorBinDebug).exists())
+        prepend << vendorBinDebug;
+    if (QDir(vendorBin).exists())
+        prepend << vendorBin;
+    if (!prepend.isEmpty())
     {
-#ifdef Q_OS_WIN
-        // Ensure DLLs are discoverable on Windows
-        const QString appDir = QCoreApplication::applicationDirPath();
-        const QString vendorBin = QStringLiteral("d:/smart_parking_system/lib/tesseract/bin");
-        const QString vendorBinDebug = QStringLiteral("d:/smart_parking_system/lib/tesseract/debug/bin");
-        const QString pathNow = qEnvironmentVariable("PATH");
-        QStringList prepend;
-        if (!appDir.isEmpty())
-            prepend << appDir;
-#ifdef QT_DEBUG
-        if (QDir(vendorBinDebug).exists())
-            prepend << vendorBinDebug; // Prefer debug/bin in Debug builds
-#else
-        if (QDir(vendorBin).exists())
-            prepend << vendorBin; // Use release bin in Release builds
-#endif
-        if (!prepend.isEmpty())
-        {
-            const QString newPath = prepend.join(';') + QLatin1Char(';') + pathNow;
-            qputenv("PATH", newPath.toUtf8());
-        }
-#endif // Q_OS_WIN
-
-        // Initialize Tesseract
-        const QString tessParent = s.value("tesseract/tessdataParent", QStringLiteral("d:/smart_parking_system/lib/tesseract")).toString();
-        const QString tessLang = s.value("tesseract/lang", QStringLiteral("eng")).toString();
-        if (!tessParent.isEmpty())
-            qputenv("TESSDATA_PREFIX", QFile::encodeName(tessParent));
-
-        m_tess = new TesseractOcr(this);
-        bool ok = m_tess->init(tessParent, tessLang);
-        if (!ok && tessLang != QStringLiteral("eng"))
-        {
-            ok = m_tess->init(tessParent, QStringLiteral("eng"));
-        }
-        if (!ok)
-        {
-            qWarning() << "OCR backend [tesseract]: NOT READY (init failed)";
-            m_tess->deleteLater();
-            m_tess = nullptr;
-        }
-        else
-        {
-            qInfo() << "Tesseract initialized.";
-        }
+        const QString newPath = prepend.join(';') + QLatin1Char(';') + pathNow;
+        qputenv("PATH", newPath.toUtf8());
     }
 
-    // Try auto-init from common locations if still not ready
-    tryAutoInitTesseract();
+    // Initialize Tesseract with vendor defaults; settings can still override
+    QSettings s("Multimodel-AIThings", "smart_parking_system");
+    const QString tessParent = s.value("tesseract/tessdataParent", QStringLiteral("d:/smart_parking_system/lib/tesseract")).toString();
+    const QString tessLang = s.value("tesseract/lang", QStringLiteral("eng")).toString();
+    if (!tessParent.isEmpty())
+        qputenv("TESSDATA_PREFIX", QFile::encodeName(tessParent));
+
+    m_tess = new TesseractOcr(this);
+    bool ok = m_tess->init(tessParent, tessLang);
+    if (!ok && tessLang != QStringLiteral("eng"))
+        ok = m_tess->init(tessParent, QStringLiteral("eng"));
+    if (!ok)
+    {
+        qWarning() << "OCR backend [tesseract]: NOT READY (init failed)";
+        m_tess->deleteLater();
+        m_tess = nullptr;
+    }
+    else
+    {
+        qInfo() << "Tesseract initialized.";
+    }
+
     qInfo() << "OCR backend [tesseract] ready =" << (m_tess && m_tess->isReady());
 }
 
@@ -299,30 +252,4 @@ QString OCRProcessor::tesseractRecognize(const QByteArray &jpegBytes) const
     if (!m_tess || !m_tess->isReady())
         return {};
     return m_tess->recognize(jpegBytes);
-}
-
-void OCRProcessor::tryAutoInitTesseract()
-{
-#ifdef HAVE_TESSERACT
-    if (m_tess && m_tess->isReady())
-        return;
-    // Chỉ thử các đường dẫn vendor-relative
-    const QString appDir = QCoreApplication::applicationDirPath();
-    // Nếu chạy từ build dir, vendor ở d:/smart_parking_system/lib/tesseract
-    const QString vendorAbs = QStringLiteral("d:/smart_parking_system/lib/tesseract");
-    const QStringList candidates = {vendorAbs, QDir(appDir).absolutePath()};
-    for (const QString &parent : candidates)
-    {
-        if (!QDir(parent).exists())
-            continue;
-        TesseractOcr *t = new TesseractOcr(this);
-        if (t->init(parent, QStringLiteral("eng")))
-        {
-            m_tess = t;
-            qInfo() << "Tesseract auto-initialized at" << parent;
-            return;
-        }
-        t->deleteLater();
-    }
-#endif
 }

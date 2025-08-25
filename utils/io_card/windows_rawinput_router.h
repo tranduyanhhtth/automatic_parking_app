@@ -1,7 +1,5 @@
 #pragma once
 
-#if defined(_WIN32) || defined(WIN32)
-
 #include <QObject>
 #include <QHash>
 #include <QByteArray>
@@ -10,6 +8,7 @@
 #include <QPointer>
 #include <QAbstractNativeEventFilter>
 #include <QSet>
+#include <QStringList>
 #include <windows.h>
 
 class WindowsRawInputRouter : public QObject, public QAbstractNativeEventFilter
@@ -30,6 +29,7 @@ public:
 
     // Enumerate currently known keyboard devices (RIM_TYPEKEYBOARD)
     QList<DeviceInfo> enumerateKeyboards();
+    Q_INVOKABLE QStringList keyboardDevicePaths() const;
 
     // QAbstractNativeEventFilter
     bool nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result) override;
@@ -45,4 +45,4 @@ private:
     QSet<HWND> m_registered;
 };
 
-#endif // _WIN32 || WIN32
+// Windows-only project; class is always available

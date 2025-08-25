@@ -105,13 +105,8 @@ void GStreamerPlayer::teardownPipeline()
 bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
 {
     // attempt 0: uridecodebin (codec agnostic), attempt 1: explicit rtspsrc+h264
-    bool useHw = m_preferHwDecode;
-#ifdef _WIN32
     const bool hasD3D11 = hasElement("d3d11h264dec") && hasElement("d3d11convert") && hasElement("d3d11download");
-    useHw = useHw && hasD3D11;
-#else
-    const bool hasD3D11 = false;
-#endif
+    bool useHw = m_preferHwDecode && hasD3D11;
     QString qUrl = m_url;
     qUrl.replace("\"", "\\\"");
     QByteArray quotedUrl = QByteArray("\"") + qUrl.toUtf8() + QByteArray("\"");
@@ -126,11 +121,9 @@ bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
     else
     {
         QByteArray decoder;
-#ifdef _WIN32
         if (useHw && hasD3D11)
             decoder = QByteArray("d3d11h264dec ! d3d11convert ! d3d11download !");
         else
-#endif
             decoder = QByteArray("decodebin !");
         pipeStr = QByteArray("rtspsrc location=") + quotedUrl +
                   QByteArray(" protocols=tcp latency=0 ! rtph264depay ! h264parse ! queue max-size-buffers=1 leaky=downstream ! ") +

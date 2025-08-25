@@ -1,16 +1,15 @@
 #include "hidkeyboardcardreader_device.h"
 #include "windows_rawinput_router.h"
 #include <QChar>
+#include <QDateTime>
 
 HidKeyboardCardReaderDevice::HidKeyboardCardReaderDevice(WindowsRawInputRouter *router, QObject *parent)
     : ICardReader(parent), m_router(router)
 {
-#ifdef _WIN32
     if (m_router)
     {
         QObject::connect(m_router, &WindowsRawInputRouter::rawKey, this, &HidKeyboardCardReaderDevice::onRawKey);
     }
-#endif
 }
 
 // Rely on AUTOMOC; no manual moc include
@@ -39,6 +38,22 @@ void HidKeyboardCardReaderDevice::setMinLength(int len)
     emit minLengthChanged();
 }
 
+void HidKeyboardCardReaderDevice::setInterKeyMsMax(int v)
+{
+    if (m_interKeyMsMax == v)
+        return;
+    m_interKeyMsMax = v;
+    emit interKeyMsMaxChanged();
+}
+
+void HidKeyboardCardReaderDevice::setAllowedPrefix(const QString &p)
+{
+    if (m_allowedPrefix == p)
+        return;
+    m_allowedPrefix = p;
+    emit allowedPrefixChanged();
+}
+
 void HidKeyboardCardReaderDevice::resetBuffer()
 {
     m_buffer.clear();
@@ -53,8 +68,25 @@ void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bo
     if (!down)
         return; // only on key down
 
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (m_lastTs > 0 && (now - m_lastTs) > m_interKeyMsMax)
+    {
+        // too slow, likely human typing – reset buffer
+        m_buffer.clear();
+    }
+    m_lastTs = now;
+
     if (vkey == VK_RETURN)
     {
+        // optional prefix check before finalizing
+        if (!m_allowedPrefix.isEmpty())
+        {
+            if (!m_buffer.startsWith(m_allowedPrefix))
+            {
+                m_buffer.clear();
+                return;
+            }
+        }
         finalize();
         return;
     }

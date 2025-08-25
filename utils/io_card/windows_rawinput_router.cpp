@@ -1,5 +1,3 @@
-#ifdef _WIN32
-
 #include "windows_rawinput_router.h"
 #include <QDebug>
 #include <QCoreApplication>
@@ -51,6 +49,33 @@ QList<WindowsRawInputRouter::DeviceInfo> WindowsRawInputRouter::enumerateKeyboar
             list.push_back(info);
     }
     return list;
+}
+
+QStringList WindowsRawInputRouter::keyboardDevicePaths() const
+{
+    QStringList out;
+    UINT num = 0;
+    if (GetRawInputDeviceList(nullptr, &num, sizeof(RAWINPUTDEVICELIST)) != 0)
+        return out;
+    QVector<RAWINPUTDEVICELIST> devs(num);
+    if (GetRawInputDeviceList(devs.data(), &num, sizeof(RAWINPUTDEVICELIST)) == UINT(-1))
+        return out;
+    for (UINT i = 0; i < num; ++i)
+    {
+        if (devs[i].dwType != RIM_TYPEKEYBOARD)
+            continue;
+        HANDLE h = devs[i].hDevice;
+        UINT size = 0;
+        GetRawInputDeviceInfoW(h, RIDI_DEVICENAME, nullptr, &size);
+        if (size == 0)
+            continue;
+        std::wstring buf;
+        buf.resize(size);
+        if (GetRawInputDeviceInfoW(h, RIDI_DEVICENAME, buf.data(), &size) == UINT(-1))
+            continue;
+        out << QString::fromWCharArray(buf.c_str());
+    }
+    return out;
 }
 
 QString WindowsRawInputRouter::devicePathForHandle(HANDLE h)
@@ -113,7 +138,3 @@ bool WindowsRawInputRouter::nativeEventFilter(const QByteArray &eventType, void 
         emit rawKey(path, vkey, !isBreak);
     return false; // let Qt handle as well
 }
-
-#endif // _WIN32
-
-// Rely on AUTOMOC; no manual moc include

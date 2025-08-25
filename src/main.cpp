@@ -5,58 +5,40 @@
 #include <QQuickItem>
 #include <QScreen>
 #include <QIcon>
-#include <QSqlQuery>
-#include <QSqlError>
-#include <QVariant>
-#include <QSettings>
-#ifdef _WIN32
+#include <QQmlEngine>
+#include <QtQuickControls2/QQuickStyle>
+#include <QtQml/qqml.h>
 #include <d3d11.h>
 #include <dxgi.h>
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib")
-#endif
 #include "controller/parkingcontroller.h"
 #include "utils/camera/cameramanager.h"
 #include "utils/db/databasemanager.h"
 #include "utils/io_barrier/usbrelaybarrier.h"
 #include "utils/config/settings.h"
-#ifdef _WIN32
 #include "utils/io_card/windows_rawinput_router.h"
 #include "utils/io_card/hidkeyboardcardreader_device.h"
-#endif
-#ifndef _WIN32
-#include "utils/io_card/hidkeyboardcardreader.h"
-#endif
 #include "utils/ocr/ocrprocessor.h"
 
 int main(int argc, char *argv[])
 {
-    // Sử dụng GStreamer để stream, không cần cấu hình biến môi trường FFmpeg
-
     QGuiApplication app(argc, argv);
+
+    // Use a non-native style so background/customization on Controls works without warnings
+    // Options: "Basic", "Fusion", "Material". Fusion gives a neutral cross-platform look.
+    QQuickStyle::setStyle("Fusion");
 
     QCoreApplication::setOrganizationName("Multimodel-AIThings");
     QCoreApplication::setApplicationName("smart_parking_system");
 
-    // Thiết lập mặc định cho Tesseract nếu người dùng chưa cấu hình
-    {
-        QSettings s("Multimodel-AIThings", "smart_parking_system");
-        if (!s.contains("tesseract/enable"))
-            s.setValue("tesseract/enable", true);
-        if (!s.contains("tesseract/tessdataParent"))
-            s.setValue("tesseract/tessdataParent", QStringLiteral("d:/smart_parking_system/lib/tesseract"));
-        if (!s.contains("tesseract/lang"))
-            s.setValue("tesseract/lang", QStringLiteral("eng"));
-    }
-
-    app.setWindowIcon(QIcon(QStringLiteral("assets/logo_icon.jpg")));
+    // Tải biểu tượng ứng dụng từ tài nguyên (qrc)
+    app.setWindowIcon(QIcon(QStringLiteral(":/assets/logo_icon.jpg")));
 
     auto cameraLane1 = new CameraManager(&app);
     auto cameraLane2 = new CameraManager(&app);
 
     auto settings = new SettingsManager(&app);
-    // Tuỳ chọn: vẫn có thể dùng decode hardware trong GStreamer (cấu hình trong pipeline nếu cần)
-    settings->useHardwareDecode();
 
     auto db = new DatabaseManager(&app);
     db->initialize();
@@ -72,27 +54,25 @@ int main(int argc, char *argv[])
 
     auto ocr = new OCRProcessor(db, &app);
 
-    // Hai đầu đọc thẻ độc lập: cổng vào và cổng ra
-#ifdef _WIN32
+    // Hai đầu đọc thẻ độc lập: cổng vào và cổng ra (Windows)
     auto rawRouter = new WindowsRawInputRouter(&app);
-    // Ensure a window will be registered after QML creates it (done later)
+
     auto cardReaderEntrance = new HidKeyboardCardReaderDevice(rawRouter, &app);
     auto cardReaderExit = new HidKeyboardCardReaderDevice(rawRouter, &app);
-    // Bind device paths from settings (if empty, auto-pick first two keyboards)
-    auto keyboards = rawRouter->enumerateKeyboards();
+
+    // Bắt buộc dùng đường dẫn thiết bị từ cấu hình; KHÔNG tự chọn bàn phím PC
+
     QString entrancePath = settings->entranceReaderPath();
     QString exitPath = settings->exitReaderPath();
-    if (entrancePath.isEmpty() && !keyboards.isEmpty())
-        entrancePath = keyboards.value(0).devicePath;
-    if (exitPath.isEmpty() && keyboards.size() > 1)
-        exitPath = keyboards.value(1).devicePath;
+
     cardReaderEntrance->setDevicePath(entrancePath);
     cardReaderExit->setDevicePath(exitPath);
-#else
-    auto cardReaderEntrance = new HidKeyboardCardReader(&app);
-    auto cardReaderExit = new HidKeyboardCardReader(&app);
-#endif
-    // Log camera stalls to HID
+
+    // Tuỳ chọn: siết thời gian quét để giảm lỗi đọc nhầm
+    cardReaderEntrance->setInterKeyMsMax(30);
+    cardReaderExit->setInterKeyMsMax(30);
+
+    // Ghi log khi camera bị đứng (stalled) lên HID
     QObject::connect(cameraLane1, &CameraManager::inputStreamStalled, cardReaderEntrance, [cardReaderEntrance]()
                      {
         const QString m = QStringLiteral("[HID] Camera Front: STALLED (no frames)");
@@ -156,16 +136,26 @@ int main(int argc, char *argv[])
         QMetaObject::invokeMethod(cardReaderExit, "debugLog", Qt::QueuedConnection, Q_ARG(QString, m));
     }
     {
-        const bool ok = cardReaderEntrance->isEnabled() && cardReaderExit->isEnabled();
-        const QString m = QStringLiteral("[HID] Card Reader: %1").arg(ok ? QStringLiteral("CONNECTED") : QStringLiteral("DISABLED"));
-        QMetaObject::invokeMethod(cardReaderEntrance, "debugLog", Qt::QueuedConnection, Q_ARG(QString, m));
-        QMetaObject::invokeMethod(cardReaderExit, "debugLog", Qt::QueuedConnection, Q_ARG(QString, m));
+        const QStringList present = rawRouter->keyboardDevicePaths();
+        const bool eBound = !entrancePath.isEmpty();
+        const bool xBound = !exitPath.isEmpty();
+        const bool ePresent = eBound && present.contains(entrancePath);
+        const bool xPresent = xBound && present.contains(exitPath);
+        const QString me = QStringLiteral("[HID] Entrance Reader: %1%2%3")
+                               .arg(eBound ? QStringLiteral("BOUND") : QStringLiteral("UNBOUND"))
+                               .arg(eBound ? QStringLiteral(" ") : QString())
+                               .arg(eBound ? (ePresent ? QStringLiteral("(PRESENT)") : QStringLiteral("(NOT FOUND)")) : QString());
+        const QString mx = QStringLiteral("[HID] Exit Reader: %1%2%3")
+                               .arg(xBound ? QStringLiteral("BOUND") : QStringLiteral("UNBOUND"))
+                               .arg(xBound ? QStringLiteral(" ") : QString())
+                               .arg(xBound ? (xPresent ? QStringLiteral("(PRESENT)") : QStringLiteral("(NOT FOUND)")) : QString());
+        QMetaObject::invokeMethod(cardReaderEntrance, "debugLog", Qt::QueuedConnection, Q_ARG(QString, me));
+        QMetaObject::invokeMethod(cardReaderExit, "debugLog", Qt::QueuedConnection, Q_ARG(QString, mx));
     }
 
     ParkingController controller(cameraLane1, cameraLane2, db, barrier1, barrier2, ocr, cardReaderEntrance, cardReaderExit);
 
-    // GPU availability + decode intent logging to HID
-#ifdef _WIN32
+    // Kiểm tra GPU và ghi log ý định giải mã video lên HID
     {
         bool hasGpu = false;
         IDXGIFactory *pFactory = nullptr;
@@ -177,7 +167,7 @@ int main(int argc, char *argv[])
                 DXGI_ADAPTER_DESC desc;
                 if (SUCCEEDED(pAdapter->GetDesc(&desc)))
                 {
-                    hasGpu = true; // Found at least one adapter
+                    hasGpu = true; // Tìm thấy ít nhất một adapter
                 }
                 pAdapter->Release();
                 if (hasGpu)
@@ -185,39 +175,44 @@ int main(int argc, char *argv[])
             }
             pFactory->Release();
         }
-        const bool wantHw = settings->useHardwareDecode();
         auto logToHids = [&](const QString &m)
         {
             QMetaObject::invokeMethod(cardReaderEntrance, "debugLog", Qt::QueuedConnection, Q_ARG(QString, m));
             QMetaObject::invokeMethod(cardReaderExit, "debugLog", Qt::QueuedConnection, Q_ARG(QString, m));
         };
-        if (hasGpu && wantHw)
-            logToHids(QStringLiteral("[HID] Video Decode: GPU available, using hardware decode"));
-        else if (hasGpu && !wantHw)
-            logToHids(QStringLiteral("[HID] Video Decode: GPU available, but hardware decode disabled in settings"));
+        if (hasGpu)
+            logToHids(QStringLiteral("[HID] Video Decode: GPU available (auto hardware decode if supported)"));
         else
-            logToHids(QStringLiteral("[HID] Video Decode: No GPU detected – falling back to software decode"));
+            logToHids(QStringLiteral("[HID] Video Decode: No GPU detected – using software decode"));
     }
-#endif
 
     QQmlApplicationEngine engine;
+    // Đảm bảo engine có thể tìm thấy QML đã biên dịch và tài nguyên
+    engine.addImportPath("qrc:/qt/qml");
     engine.rootContext()->setContextProperty("app", &controller);
     engine.rootContext()->setContextProperty("cameraLane1", cameraLane1);
     engine.rootContext()->setContextProperty("cameraLane2", cameraLane2);
+    engine.rootContext()->setContextProperty("repo", db);
     engine.rootContext()->setContextProperty("cardReaderEntrance", cardReaderEntrance);
     engine.rootContext()->setContextProperty("cardReaderExit", cardReaderExit);
     engine.rootContext()->setContextProperty("barrier1", barrier1);
     engine.rootContext()->setContextProperty("barrier2", barrier2);
     engine.rootContext()->setContextProperty("settings", settings);
 
+    // Đăng ký đối tượng backend dạng QML singleton (tuỳ chọn, vẫn giữ context properties)
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "App", &controller);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Settings", settings);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Repo", db);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane1", cameraLane1);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane2", cameraLane2);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier1", barrier1);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier2", barrier2);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderEntrance", cardReaderEntrance);
+    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderExit", cardReaderExit);
+
     // Phần này là để xử lý khi QML khởi tạo, bao gồm cả Window và Item
     QQuickWindow *createdWindow = nullptr;
-    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app, [&, cardReaderEntrance, cardReaderExit
-#ifdef _WIN32
-                                                                            ,
-                                                                            rawRouter
-#endif
-    ](QObject *obj, const QUrl &objUrl)
+    QObject::connect(&engine, &QQmlApplicationEngine::objectCreated, &app, [&, cardReaderEntrance, cardReaderExit, rawRouter](QObject *obj, const QUrl &objUrl)
                      {
         Q_UNUSED(objUrl)
         if (!obj) {
@@ -235,11 +230,9 @@ int main(int argc, char *argv[])
                 win->installEventFilter(cardReaderEntrance);
             if (cardReaderExit)
                 win->installEventFilter(cardReaderExit);
-#ifdef _WIN32
-            // Also register for Raw Input so we can distinguish devices
+            // Đăng ký Raw Input để phân biệt thiết bị
             if (rawRouter)
                 rawRouter->registerWindow(win);
-#endif
         } 
         else if (auto item = qobject_cast<QQuickItem *>(obj)) 
         {
@@ -269,13 +262,11 @@ int main(int argc, char *argv[])
                 createdWindow->installEventFilter(cardReaderEntrance);
             if (cardReaderExit)
                 createdWindow->installEventFilter(cardReaderExit);
-#ifdef _WIN32
             if (rawRouter)
                 rawRouter->registerWindow(createdWindow);
-#endif
-        } },
-                     Qt::QueuedConnection);
+        } }, Qt::QueuedConnection);
 
+    // Nạp QML chính từ module đã biên dịch (URI smart_parking_system)
     engine.loadFromModule("smart_parking_system", "MainWindow");
 
     return app.exec();

@@ -133,8 +133,6 @@ bool CameraManager::startInputStream(const QString &url)
     if (!m_gstIn)
     {
         m_gstIn = new GStreamerPlayer(this);
-        // Prefer hardware decode if available (Windows: d3d11h264dec)
-        m_gstIn->setPreferHardwareDecode(true);
         connect(m_gstIn, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
             if (m_inProducer) m_inProducer->pushImage(img); });
@@ -151,7 +149,6 @@ bool CameraManager::startOutputStream(const QString &url)
     if (!m_gstOut)
     {
         m_gstOut = new GStreamerPlayer(this);
-        m_gstOut->setPreferHardwareDecode(true);
         connect(m_gstOut, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
             if (m_outProducer) m_outProducer->pushImage(img); });

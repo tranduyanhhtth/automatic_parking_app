@@ -1,13 +1,11 @@
 #include "yolo_onnx_detector.h"
 #include <QImage>
-#include <QBuffer>
 #include <QDebug>
 #include <algorithm>
 #include <cmath>
-
-#ifdef HAVE_ONNXRUNTIME
+#include <numeric> // std::iota
+#include <cstring> // std::memcpy
 #include <onnxruntime_cxx_api.h>
-#endif
 
 namespace
 {
@@ -67,7 +65,6 @@ namespace
 YoloOnnxDetectorImpl::YoloOnnxDetectorImpl(const QString &modelPath, QObject *parent)
     : QObject(parent), m_modelPath(modelPath)
 {
-#ifdef HAVE_ONNXRUNTIME
     // Try a light session init to verify the file is loadable and runtime is present.
     try
     {
@@ -91,11 +88,6 @@ YoloOnnxDetectorImpl::YoloOnnxDetectorImpl(const QString &modelPath, QObject *pa
         qWarning() << "ONNX: failed to load model:" << e.what();
         m_ready = false;
     }
-#else
-    m_ready = false;
-    Q_UNUSED(m_modelPath)
-    qWarning() << "ONNX: runtime disabled at build time (HAVE_ONNXRUNTIME not defined); detector not ready";
-#endif
 }
 
 bool YoloOnnxDetectorImpl::isReady() const { return m_ready; }
@@ -108,7 +100,7 @@ bool YoloOnnxDetectorImpl::detectJpeg(const QByteArray &jpeg,
     scores.clear();
     if (!m_ready)
     {
-        qWarning() << "ONNX: detector not ready; ensure ENABLE_ONNXRUNTIME=ON and onnxruntime.dll is next to the exe";
+        qWarning() << "ONNX: detector not ready; ensure onnxruntime.dll is next to the exe";
         return false;
     }
     if (jpeg.isEmpty())
@@ -131,16 +123,6 @@ bool YoloOnnxDetectorImpl::detectRgb(const uchar *data, int width, int height, i
                                      QVector<QRectF> &boxes,
                                      QVector<float> &scores) const
 {
-#ifndef HAVE_ONNXRUNTIME
-    Q_UNUSED(data)
-    Q_UNUSED(width)
-    Q_UNUSED(height)
-    Q_UNUSED(bytesPerLine)
-    Q_UNUSED(boxes)
-    Q_UNUSED(scores)
-    qWarning() << "ONNX: runtime disabled at build time; skipping inference";
-    return false;
-#else
     try
     {
         QImage src((uchar *)data, width, height, bytesPerLine, QImage::Format_RGB888);
@@ -239,5 +221,4 @@ bool YoloOnnxDetectorImpl::detectRgb(const uchar *data, int width, int height, i
         qWarning() << "ONNX detect error:" << e.what();
         return false;
     }
-#endif
 }

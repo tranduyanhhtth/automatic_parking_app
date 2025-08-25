@@ -9,6 +9,7 @@
 #include <QSqlError>
 #include <QDebug>
 #include <QDateTime>
+#include <QList>
 // #include "domain/model/parkingrecord.h"
 #include "domain/ports/iparkingrepository.h"
 #include <optional>
@@ -41,6 +42,10 @@ public:
     Q_INVOKABLE QVariantMap fetchOpenSession(const QString &rfid) override;
 
     Q_INVOKABLE CheckOutResult checkOutRfidOnly(const QString &rfid, QString *checkoutTimeOut) override;
+    Q_INVOKABLE CheckOutResult checkOutRfidWithImages(const QString &rfid,
+                                                      QString *checkoutTimeOut,
+                                                      const QByteArray &image1,
+                                                      const QByteArray &image2) override;
 
     Q_INVOKABLE bool deleteClosedSessions(const QString &rfid) override;
 
@@ -48,6 +53,55 @@ public:
     Q_INVOKABLE QVariantMap fetchFullOpenSession(const QString &rfid) override;
 
     Q_INVOKABLE bool updatePlateForOpenSession(const QString &rfid, const QString &plate) override;
+    Q_INVOKABLE QVariantMap getUserById(int userId) override;
+
+    // Mở rộng: Users / Subscriptions / Pricing / Revenues
+    Q_INVOKABLE int upsertUser(const QString &fullName,
+                               const QString &phone,
+                               const QString &rfid,
+                               const QString &plate,
+                               const QString &vehicleType) override;
+    Q_INVOKABLE int createSubscription(int userId,
+                                       const QString &plate,
+                                       const QString &rfid,
+                                       const QString &planType,
+                                       const QString &startDate,
+                                       const QString &endDate,
+                                       const QString &paymentMode,
+                                       int price,
+                                       const QString &status) override;
+    Q_INVOKABLE QVariantMap findActiveSubscription(const QString &rfid,
+                                                   const QString &plate,
+                                                   const QString &nowIso) override;
+    Q_INVOKABLE int insertRevenue(std::optional<int> sessionId,
+                                  std::optional<int> subscriptionId,
+                                  std::optional<int> userId,
+                                  int amount,
+                                  const QString &paymentType,
+                                  const QString &revenueType,
+                                  const QString &note) override;
+    Q_INVOKABLE int addPenalty(std::optional<int> userId,
+                               int amount,
+                               const QString &paymentType,
+                               const QString &note) override;
+    Q_INVOKABLE QList<QVariantMap> searchSessions(const QString &plate,
+                                                  const QString &rfid,
+                                                  const QString &fromIso,
+                                                  const QString &toIso,
+                                                  const QString &status,
+                                                  int limit,
+                                                  int offset) override;
+    // Lấy chi tiết phiên theo ID, bao gồm ảnh (data URL)
+    Q_INVOKABLE QVariantMap getSessionDetails(int id);
+    Q_INVOKABLE int computeFeeForSession(int sessionId,
+                                         const QString &nowIso,
+                                         bool lostCard) override;
+    Q_INVOKABLE bool savePricingJson(const QString &vehicleType,
+                                     const QString &ticketType,
+                                     const QString &jsonText,
+                                     const QString &description) override;
+    Q_INVOKABLE QVariantMap getLatestPricing(const QString &vehicleType,
+                                             const QString &ticketType) override;
 
 private:
     QSqlDatabase DB_Connection;
@@ -55,6 +109,15 @@ private:
     bool ensureSchema();
     // Truy vấn bản ghi đang mở
     std::optional<QVariantMap> findOpenByRfid(const QString &encodedRfid);
+    // Nội bộ: tra user theo RFID/Plate
+    std::optional<QVariantMap> findUserByRfidOrPlate(const QString &rfid, const QString &plate);
+    // Nội bộ: tính phí theo pricing cơ bản
+    int computeFee(const QString &vehicleType, qint64 durationMinutes);
+    // Nội bộ: tính phí theo JSON time_slots
+    int computeFeeJson(const QString &vehicleType,
+                       const QDateTime &checkin,
+                       const QDateTime &checkout,
+                       bool lostCard);
 
     // // Mã hóa đơn giản cho trường nhạy cảm (RFID, biển số)
     // QString encodeText(const QString &plain) const;

@@ -1,0 +1,24 @@
+<RCC>
+    <qresource prefix="/qt/qml/smart_parking_system/src/qml">
+        <file>MainWindow.qml</file>
+        <file>MainWindowForm.ui.qml</file>
+        <file>components/LaneComponent.qml</file>
+        <file>components/ToastComponent.qml</file>
+        <file>components/NavDrawer.ui.qml<file>
+        <file>components/HidLogPanel.qml</file>
+        <file>dialogs/AdminDialog.qml</file>
+        <file>dialogs/CameraSettingsDialog.qml</file>
+        <file>dialogs/BarrierSettingsDialog.qml</file>
+        <file>dialogs/LoginDialog.ui.qml</file>
+        <file>dialogs/SearchDialog.qml</file>
+        <file>dialog/SessionDetailDialog.ui.qml</file>
+        <file>logic/AdminLoginLogic.qml</file>
+        <file>logic/CameraLogic.qml</file>
+        <file>logic/BarrierLogic.qml</file>
+        <file>logic/PricingLogic.qml</file>
+        <file>logic/SearchLogic.qml</file>
+        <file>logic/HidLogLogic.qml</file>
+        <file>pages/AdminPage.ui.qml<file>
+        <file>pages/SearchPage.ui.qml<file>
+    </qresource>
+</RCC>

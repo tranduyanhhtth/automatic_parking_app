@@ -17,7 +17,6 @@ void SettingsManager::load()
     m_barrier1Baud = s.value("barrier1Baud", 9600).toInt();
     m_barrier2Port = s.value("barrier2Port", QStringLiteral("COM4")).toString();
     m_barrier2Baud = s.value("barrier2Baud", 9600).toInt();
-    m_useHwDecode = s.value("useHardwareDecode", true).toBool();
     m_entranceReaderPath = s.value("entranceReaderPath", QString()).toString();
     m_exitReaderPath = s.value("exitReaderPath", QString()).toString();
     emit camera1UrlChanged();
@@ -28,7 +27,6 @@ void SettingsManager::load()
     emit barrier1BaudChanged();
     emit barrier2PortChanged();
     emit barrier2BaudChanged();
-    emit useHardwareDecodeChanged();
     emit entranceReaderPathChanged();
     emit exitReaderPathChanged();
 }
@@ -44,7 +42,6 @@ void SettingsManager::save()
     s.setValue("barrier1Baud", m_barrier1Baud);
     s.setValue("barrier2Port", m_barrier2Port);
     s.setValue("barrier2Baud", m_barrier2Baud);
-    s.setValue("useHardwareDecode", m_useHwDecode);
     s.setValue("entranceReaderPath", m_entranceReaderPath);
     s.setValue("exitReaderPath", m_exitReaderPath);
 }
@@ -111,14 +108,6 @@ void SettingsManager::setBarrier2Baud(int baud)
         return;
     m_barrier2Baud = baud;
     emit barrier2BaudChanged();
-}
-
-void SettingsManager::setUseHardwareDecode(bool v)
-{
-    if (m_useHwDecode == v)
-        return;
-    m_useHwDecode = v;
-    emit useHardwareDecodeChanged();
 }
 
 void SettingsManager::setEntranceReaderPath(const QString &p)

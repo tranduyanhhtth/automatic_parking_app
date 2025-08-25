@@ -9,7 +9,7 @@ if (NOT WIN32)
     message(FATAL_ERROR "Windows only.")
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort Network)
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort Network QuickControls2)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -23,9 +23,28 @@ qt_add_qml_module(appsmart_parking_system
     QML_FILES
         src/qml/MainWindow.qml
         src/qml/MainWindowForm.ui.qml
-
-    RESOURCES
-        src/assets/logo_icon.jpg
+        # Components
+        src/qml/components/LaneComponent.ui.qml
+        src/qml/components/ToastComponent.ui.qml
+        src/qml/components/HidLogPanel.ui.qml
+        src/qml/components/NavDrawer.ui.qml
+        # Dialogs
+        src/qml/dialogs/AdminDialog.ui.qml
+        src/qml/dialogs/CameraSettingsDialog.ui.qml
+        src/qml/dialogs/BarrierSettingsDialog.ui.qml
+        src/qml/dialogs/SearchDialog.ui.qml
+        src/qml/dialogs/LoginDialog.ui.qml
+        src/qml/dialogs/SessionDetailDialog.ui.qml
+        # Pages
+        src/qml/pages/SearchPage.ui.qml
+        src/qml/pages/AdminPage.ui.qml
+        # Logic helpers
+        src/qml/logic/CameraLogic.qml
+        src/qml/logic/BarrierLogic.qml
+        src/qml/logic/PricingLogic.qml
+        src/qml/logic/SearchLogic.qml
+        src/qml/logic/HidLogLogic.qml
+        src/qml/logic/AdminLoginLogic.qml
 
     SOURCES
         utils/camera/cameramanager.h utils/camera/cameramanager.cpp
@@ -42,6 +61,11 @@ qt_add_qml_module(appsmart_parking_system
         controller/parkingcontroller.h controller/parkingcontroller.cpp
         domain/ports/icardreader.h
         domain/model/parkingrecord.h
+)
+
+# Include QML and other resources from qrc files (AUTORCC is enabled for the target)
+target_sources(appsmart_parking_system PRIVATE
+    src/assets/assets.qrc
 )
 
 # Ensure Qt MOC/UIC/RCC are enabled for this target
@@ -71,7 +95,7 @@ set_target_properties(appsmart_parking_system PROPERTIES
 )
 
 target_link_libraries(appsmart_parking_system
-    PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network
+    PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network Qt6::QuickControls2
     PRIVATE onnxruntime
 )
 

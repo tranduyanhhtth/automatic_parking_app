@@ -32,8 +32,6 @@ private:
     bool m_detectorReady{false};
     IParkingRepository *m_repo{nullptr};
     TesseractOcr *m_tess{nullptr};
-    // Try to auto-initialize Tesseract from common locations if settings are missing
-    void tryAutoInitTesseract();
     QString tesseractRecognize(const QByteArray &jpegBytes) const;
 };
 
