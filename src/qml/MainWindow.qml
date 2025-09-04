@@ -267,8 +267,8 @@ Item {
     }
 
     // Preview source bindings for lanes (bind to alias properties on form)
-    Binding { target: form; property: "lane1InputPreviewSource"; value: app.exitReviewAvailable ? (app.exitImage1DataUrl || "") : (app.dualMode !== 2 ? cameraLane1.inputSnapshotDataUrl : cameraLane2.inputSnapshotDataUrl) }
-    Binding { target: form; property: "lane1OutputPreviewSource"; value: app.exitReviewAvailable ? (app.exitImage2DataUrl || "") : (app.dualMode !== 2 ? cameraLane1.outputSnapshotDataUrl : cameraLane2.outputSnapshotDataUrl) }
-    Binding { target: form; property: "lane2InputPreviewSource"; value: app.exitReviewAvailable ? (app.exitImage1DataUrl || "") : (app.dualMode === 1 ? cameraLane1.inputSnapshotDataUrl : cameraLane2.inputSnapshotDataUrl) }
-    Binding { target: form; property: "lane2OutputPreviewSource"; value: app.exitReviewAvailable ? (app.exitImage2DataUrl || "") : (app.dualMode === 1 ? cameraLane1.outputSnapshotDataUrl : cameraLane2.outputSnapshotDataUrl) }
+    Binding { target: form; property: "lane1InputPreviewSource"; value: app.exitReviewAvailable ? (app.entrancePreviewImage1DataUrl || "") : (app.dualMode !== 2 ? cameraLane1.inputSnapshotDataUrl : cameraLane2.inputSnapshotDataUrl) }
+    Binding { target: form; property: "lane1OutputPreviewSource"; value: app.exitReviewAvailable ? (app.entrancePreviewImage2DataUrl || "") : (app.dualMode !== 2 ? cameraLane1.outputSnapshotDataUrl : cameraLane2.outputSnapshotDataUrl) }
+    Binding { target: form; property: "lane2InputPreviewSource"; value: app.exitReviewAvailable ? (app.entrancePreviewImage1DataUrl || "") : (app.dualMode === 1 ? cameraLane1.inputSnapshotDataUrl : cameraLane2.inputSnapshotDataUrl) }
+    Binding { target: form; property: "lane2OutputPreviewSource"; value: app.exitReviewAvailable ? (app.entrancePreviewImage2DataUrl || "") : (app.dualMode === 1 ? cameraLane1.outputSnapshotDataUrl : cameraLane2.outputSnapshotDataUrl) }
 }

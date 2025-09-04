@@ -131,6 +131,8 @@ private:
     std::optional<QVariantMap> findUserByRfidOrPlate(const QString &rfid, const QString &plate);
     // Nội bộ: tra pricing id theo loại xe + loại vé
     int getPricingIdFor(const QString &vehicleType, const QString &ticketType);
+    // Đảm bảo có user mặc định để thỏa ràng buộc NOT NULL của user_id
+    int ensureGuestUser();
     QString normalizeVehicle(const QString &vt) const; // motorbike->bike
     QString normalizePlan(const QString &plan) const;  // tháng->monthly
     // Nội bộ: tính phí theo row pricing đã chọn
@@ -155,6 +157,8 @@ private:
 
     // Tạo timestamp dạng TEXT (ISO 8601)
     QString nowIso8601() const;
+    // Migration helpers
+    bool migrateParkingSessionsPricingNotNull();
 };
 
 #endif // DATABASEMANAGER_H

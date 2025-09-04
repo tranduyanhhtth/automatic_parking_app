@@ -418,12 +418,22 @@ Item {
 		TextArea {
 			id: pricingJson
 		}
-			// Structured pricing fields (placeholders so logic can bind)
-			TextField { id: pricingBaseFee }
-			TextField { id: pricingGraceMinutes }
-			TextField { id: pricingIncEvery }
-			TextField { id: pricingIncFee }
-			TextField { id: pricingCap }
+		// Structured pricing fields (placeholders so logic can bind)
+		TextField {
+			id: pricingBaseFee
+		}
+		TextField {
+			id: pricingGraceMinutes
+		}
+		TextField {
+			id: pricingIncEvery
+		}
+		TextField {
+			id: pricingIncFee
+		}
+		TextField {
+			id: pricingCap
+		}
 		// Subscription form controls kept as invisible placeholders
 		ComboBox {
 			id: subVehicle

@@ -32,6 +32,7 @@ private:
     static QImage sampleToImage(GstSample *sample);
     static gboolean onBusMessage(GstBus *bus, GstMessage *message, gpointer user_data);
     static GstFlowReturn onNewSample(GstAppSink *sink, gpointer user_data);
+    static void onSourceSetup(GstElement *bin, GstElement *source, gpointer user_data);
     static bool hasElement(const char *name);
     void cleanup();
 

@@ -230,6 +230,10 @@ bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
         g_object_set(G_OBJECT(player), "video-sink", videoBin, nullptr);
         g_object_set(G_OBJECT(player), "audio-sink", audioSink, nullptr);
 
+        // Force RTSP over TCP and allow auth via URL when source is created
+        // Connect to the "source-setup" signal emitted by playbin for rtspsrc
+        g_signal_connect(player, "source-setup", G_CALLBACK(&GStreamerPlayer::onSourceSetup), this);
+
         m_pipeline = player;
         // Grab appsink from the video sink bin we just created
         m_appsink = gst_bin_get_by_name(GST_BIN(videoBin), "mysink");
@@ -256,7 +260,7 @@ bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
 
         // uridecodebin handles RTSP and dynamic pads; link to videoconvert -> appsink
         // uridecodebin will internally use rtspsrc; prefer TCP via GST_RTSP_TCP env
-        QByteArray pipeStr = QByteArray("uridecodebin uri=") + quotedUrl +
+        QByteArray pipeStr = QByteArray("uridecodebin name=uridec uri=") + quotedUrl +
                              QByteArray(" ! videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
 
         GError *err = nullptr;
@@ -268,6 +272,14 @@ bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
                 g_error_free(err);
             emit errorOccured(msg);
             return false;
+        }
+
+        // Hook source-setup to enforce TCP/auth when uridecodebin creates rtspsrc
+        GstElement *uridec = gst_bin_get_by_name(GST_BIN(m_pipeline), "uridec");
+        if (uridec)
+        {
+            g_signal_connect(uridec, "source-setup", G_CALLBACK(&GStreamerPlayer::onSourceSetup), this);
+            gst_object_unref(uridec);
         }
 
         m_appsink = gst_bin_get_by_name(GST_BIN(m_pipeline), "mysink");
@@ -340,7 +352,8 @@ gboolean GStreamerPlayer::onBusMessage(GstBus *bus, GstMessage *message, gpointe
         GError *err = nullptr;
         gchar *debug = nullptr;
         gst_message_parse_error(message, &err, &debug);
-        const QString msg = QStringLiteral("Gst error: %1").arg(err ? QString::fromUtf8(err->message) : QString());
+        const QString srcName = QString::fromUtf8(GST_MESSAGE_SRC_NAME(message) ? GST_MESSAGE_SRC_NAME(message) : "");
+        const QString msg = QStringLiteral("Gst error from %1: %2").arg(srcName, err ? QString::fromUtf8(err->message) : QString());
         if (err)
             g_error_free(err);
         if (debug)
@@ -359,6 +372,23 @@ gboolean GStreamerPlayer::onBusMessage(GstBus *bus, GstMessage *message, gpointe
         break;
     }
     return TRUE;
+}
+
+void GStreamerPlayer::onSourceSetup(GstElement *bin, GstElement *source, gpointer user_data)
+{
+    Q_UNUSED(bin)
+    Q_UNUSED(user_data)
+    // rtspsrc has properties: protocols, user-id, user-pw; set TCP via env/protocols safeguard
+    if (GST_IS_ELEMENT(source))
+    {
+        // Enforce TCP protocols=GST_RTSP_LOWER_TRANS_TCP (4) if property exists
+        if (g_object_class_find_property(G_OBJECT_GET_CLASS(source), "protocols"))
+        {
+            g_object_set(G_OBJECT(source), "protocols", 4, nullptr);
+        }
+        // Do not set user-id/user-pw explicitly here; rtspsrc will parse from URI
+        // If needed later, we can parse m_url and set user-id / user-pw.
+    }
 }
 
 bool GStreamerPlayer::hasElement(const char *name)

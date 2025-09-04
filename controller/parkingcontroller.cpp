@@ -44,11 +44,9 @@ void ParkingController::onEntranceRfidScanned(const QString &rfid)
 
 void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx)
 {
-    ICameraSnapshotProvider *cam = camForLane(laneIdx);
-    IBarrier *bar = barrierForLane(laneIdx);
-    if (!cam || !bar || !m_db)
+    // Toast and DB checks must not depend on camera/barrier availability
+    if (!m_db)
         return;
-
     if (m_db->hasOpenSession(normRfid))
     {
         m_message = QStringLiteral("Thẻ đang sử dụng");
@@ -59,10 +57,15 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
     }
     else
     {
+        ICameraSnapshotProvider *cam = camForLane(laneIdx);
+        IBarrier *bar = barrierForLane(laneIdx);
+        if (!cam || !bar)
+            return;
         // Từ đây thẻ chắc chắn chưa sử dụng -> chụp ảnh hiện tại từ camera của lane
         QByteArray img1 = cam->captureInputSnapshot(85);
         QByteArray img2 = cam->captureOutputSnapshot(85);
         QString detectedPlate;
+        QByteArray ann1, ann2; // annotated images with bounding boxes if available
         if (m_ocr)
         {
             const QVariantMap res = m_ocr->recognizePlates(img1, img2);
@@ -77,6 +80,18 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
                 emit showToast(QStringLiteral("OCR plate: %1").arg(detectedPlate));
             else
                 emit showToast(QStringLiteral("OCR plate: (none)"));
+            ann1 = res.value("frontAnnotated").toByteArray();
+            ann2 = res.value("rearAnnotated").toByteArray();
+            // Update entrance preview for UI
+            if (!ann1.isEmpty())
+                m_entranceImg1 = makeDataUrlFromBytes(ann1);
+            else
+                m_entranceImg1 = makeDataUrlFromBytes(img1);
+            if (!ann2.isEmpty())
+                m_entranceImg2 = makeDataUrlFromBytes(ann2);
+            else
+                m_entranceImg2 = makeDataUrlFromBytes(img2);
+            emit entrancePreviewChanged();
         }
 
         // Cập nhật lastRfid cho UI khi thực sự tiến hành check-in
@@ -85,7 +100,10 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
 
         m_plate = detectedPlate;
         emit plateChanged();
-        const CheckInResult ok = m_db->checkIn(normRfid, m_plate, img1, img2);
+        // Prefer annotated images if present
+        const QByteArray store1 = ann1.isEmpty() ? img1 : ann1;
+        const QByteArray store2 = ann2.isEmpty() ? img2 : ann2;
+        const CheckInResult ok = m_db->checkIn(normRfid, m_plate, store1, store2);
         if (ok == CheckInResult::Ok)
         {
             emit debugLog(QStringLiteral("IN: check-in %1 -> pulse barrier(L%2)").arg(normRfid).arg(laneIdx + 1));
@@ -154,11 +172,8 @@ void ParkingController::onExitRfidScanned(const QString &rfid)
 
 void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
 {
-    ICameraSnapshotProvider *cam = camForLane(laneIdx);
-    IBarrier *bar = barrierForLane(laneIdx);
-    if (!cam || !bar || !m_db)
+    if (!m_db)
         return;
-
     if (normRfid.isEmpty())
         return;
     if (!m_db->hasOpenSession(normRfid))
@@ -166,11 +181,16 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         emit showToast(QStringLiteral("Thẻ chưa được sử dụng"));
         return;
     }
+    ICameraSnapshotProvider *cam = camForLane(laneIdx);
+    IBarrier *bar = barrierForLane(laneIdx);
+    if (!cam || !bar)
+        return;
     m_lastRfid = normRfid;
     emit lastRfidChanged();
     loadExitReview(normRfid);
     QByteArray live1 = cam->captureInputSnapshot(85);
     QByteArray live2 = cam->captureOutputSnapshot(85);
+    QByteArray ann1, ann2; // annotated checkout images
     if (m_ocr)
     {
         QVariantMap full = m_db->fetchFullOpenSession(normRfid);
@@ -195,6 +215,8 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
                 ocrPlate = QStringLiteral("unknown");
             else
                 emit showToast(QStringLiteral("OCR plate: %1").arg(ocrPlate));
+            ann1 = res.value("frontAnnotated").toByteArray();
+            ann2 = res.value("rearAnnotated").toByteArray();
         }
         const QString a = normalizePlate(storedPlate);
         const QString b = normalizePlate(ocrPlate);
@@ -208,7 +230,10 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
     const QString checkinBefore = openBefore.value("checkin_time").toString();
     QString coTime;
     // Lưu ảnh checkout vào DB như cổng vào
-    const CheckOutResult r = m_db->checkOutRfidWithImages(normRfid, &coTime, live1, live2);
+    // Store annotated images if we have them
+    const QByteArray store1 = ann1.isEmpty() ? live1 : ann1;
+    const QByteArray store2 = ann2.isEmpty() ? live2 : ann2;
+    const CheckOutResult r = m_db->checkOutRfidWithImages(normRfid, &coTime, store1, store2);
     if (r == CheckOutResult::OkMatched)
     {
         m_checkOutTime = coTime;

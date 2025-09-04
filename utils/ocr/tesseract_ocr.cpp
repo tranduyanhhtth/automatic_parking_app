@@ -74,9 +74,15 @@ bool TesseractOcr::init(const QString &tessdataParent, const QString &lang)
         m_ready = false;
         return false;
     }
-    // Tune for license plates: single line and alphanumeric whitelist
-    m_api->SetPageSegMode(tesseract::PSM_SINGLE_LINE);
+    // Tune for license plates: prefer multi-char recognition
+    // SINGLE_LINE can be too aggressive and sometimes yields 1 char; use SINGLE_BLOCK or AUTO
+    m_api->SetPageSegMode(tesseract::PSM_SINGLE_BLOCK);
     m_api->SetVariable("tessedit_char_whitelist", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789");
+    // Avoid punctuation and spaces
+    m_api->SetVariable("tessedit_char_blacklist", "\n\r -_.:,;'/\\`~!@#$%^&*()[]{}<>?\"|");
+    // Prefer LSTM-only engine for better sequence accuracy
+    m_api->SetVariable("load_system_dawg", "F");
+    m_api->SetVariable("load_freq_dawg", "F");
     m_ready = true;
     qInfo() << "Tesseract ready. Version=" << QString::fromUtf8(m_api->Version())
             << ", datapath/TESSDATA_PREFIX=" << qEnvironmentVariable("TESSDATA_PREFIX");
@@ -93,8 +99,37 @@ QString TesseractOcr::recognize(const QByteArray &imageBytes) const
     Pix *pix = pixReadMem(dataPtr, dataSize);
     if (!pix)
         return {};
+    // Set a reasonable DPI if missing to aid recognition engine
+    if (pixGetXRes(pix) == 0 || pixGetYRes(pix) == 0)
+        pixSetResolution(pix, 200, 200);
     m_api->SetImage(pix);
     char *outText = m_api->GetUTF8Text();
+    pixDestroy(&pix);
+    if (!outText)
+        return {};
+    QString res = QString::fromUtf8(outText).trimmed();
+    delete[] outText;
+    return res;
+}
+
+QString TesseractOcr::recognizeWithPSM(const QByteArray &imageBytes, int psm) const
+{
+    if (!m_ready || imageBytes.isEmpty())
+        return {};
+    const l_uint8 *dataPtr = reinterpret_cast<const l_uint8 *>(imageBytes.constData());
+    size_t dataSize = static_cast<size_t>(imageBytes.size());
+    Pix *pix = pixReadMem(dataPtr, dataSize);
+    if (!pix)
+        return {};
+    if (pixGetXRes(pix) == 0 || pixGetYRes(pix) == 0)
+        pixSetResolution(pix, 200, 200);
+    // Save current PSM
+    const tesseract::PageSegMode old = m_api->GetPageSegMode();
+    m_api->SetPageSegMode(static_cast<tesseract::PageSegMode>(psm));
+    m_api->SetImage(pix);
+    char *outText = m_api->GetUTF8Text();
+    // Restore
+    m_api->SetPageSegMode(old);
     pixDestroy(&pix);
     if (!outText)
         return {};

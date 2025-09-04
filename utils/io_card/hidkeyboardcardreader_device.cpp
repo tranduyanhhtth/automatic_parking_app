@@ -63,8 +63,41 @@ void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bo
 {
     if (!m_enabled)
         return;
-    if (path != m_devicePath)
+    // If devicePath is set, filter strictly; if empty and autoBindWhenEmpty is on,
+    // auto-claim the first path that hits this reader (if not already claimed by another reader)
+    if (m_devicePath.isEmpty())
+    {
+        if (m_autoBindWhenEmpty)
+        {
+            // Only auto-bind true HID device paths (avoid ACPI/laptop keyboard)
+            const bool isHidPath = path.startsWith(QStringLiteral("\\\\?\\HID#"), Qt::CaseInsensitive);
+            if (!isHidPath)
+            {
+                emit debugLog(QStringLiteral("[HID] Ignore non-HID path for auto-bind: %1").arg(path));
+                return;
+            }
+            if (!claimedPaths().contains(path))
+            {
+                claimedPaths().insert(path);
+                m_devicePath = path;
+                emit devicePathChanged();
+                emit debugLog(QStringLiteral("[HID] Auto-bound to %1").arg(path));
+            }
+            else
+            {
+                // Another reader already claimed this device; ignore
+                return;
+            }
+        }
+        else
+        {
+            // setup mode: accept any HID without binding
+        }
+    }
+    else if (path != m_devicePath)
+    {
         return; // Only listen to bound device
+    }
     if (!down)
         return; // only on key down
 
@@ -90,11 +123,19 @@ void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bo
         finalize();
         return;
     }
+    if (vkey == VK_BACK)
+    {
+        // Treat backspace as a hard reset of the buffer
+        m_buffer.clear();
+        return;
+    }
     // Allow 0-9 and A-Z via virtual-key to ASCII simplistic mapping
     if (vkey >= '0' && vkey <= '9')
         m_buffer.append(QChar(ushort(vkey)));
     else if (vkey >= 'A' && vkey <= 'Z')
         m_buffer.append(QChar(ushort(vkey)));
+    else if (vkey >= VK_NUMPAD0 && vkey <= VK_NUMPAD9)
+        m_buffer.append(QChar(ushort('0' + (vkey - VK_NUMPAD0))));
     // Other keys ignored
 }
 

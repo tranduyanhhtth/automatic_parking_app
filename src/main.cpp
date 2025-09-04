@@ -58,7 +58,9 @@ int main(int argc, char *argv[])
     auto rawRouter = new WindowsRawInputRouter(&app);
 
     auto cardReaderEntrance = new HidKeyboardCardReaderDevice(rawRouter, &app);
+    cardReaderEntrance->setObjectName(QStringLiteral("EntranceReader"));
     auto cardReaderExit = new HidKeyboardCardReaderDevice(rawRouter, &app);
+    cardReaderExit->setObjectName(QStringLiteral("ExitReader"));
 
     // Bắt buộc dùng đường dẫn thiết bị từ cấu hình; KHÔNG tự chọn bàn phím PC
 
@@ -67,10 +69,22 @@ int main(int argc, char *argv[])
 
     cardReaderEntrance->setDevicePath(entrancePath);
     cardReaderExit->setDevicePath(exitPath);
+    // Khi auto-bind xảy ra, lưu ngay vào Settings để lần sau khởi động là BOUND
+    QObject::connect(cardReaderEntrance, &HidKeyboardCardReaderDevice::devicePathChanged, &app, [settings, cardReaderEntrance]()
+                     {
+        if (!cardReaderEntrance->devicePath().isEmpty()) {
+            settings->setEntranceReaderPath(cardReaderEntrance->devicePath());
+        } });
+    QObject::connect(cardReaderExit, &HidKeyboardCardReaderDevice::devicePathChanged, &app, [settings, cardReaderExit]()
+                     {
+        if (!cardReaderExit->devicePath().isEmpty()) {
+            settings->setExitReaderPath(cardReaderExit->devicePath());
+        } });
 
     // Tuỳ chọn: siết thời gian quét để giảm lỗi đọc nhầm
-    cardReaderEntrance->setInterKeyMsMax(30);
-    cardReaderExit->setInterKeyMsMax(30);
+    // Slightly relaxed threshold; HID scanners can have ~5-20ms between keys, sometimes brief 40-60ms gaps
+    cardReaderEntrance->setInterKeyMsMax(80);
+    cardReaderExit->setInterKeyMsMax(80);
 
     // Ghi log khi camera bị đứng (stalled) lên HID
     QObject::connect(cameraLane1, &CameraManager::inputStreamStalled, cardReaderEntrance, [cardReaderEntrance]()
@@ -141,14 +155,16 @@ int main(int argc, char *argv[])
         const bool xBound = !exitPath.isEmpty();
         const bool ePresent = eBound && present.contains(entrancePath);
         const bool xPresent = xBound && present.contains(exitPath);
-        const QString me = QStringLiteral("[HID] Entrance Reader: %1%2%3")
+        const QString me = QStringLiteral("[HID] Entrance Reader: %1%2%3%4")
                                .arg(eBound ? QStringLiteral("BOUND") : QStringLiteral("UNBOUND"))
                                .arg(eBound ? QStringLiteral(" ") : QString())
-                               .arg(eBound ? (ePresent ? QStringLiteral("(PRESENT)") : QStringLiteral("(NOT FOUND)")) : QString());
-        const QString mx = QStringLiteral("[HID] Exit Reader: %1%2%3")
+                               .arg(eBound ? (ePresent ? QStringLiteral("(PRESENT)") : QStringLiteral("(NOT FOUND)")) : QString())
+                               .arg(!eBound ? QStringLiteral(" — listening to ANY keyboard-like HID (setup mode)") : QString());
+        const QString mx = QStringLiteral("[HID] Exit Reader: %1%2%3%4")
                                .arg(xBound ? QStringLiteral("BOUND") : QStringLiteral("UNBOUND"))
                                .arg(xBound ? QStringLiteral(" ") : QString())
-                               .arg(xBound ? (xPresent ? QStringLiteral("(PRESENT)") : QStringLiteral("(NOT FOUND)")) : QString());
+                               .arg(xBound ? (xPresent ? QStringLiteral("(PRESENT)") : QStringLiteral("(NOT FOUND)")) : QString())
+                               .arg(!xBound ? QStringLiteral(" — listening to ANY keyboard-like HID (setup mode)") : QString());
         QMetaObject::invokeMethod(cardReaderEntrance, "debugLog", Qt::QueuedConnection, Q_ARG(QString, me));
         QMetaObject::invokeMethod(cardReaderExit, "debugLog", Qt::QueuedConnection, Q_ARG(QString, mx));
     }

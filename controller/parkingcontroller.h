@@ -47,6 +47,9 @@ class ParkingController : public QObject
     Q_PROPERTY(QString exitImage1DataUrl READ exitImage1DataUrl NOTIFY exitReviewChanged)
     Q_PROPERTY(QString exitImage2DataUrl READ exitImage2DataUrl NOTIFY exitReviewChanged)
     Q_PROPERTY(bool exitReviewAvailable READ exitReviewAvailable NOTIFY exitReviewChanged)
+    // Ảnh xem trước cổng vào có vẽ bounding boxes
+    Q_PROPERTY(QString entrancePreviewImage1DataUrl READ entrancePreviewImage1DataUrl NOTIFY entrancePreviewChanged)
+    Q_PROPERTY(QString entrancePreviewImage2DataUrl READ entrancePreviewImage2DataUrl NOTIFY entrancePreviewChanged)
 public:
     explicit ParkingController(ICameraSnapshotProvider *cam1,
                                ICameraSnapshotProvider *cam2,
@@ -202,6 +205,8 @@ public:
     QString exitImage1DataUrl() const { return m_exitImg1; }
     QString exitImage2DataUrl() const { return m_exitImg2; }
     bool exitReviewAvailable() const { return !m_exitImg1.isEmpty() || !m_exitImg2.isEmpty(); }
+    QString entrancePreviewImage1DataUrl() const { return m_entranceImg1; }
+    QString entrancePreviewImage2DataUrl() const { return m_entranceImg2; }
 
 public slots:
     // Tải ảnh phiên vào để bác bảo vệ so sánh
@@ -269,6 +274,7 @@ signals:
     void laneChanged();
     void openCountChanged();
     void exitReviewChanged();
+    void entrancePreviewChanged();
     void showToast(const QString &message);
     // Debug logging hook for UI HID LOG overlay
     void debugLog(const QString &message);
@@ -304,6 +310,8 @@ private:
     // mở bằng cơm
     QString m_exitImg1;
     QString m_exitImg2;
+    QString m_entranceImg1;
+    QString m_entranceImg2;
 
     // Trạng thái hiển thị mới
     QString m_entrancePlate;

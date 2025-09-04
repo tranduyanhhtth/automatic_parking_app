@@ -20,6 +20,10 @@ public:
     // Recognize text from a JPEG/PNG buffer. Returns trimmed UTF-8 text.
     QString recognize(const QByteArray &imageBytes) const;
 
+    // Recognize with a specific Page Segmentation Mode (PSM). See tesseract::PageSegMode.
+    // Example PSMs: PSM_SINGLE_LINE for 1 hàng, PSM_SINGLE_BLOCK cho 2 hàng.
+    QString recognizeWithPSM(const QByteArray &imageBytes, int psm) const;
+
     bool isReady() const { return m_ready; }
 
 private:

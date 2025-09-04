@@ -57,12 +57,12 @@ bool DatabaseManager::ensureSchema()
         return false;
     }
 
-    // 2) parking_sessions (new schema adds pricing_id and status constraints)
+    // 2) parking_sessions (enforce NOT NULL on pricing_id, and RESTRICT on FKs)
     if (!q.exec(R"(
         CREATE TABLE IF NOT EXISTS parking_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
-            pricing_id INTEGER,
+            pricing_id INTEGER NOT NULL,
             rfid TEXT,
             plate TEXT,
             checkin_time TEXT NOT NULL,
@@ -74,8 +74,8 @@ bool DatabaseManager::ensureSchema()
             duration_minutes INTEGER,
             fee INTEGER,
             status TEXT CHECK (status IN ('checked_in','checked_out','pending')),
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
-            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE SET NULL
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT,
+            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE RESTRICT
         )
     )"))
     {
@@ -90,6 +90,37 @@ bool DatabaseManager::ensureSchema()
         QSqlQuery copy(DB_Connection);
         copy.exec("INSERT INTO parking_sessions (rfid, plate, checkin_time, checkout_time, checkin_image1, checkin_image2, status) SELECT rfid, plate, checkin_time, checkout_time, checkin_image1, checkin_image2, status FROM parking_log WHERE NOT EXISTS (SELECT 1 FROM parking_sessions LIMIT 1)");
     }
+
+    // Legacy DBs may have parking_sessions without user_id/pricing_id. Add columns if missing, then backfill.
+    auto columnExists = [&](const QString &table, const QString &column) -> bool
+    {
+        QSqlQuery qi(DB_Connection);
+        if (!qi.exec(QStringLiteral("PRAGMA table_info(%1)").arg(table)))
+            return false;
+        while (qi.next())
+        {
+            if (qi.value(1).toString() == column)
+                return true;
+        }
+        return false;
+    };
+    const bool hasUserIdCol = columnExists("parking_sessions", "user_id");
+    const bool hasPricingIdCol = columnExists("parking_sessions", "pricing_id");
+    if (!hasUserIdCol)
+    {
+        // Add as nullable first for existing rows, we'll backfill right after.
+        q.exec("ALTER TABLE parking_sessions ADD COLUMN user_id INTEGER");
+    }
+    if (!hasPricingIdCol)
+    {
+        q.exec("ALTER TABLE parking_sessions ADD COLUMN pricing_id INTEGER");
+    }
+
+    // Create helpful indexes (safe if columns were just added; creation will be skipped if not possible)
+    if (!hasUserIdCol)
+        q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_user ON parking_sessions(user_id)");
+    if (!hasPricingIdCol)
+        q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_pricing ON parking_sessions(pricing_id)");
 
     // Indexes cho truy vấn nhanh
     q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_rfid_open ON parking_sessions(rfid, checkout_time)");
@@ -183,6 +214,20 @@ bool DatabaseManager::ensureSchema()
     DB_Connection.commit();
     // Seed default pricing if table is empty
     ensureDefaultPricing();
+
+    // Backfill legacy columns just added (outside of transaction to avoid long locks)
+    // Ensure we have a guest user id to satisfy NOT NULL user_id on new inserts
+    const int guestId = ensureGuestUser();
+    if (guestId > 0)
+    {
+        QSqlQuery updUser(DB_Connection);
+        updUser.prepare("UPDATE parking_sessions SET user_id = COALESCE(user_id, ?) WHERE user_id IS NULL");
+        updUser.addBindValue(guestId);
+        updUser.exec(); // ignore errors if column already had data
+    }
+
+    // If an older DB has NULL pricing_id in parking_sessions, migrate/backfill it now
+    migrateParkingSessionsPricingNotNull();
     return true;
 }
 
@@ -211,6 +256,40 @@ INSERT INTO pricing (vehicle_type, ticket_type, base_fee, duration_minutes, incr
 )SQL";
     if (!q.exec(sql))
         qWarning() << "Seed pricing failed:" << q.lastError().text();
+    return true;
+}
+
+bool DatabaseManager::migrateParkingSessionsPricingNotNull()
+{
+    // Backfill NULL pricing_id using users.vehicle_type -> pricing(hourly)
+    QSqlQuery q(DB_Connection);
+    // 1) If pricing_id exists and is NULL, try to compute from user vehicle_type
+    if (!q.exec(R"(
+        UPDATE parking_sessions AS ps
+        SET pricing_id = (
+            SELECT p.id FROM users u
+            JOIN pricing p ON p.vehicle_type = CASE
+                WHEN LOWER(u.vehicle_type) IN ('motorbike','bike') THEN 'bike'
+                WHEN LOWER(u.vehicle_type) = 'truck' THEN 'truck'
+                ELSE 'car'
+            END AND p.ticket_type = 'hourly'
+            WHERE u.id = ps.user_id
+            ORDER BY p.id ASC LIMIT 1
+        )
+        WHERE ps.pricing_id IS NULL
+    )"))
+        return false;
+
+    // 2) Fallback: set to default hourly for 'car' if still NULL
+    const int defaultHourly = getPricingIdFor(QStringLiteral("car"), QStringLiteral("hourly"));
+    if (defaultHourly > 0)
+    {
+        QSqlQuery q2(DB_Connection);
+        q2.prepare("UPDATE parking_sessions SET pricing_id=? WHERE pricing_id IS NULL");
+        q2.addBindValue(defaultHourly);
+        if (!q2.exec())
+            return false;
+    }
     return true;
 }
 
@@ -517,7 +596,8 @@ int DatabaseManager::addPenalty(std::optional<int> userId,
                                 const QString &paymentType,
                                 const QString &note)
 {
-    return insertRevenue(std::nullopt, std::nullopt, userId, amount, paymentType, QStringLiteral("penalty"), note);
+    // Respect CHECK constraint: use 'other' for penalties
+    return insertRevenue(std::nullopt, std::nullopt, userId, amount, paymentType, QStringLiteral("other"), note);
 }
 
 QList<QVariantMap> DatabaseManager::searchSessions(const QString &plate,
@@ -650,6 +730,8 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
         if (vehicleType.isEmpty())
             vehicleType = QStringLiteral("car");
     }
+    if (userId <= 0)
+        userId = ensureGuestUser();
     auto sub = findActiveSubscription(encRfid, encPlate, QString());
     int pricingId = -1;
     if (!sub.isEmpty() && sub.contains("pricing_id"))
@@ -657,18 +739,16 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
     if (pricingId <= 0)
         pricingId = getPricingIdFor(vehicleType, QStringLiteral("hourly"));
     QSqlQuery q(DB_Connection);
-    q.prepare(R"(
-        INSERT INTO parking_sessions (user_id, pricing_id, rfid, plate, checkin_time, checkin_image1, checkin_image2, status)
-        VALUES(:uid, :pid, :rfid, :plate, :ts, :img1, :img2, :st)
-    )");
-    q.bindValue(":uid", userId > 0 ? QVariant(userId) : QVariant(QVariant::Int));
-    q.bindValue(":pid", pricingId > 0 ? QVariant(pricingId) : QVariant(QVariant::Int));
-    q.bindValue(":rfid", encRfid);
-    q.bindValue(":plate", encPlate);
-    q.bindValue(":ts", nowTxt);
-    q.bindValue(":img1", image1);
-    q.bindValue(":img2", image2);
-    q.bindValue(":st", QStringLiteral("checked_in"));
+    // Dùng placeholders vị trí để tránh mismatch trong một số build Qt/SQLite
+    q.prepare("INSERT INTO parking_sessions (user_id, pricing_id, rfid, plate, checkin_time, checkin_image1, checkin_image2, status) VALUES(?,?,?,?,?,?,?,?)");
+    q.addBindValue(userId);
+    q.addBindValue(pricingId > 0 ? QVariant(pricingId) : QVariant(QVariant::Int));
+    q.addBindValue(encRfid);
+    q.addBindValue(encPlate);
+    q.addBindValue(nowTxt);
+    q.addBindValue(image1);
+    q.addBindValue(image2);
+    q.addBindValue(QStringLiteral("checked_in"));
     if (!q.exec())
     {
         qWarning() << "checkIn error:" << q.lastError().text();
@@ -676,6 +756,27 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
     }
     Q_UNUSED(sub);
     return CheckInResult::Ok;
+}
+
+int DatabaseManager::ensureGuestUser()
+{
+    // Tạo hoặc lấy user mặc định cho khách vãng lai
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT id FROM users WHERE phone = '0000000000' AND full_name = 'Guest' LIMIT 1");
+    if (q.exec() && q.next())
+        return q.value(0).toInt();
+    QSqlQuery ins(DB_Connection);
+    ins.prepare("INSERT INTO users (full_name, phone, rfid, plate, vehicle_type, created_at, status) VALUES(?,?,?,?,?,?,?)");
+    ins.addBindValue(QStringLiteral("Guest"));
+    ins.addBindValue(QStringLiteral("0000000000"));
+    ins.addBindValue(QVariant());
+    ins.addBindValue(QVariant());
+    ins.addBindValue(QStringLiteral("car"));
+    ins.addBindValue(nowIso8601());
+    ins.addBindValue(QStringLiteral("active"));
+    if (!ins.exec())
+        return 1; // worst-case fallback, though NOT NULL will accept 1 only if exists
+    return ins.lastInsertId().toInt();
 }
 
 CheckOutResult DatabaseManager::checkOut(const QString &rfid,

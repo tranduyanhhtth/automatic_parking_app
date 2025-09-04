@@ -4,6 +4,7 @@
 #include <QUrlQuery>
 #include <QSet>
 #include <QList>
+#include <QPair>
 
 // Remove FFmpeg-only query params that some cameras reject. Preserve vendor params.
 static QString sanitizeRtspUrl(const QString &in)
@@ -43,11 +44,28 @@ static QString sanitizeRtspUrl(const QString &in)
         kept.append(kv);
     }
 
-    if (removed)
+    // Rebuild query without blocked params
+    QUrlQuery nq;
+    for (const auto &kv : kept)
+        nq.addQueryItem(kv.first, kv.second);
+
+    // If this looks like vendor path and required params are missing, add defaults
+    const QString p = url.path();
+    const bool looksVendorStreaming = p.contains(QLatin1String("/rtsp/streaming"), Qt::CaseInsensitive) ||
+                                      p.contains(QLatin1String("/Streaming/Channels"), Qt::CaseInsensitive);
+    if (looksVendorStreaming)
     {
-        QUrlQuery nq;
-        for (const auto &kv : kept)
-            nq.addQueryItem(kv.first, kv.second);
+        const bool hasChannel = nq.hasQueryItem(QStringLiteral("channel"));
+        const bool hasSubtype = nq.hasQueryItem(QStringLiteral("subtype"));
+        if (!hasChannel)
+            nq.addQueryItem(QStringLiteral("channel"), QStringLiteral("01"));
+        if (!hasSubtype)
+            nq.addQueryItem(QStringLiteral("subtype"), QStringLiteral("0"));
+    }
+
+    // If anything changed (blocked removed or defaults added), return modified URL
+    if (removed || nq.query() != q.query())
+    {
         url.setQuery(nq);
         return url.toString(QUrl::FullyEncoded);
     }

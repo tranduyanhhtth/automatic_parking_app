@@ -2,6 +2,7 @@
 #include "domain/ports/icardreader.h"
 #include <QObject>
 #include <QString>
+#include <QSet>
 
 class WindowsRawInputRouter;
 
@@ -14,6 +15,7 @@ class HidKeyboardCardReaderDevice : public ICardReader
     Q_PROPERTY(int minLength READ minLength WRITE setMinLength NOTIFY minLengthChanged)
     Q_PROPERTY(int interKeyMsMax READ interKeyMsMax WRITE setInterKeyMsMax NOTIFY interKeyMsMaxChanged)
     Q_PROPERTY(QString allowedPrefix READ allowedPrefix WRITE setAllowedPrefix NOTIFY allowedPrefixChanged)
+    Q_PROPERTY(bool autoBindWhenEmpty READ autoBindWhenEmpty WRITE setAutoBindWhenEmpty NOTIFY autoBindWhenEmptyChanged)
 public:
     explicit HidKeyboardCardReaderDevice(WindowsRawInputRouter *router, QObject *parent = nullptr);
 
@@ -30,6 +32,15 @@ public:
     QString allowedPrefix() const { return m_allowedPrefix; }
     void setAllowedPrefix(const QString &p);
 
+    bool autoBindWhenEmpty() const { return m_autoBindWhenEmpty; }
+    void setAutoBindWhenEmpty(bool v)
+    {
+        if (m_autoBindWhenEmpty == v)
+            return;
+        m_autoBindWhenEmpty = v;
+        emit autoBindWhenEmptyChanged();
+    }
+
     Q_INVOKABLE void resetBuffer();
     Q_INVOKABLE void resetDebounce() { resetBuffer(); }
 
@@ -39,6 +50,7 @@ signals:
     void minLengthChanged();
     void interKeyMsMaxChanged();
     void allowedPrefixChanged();
+    void autoBindWhenEmptyChanged();
     void debugLog(const QString &msg);
 
 private:
@@ -50,7 +62,14 @@ private:
     QString m_buffer;
     bool m_enabled{true};
     int m_minLength{4};
-    int m_interKeyMsMax{30}; // keys slower than this reset buffer (treat as human typing)
+    int m_interKeyMsMax{80}; // keys slower than this reset buffer (treat as human typing)
     QString m_allowedPrefix; // optional required prefix (e.g., ";" or start digits)
     qint64 m_lastTs{0};
+    bool m_autoBindWhenEmpty{true};
+
+    static QSet<QString> &claimedPaths()
+    {
+        static QSet<QString> s;
+        return s;
+    }
 };
