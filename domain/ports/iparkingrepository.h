@@ -60,6 +60,7 @@ public:
                            const QString &vehicleType) = 0;
     // Tạo subscription (vé tháng/quý/tuần); trả về id hoặc -1 nếu lỗi
     virtual int createSubscription(int userId,
+                                   int pricingId,
                                    const QString &plate,
                                    const QString &rfid,
                                    const QString &planType,
@@ -68,6 +69,17 @@ public:
                                    const QString &paymentMode,
                                    int price,
                                    const QString &status = QStringLiteral("active")) = 0;
+    // Cập nhật subscription hiện có (trả về true nếu thành công)
+    virtual bool updateSubscription(int id,
+                                    int userId,
+                                    const QString &plate,
+                                    const QString &rfid,
+                                    const QString &planType,
+                                    const QString &startDate,
+                                    const QString &endDate,
+                                    const QString &paymentMode,
+                                    int price,
+                                    const QString &status = QStringLiteral("active")) = 0;
     // Tìm subscription còn hạn tại thời điểm nowIso (nếu nowIso rỗng dùng hiện tại)
     virtual QVariantMap findActiveSubscription(const QString &rfid,
                                                const QString &plate,
@@ -106,6 +118,13 @@ public:
     // Lấy cấu hình pricing JSON mới nhất cho vehicle_type + ticket_type
     virtual QVariantMap getLatestPricing(const QString &vehicleType,
                                          const QString &ticketType) = 0;
+
+    // Liệt kê các subscription (tham số lọc đơn giản tuỳ chọn)
+    virtual QList<QVariantMap> listSubscriptions(int limit = 500,
+                                                 int offset = 0) = 0;
+
+    // Lấy pricing_id cho vehicle_type + ticket_type
+    virtual int getPricingId(const QString &vehicleType, const QString &ticketType) = 0;
 };
 
 #endif // IPARKINGREPOSITORY_H

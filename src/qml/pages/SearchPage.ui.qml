@@ -22,17 +22,23 @@ Item {
     property alias cbStatus: cbStatus
     property alias dpFrom: dpFrom
     property alias dpTo: dpTo
+    property alias fromHour: fromHour
+    property alias fromMinute: fromMinute
+    property alias toHour: toHour
+    property alias toMinute: toMinute
     property alias resultsView: resultsView
     property alias resultsModel: resultsModel
     property alias lblSummary: lblSummary
     property alias lblRevenue: lblRevenue
-    // Expose user info labels for logic to fill
-    property alias userNameLabel: userNameLabel
-    property alias userPhoneLabel: userPhoneLabel
-    property alias userVehicleTypeLabel: userVehicleTypeLabel
-    property alias userNoteLabel: userNoteLabel
     // detail dialog instance for logic to control
     property alias sessionDetailDialog: sessionDetail
+    // Add aliases for date picker ComboBoxes
+    property alias fromYear: fromDatePopup.fromYear
+    property alias fromMonth: fromDatePopup.fromMonth
+    property alias fromDay: fromDatePopup.fromDay
+    property alias toYear: toDatePopup.toYear
+    property alias toMonth: toDatePopup.toMonth
+    property alias toDay: toDatePopup.toDay
 
     // Full-page content pane
     ColumnLayout {
@@ -45,11 +51,12 @@ Item {
             spacing: 8
             TextField {
                 id: tfQuery
-                placeholderText: "Nhập biển số hoặc RFID hoặc chọn thời gian vào"
+                placeholderText: "Nhập biển số"
                 placeholderTextColor: "white"
                 color: "white"
+                font.pixelSize: 20
                 Layout.fillWidth: true
-                Layout.preferredHeight: 30
+                Layout.preferredHeight: 40
                 background: Rectangle {
                     color: "#222"
                     border.color: "#555"
@@ -59,8 +66,9 @@ Item {
             ComboBox {
                 id: cbStatus
                 model: ["Tất cả", "In", "Out"]
+                font.pixelSize: 14
                 Layout.preferredWidth: 140
-                Layout.preferredHeight: 30
+                Layout.preferredHeight: 40
                 background: Rectangle {
                     radius: 8
                     border.color: "#222"
@@ -70,15 +78,18 @@ Item {
                 id: dpFrom
                 placeholderText: "Từ ngày (YYYY-MM-DD)"
                 placeholderTextColor: "white"
-                color: "red"
+                color: "white"
+                font.pixelSize: 14
                 Layout.preferredWidth: 180
-                Layout.preferredHeight: 30
+                Layout.preferredHeight: 40
                 background: Rectangle {
                     color: "#222"
                     border.color: "#555"
                     radius: 8
                 }
-                // Open DatePicker on click
+                validator: RegularExpressionValidator {
+                    regularExpression: /^\d{4}-\d{2}-\d{2}$/
+                }
                 MouseArea {
                     anchors.fill: parent
                     onClicked: searchPage.fromPickerVisible = true
@@ -89,17 +100,120 @@ Item {
                 placeholderText: "Đến ngày (YYYY-MM-DD)"
                 placeholderTextColor: "white"
                 color: "white"
+                font.pixelSize: 14
                 Layout.preferredWidth: 180
-                Layout.preferredHeight: 30
+                Layout.preferredHeight: 40
                 background: Rectangle {
                     color: "#222"
                     border.color: "#555"
                     radius: 8
                 }
-                // Open DatePicker on click
+                validator: RegularExpressionValidator {
+                    regularExpression: /^\d{4}-\d{2}-\d{2}$/
+                }
                 MouseArea {
                     anchors.fill: parent
                     onClicked: searchPage.toPickerVisible = true
+                }
+            }
+            RowLayout {
+                spacing: 4
+                TextField {
+                    id: tfFromTime
+                    readOnly: true
+                    color: "white"
+                    font.pixelSize: 28
+                    text: (fromHour.currentIndex < 10 ? "0" : "") + fromHour.currentIndex + ":"
+                          + (fromMinute.currentIndex < 10 ? "0" : "") + fromMinute.currentIndex
+                    Layout.preferredWidth: 90
+                    Layout.preferredHeight: 40
+                    background: Rectangle {
+                        color: "#222"
+                        border.color: "#555"
+                        radius: 8
+                    }
+                }
+                ComboBox {
+                    id: fromHour
+                    model: 24
+                    currentIndex: 0
+                    displayText: ""
+                    popup.height: 240
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    background: Rectangle {
+                        radius: 8
+                        border.color: "#222"
+                    }
+                    delegate: ItemDelegate {
+                        text: (index < 10 ? "0" : "") + index
+                    }
+                }
+                ComboBox {
+                    id: fromMinute
+                    model: 60
+                    currentIndex: 0
+                    displayText: ""
+                    popup.height: 240
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    background: Rectangle {
+                        radius: 8
+                        border.color: "#222"
+                    }
+                    delegate: ItemDelegate {
+                        text: (index < 10 ? "0" : "") + index
+                    }
+                }
+            }
+            RowLayout {
+                spacing: 4
+                TextField {
+                    id: tfToTime
+                    readOnly: true
+                    color: "white"
+                    font.pixelSize: 28
+                    text: (toHour.currentIndex < 10 ? "0" : "") + toHour.currentIndex + ":"
+                          + (toMinute.currentIndex < 10 ? "0" : "") + toMinute.currentIndex
+                    Layout.preferredWidth: 90
+                    Layout.preferredHeight: 40
+                    background: Rectangle {
+                        color: "#222"
+                        border.color: "#555"
+                        radius: 8
+                    }
+                }
+                ComboBox {
+                    id: toHour
+                    model: 24
+                    currentIndex: 0
+                    displayText: ""
+                    popup.height: 240
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    background: Rectangle {
+                        radius: 8
+                        border.color: "#222"
+                    }
+                    delegate: ItemDelegate {
+                        text: (index < 10 ? "0" : "") + index
+                    }
+                }
+                ComboBox {
+                    id: toMinute
+                    model: 60
+                    currentIndex: 0
+                    displayText: ""
+                    popup.height: 240
+                    Layout.preferredWidth: 30
+                    Layout.preferredHeight: 30
+                    background: Rectangle {
+                        radius: 8
+                        border.color: "#222"
+                    }
+                    delegate: ItemDelegate {
+                        text: (index < 10 ? "0" : "") + index
+                    }
                 }
             }
             Item {
@@ -107,13 +221,14 @@ Item {
             }
             Rectangle {
                 width: 110
-                height: 30
+                height: 40
                 radius: 8
                 color: "#2b7"
                 Text {
                     anchors.centerIn: parent
                     text: "Tìm kiếm"
                     color: "white"
+                    font.pixelSize: 15
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -122,7 +237,7 @@ Item {
             }
             Rectangle {
                 width: 90
-                height: 30
+                height: 40
                 radius: 8
                 color: "#444"
                 border.color: "#222"
@@ -130,6 +245,7 @@ Item {
                     anchors.centerIn: parent
                     text: "Đóng"
                     color: "white"
+                    font.pixelSize: 15
                 }
                 MouseArea {
                     anchors.fill: parent
@@ -232,8 +348,7 @@ Item {
                     ListView {
                         id: resultsView
                         width: resultsContainer.width
-                        height: resultsScroll.height - headerRow.implicitHeight
-                                - userInfoRect.height - 16
+                        height: resultsScroll.height - headerRow.implicitHeight - 16
                         clip: true
                         model: resultsModel
                         delegate: RowLayout {
@@ -260,14 +375,14 @@ Item {
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: checkin
+                                text: Qt.formatDateTime(checkin, "HH:mm:ss - dd/MM/yyyy")
                                 color: "#ccc"
                                 Layout.minimumWidth: 160
                                 Layout.fillWidth: true
                                 elide: Text.ElideRight
                             }
                             Text {
-                                text: checkout
+                                text: Qt.formatDateTime(checkout, "HH:mm:ss - dd/MM/yyyy")
                                 color: "#ccc"
                                 Layout.minimumWidth: 160
                                 Layout.fillWidth: true
@@ -302,8 +417,7 @@ Item {
                                 MouseArea {
                                     anchors.fill: parent
                                     onPressed: searchPage.selectedRowId = idText
-                                    onClicked: searchPage.triggerShowDetail
-                                               = !searchPage.triggerShowDetail
+                                    onClicked: searchPage.triggerShowDetail = !searchPage.triggerShowDetail
                                 }
                             }
                             // Rectangle {
@@ -323,53 +437,6 @@ Item {
                             //                    = !searchPage.triggerPrintInvoice
                             //     }
                             // }
-                        }
-                    }
-
-                    // Thông tin người dùng (nếu có liên kết)
-                    Rectangle {
-                        id: userInfoRect
-                        width: resultsContainer.width
-                        height: 100
-                        radius: 6
-                        color: "white"
-                        border.color: "#333"
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 20
-                            Text {
-                                text: "Thông tin người dùng:"
-                                color: "black"
-                                font.bold: true
-                            }
-                            Text {
-                                id: userNameLabel
-                                text: "Họ tên: -"
-                                color: "black"
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                id: userPhoneLabel
-                                text: "SĐT: -"
-                                color: "black"
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                id: userVehicleTypeLabel
-                                text: "Loại xe: -"
-                                color: "black"
-                                Layout.fillWidth: true
-                            }
-                            Text {
-                                id: userNoteLabel
-                                text: "Ghi chú: -"
-                                color: "black"
-                                Layout.fillWidth: true
-                            }
-                            Item {
-                                Layout.preferredWidth: 0
-                            }
                         }
                     }
                 }
@@ -400,7 +467,7 @@ Item {
         id: sessionDetail
     }
 
-    // Simple Date Picker Popup for From date (SpinBox-based)
+    // Simple Date Picker Popup for From date
     Popup {
         id: fromDatePopup
         modal: true
@@ -408,51 +475,45 @@ Item {
         visible: searchPage.fromPickerVisible
         x: (parent ? parent.width : 800) / 2 - width / 2
         y: (parent ? parent.height : 600) / 2 - height / 2
+
+        property alias fromYear: fromYearCombo
+        property alias fromMonth: fromMonthCombo
+        property alias fromDay: fromDayCombo
+
         contentItem: ColumnLayout {
             spacing: 10
             RowLayout {
                 spacing: 8
-                Text {
-                    text: "Năm"
-                    color: "#ddd"
-                }
+                Text { text: "Năm"; color: "black" }
                 ComboBox {
-                    id: fromYear
+                    id: fromYearCombo
                     model: 101 // 2000..2100
-                    currentIndex: 25 // 2025
                     popup.height: 240
-                    delegate: ItemDelegate {
-                        text: (2000 + index)
-                    }
+                    delegate: ItemDelegate { text: (2000 + index) }
                     Layout.preferredWidth: 100
+                    currentIndex: 25 // Mặc định 2025
                 }
-                Text {
-                    text: "Tháng"
-                    color: "#ddd"
-                }
+                Text { text: "Tháng"; color: "black" }
                 ComboBox {
-                    id: fromMonth
-                    model: 12 // 1..12
+                    id: fromMonthCombo
+                    model: 12 // 0-11
                     popup.height: 240
-                    currentIndex: 0
                     delegate: ItemDelegate {
-                        text: (index + 1) < 10 ? ("0" + (index + 1)) : ("" + (index + 1))
+                        text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) // Hiển thị 01-12
                     }
                     Layout.preferredWidth: 90
+                    currentIndex: 1 // Mặc định tháng 1
                 }
-                Text {
-                    text: "Ngày"
-                    color: "#ddd"
-                }
+                Text { text: "Ngày"; color: "black" }
                 ComboBox {
-                    id: fromDay
-                    model: 31 // 1..31
+                    id: fromDayCombo
+                    model: 31 // 0-30
                     popup.height: 240
-                    currentIndex: 0
                     delegate: ItemDelegate {
-                        text: (index + 1) < 10 ? ("0" + (index + 1)) : ("" + (index + 1))
+                        text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) // Hiển thị 01-31
                     }
                     Layout.preferredWidth: 90
+                    currentIndex: 1 // Mặc định ngày 1
                 }
             }
             RowLayout {
@@ -463,36 +524,22 @@ Item {
                     height: 32
                     radius: 6
                     color: "#444"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Hủy"
-                        color: "white"
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: searchPage.fromPickerVisible = false
-                    }
+                    Text { anchors.centerIn: parent; text: "Hủy"; color: "white" }
+                    MouseArea { anchors.fill: parent; onClicked: searchPage.fromPickerVisible = false }
                 }
                 Rectangle {
                     Layout.fillWidth: true
                     height: 32
                     radius: 6
                     color: "#2b7"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Chọn"
-                        color: "white"
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: searchPage.triggerFromDateSelect = true
-                    }
+                    Text { anchors.centerIn: parent; text: "Chọn"; color: "white" }
+                    MouseArea { anchors.fill: parent; onClicked: searchPage.triggerFromDateSelect = true }
                 }
             }
         }
     }
 
-    // Simple Date Picker Popup for To date (SpinBox-based)
+    // Simple Date Picker Popup for To date
     Popup {
         id: toDatePopup
         modal: true
@@ -500,51 +547,45 @@ Item {
         visible: searchPage.toPickerVisible
         x: (parent ? parent.width : 800) / 2 - width / 2
         y: (parent ? parent.height : 600) / 2 - height / 2
+
+        property alias toYear: toYearCombo
+        property alias toMonth: toMonthCombo
+        property alias toDay: toDayCombo
+
         contentItem: ColumnLayout {
             spacing: 10
             RowLayout {
                 spacing: 8
-                Text {
-                    text: "Năm"
-                    color: "#ddd"
-                }
+                Text { text: "Năm"; color: "black" }
                 ComboBox {
-                    id: toYear
+                    id: toYearCombo
                     model: 101 // 2000..2100
-                    currentIndex: 25 // 2025
                     popup.height: 240
-                    delegate: ItemDelegate {
-                        text: (2000 + index)
-                    }
+                    delegate: ItemDelegate { text: (2000 + index) }
                     Layout.preferredWidth: 100
+                    currentIndex: 25 // Mặc định 2025
                 }
-                Text {
-                    text: "Tháng"
-                    color: "#ddd"
-                }
+                Text { text: "Tháng"; color: "black" }
                 ComboBox {
-                    id: toMonth
-                    model: 12 // 1..12
+                    id: toMonthCombo
+                    model: 12 // 0-11
                     popup.height: 240
-                    currentIndex: 0
                     delegate: ItemDelegate {
-                        text: (index + 1) < 10 ? ("0" + (index + 1)) : ("" + (index + 1))
+                        text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) // Hiển thị 01-12
                     }
                     Layout.preferredWidth: 90
+                    currentIndex: 1 // Mặc định tháng 1
                 }
-                Text {
-                    text: "Ngày"
-                    color: "#ddd"
-                }
+                Text { text: "Ngày"; color: "black" }
                 ComboBox {
-                    id: toDay
-                    model: 31 // 1..31
+                    id: toDayCombo
+                    model: 31 // 0-30
                     popup.height: 240
-                    currentIndex: 0
                     delegate: ItemDelegate {
-                        text: (index + 1) < 10 ? ("0" + (index + 1)) : ("" + (index + 1))
+                        text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) // Hiển thị 01-31
                     }
                     Layout.preferredWidth: 90
+                    currentIndex: 1 // Mặc định ngày 1
                 }
             }
             RowLayout {
@@ -555,30 +596,16 @@ Item {
                     height: 32
                     radius: 6
                     color: "#444"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Hủy"
-                        color: "white"
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: searchPage.toPickerVisible = false
-                    }
+                    Text { anchors.centerIn: parent; text: "Hủy"; color: "white" }
+                    MouseArea { anchors.fill: parent; onClicked: searchPage.toPickerVisible = false }
                 }
                 Rectangle {
                     Layout.fillWidth: true
                     height: 32
                     radius: 6
                     color: "#2b7"
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Chọn"
-                        color: "white"
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: searchPage.triggerToDateSelect = true
-                    }
+                    Text { anchors.centerIn: parent; text: "Chọn"; color: "white" }
+                    MouseArea { anchors.fill: parent; onClicked: searchPage.triggerToDateSelect = true }
                 }
             }
         }

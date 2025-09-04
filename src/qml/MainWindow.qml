@@ -7,6 +7,9 @@ import "./components"
 import "./dialogs"
 import "./logic"
 import "./pages"
+// Import qua qrc để đảm bảo phân giải type khi chạy từ resource
+import "qrc:/qt/qml/smart_parking_system/src/qml/logic" as AdminLogic
+import "qrc:/qt/qml/smart_parking_system/src/qml/pages" as Pages
 
 Item {
     id: root
@@ -71,7 +74,7 @@ Item {
             Layout.fillHeight: true
         }
         // Trang Quản trị
-        AdminPage {
+        Pages.AdminPage {
             id: adminPage
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -167,6 +170,49 @@ Item {
     PricingLogic {
         id: pricingLogic
     }
+    Loader {
+        id: adminSubscriptionsLogicLoader
+        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminSubscriptionsLogic.qml"
+        active: true
+        onLoaded: {
+            if (item) {
+                item.adminPage = adminPage
+                item.notify = (msg) => root.showToast(msg)
+            }
+        }
+    }
+    // Subscriptions CRUD (edit/view + save)
+    Loader {
+        id: adminSubscriptionsCrudLoader
+        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminSubscriptionsCrud.qml"
+        active: true
+        onLoaded: {
+            if (item) {
+                item.adminPage = adminPage
+                item.notify = (msg) => root.showToast(msg)
+                // Load data once so the list shows in view-only mode
+                if (item.load) item.load()
+            }
+        }
+    }
+    // Logic bảng giá cho trang quản trị (điều khiển min/max các loại vé)
+    Loader {
+        id: adminPricingLogicLoader
+        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminPricingLogic.qml"
+        active: true
+    }
+    Loader {
+        id: adminPricingActionsLoader
+        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminPricingActions.qml"
+        active: true
+        onLoaded: {
+            if (item) {
+                item.adminPage = adminPage
+                item.pricingLogic = adminPricingLogicLoader.item
+                item.notify = (msg) => root.showToast(msg)
+            }
+        }
+    }
     SearchLogic {
         id: searchLogic
         searchPage: searchPage
@@ -177,16 +223,38 @@ Item {
 
     // Initialize streams and sinks
     Component.onCompleted: {
+        // Kết nối logic bảng giá cho trang quản trị sau khi page sẵn sàng
+        try {
+            if (adminPage && adminPricingLogicLoader.item && adminPage.pricingLogicRef !== undefined)
+                adminPage.pricingLogicRef = adminPricingLogicLoader.item
+        } catch (e) {
+            // Bỏ qua nếu bản UI cũ không có thuộc tính
+        }
         // Set video sinks for Lane 1
-        if (form.inputVideoLane1 && form.inputVideoLane1.videoSink)
+        if (form.inputVideoLane1 && form.inputVideoLane1.videoSink) {
             cameraLane1.setInputVideoSink(form.inputVideoLane1.videoSink)
-        if (form.outputVideoLane1 && form.outputVideoLane1.videoSink)
+        } else {
+            console.warn("[QML] Lane 1 input video or videoSink not available")
+        }
+
+        if (form.outputVideoLane1 && form.outputVideoLane1.videoSink) {
             cameraLane1.setOutputVideoSink(form.outputVideoLane1.videoSink)
+        } else {
+            console.warn("[QML] Lane 1 output video or videoSink not available")
+        }
+
         // Set video sinks for Lane 2
-        if (form.inputVideoLane2 && form.inputVideoLane2.videoSink)
+        if (form.inputVideoLane2 && form.inputVideoLane2.videoSink) {
             cameraLane2.setInputVideoSink(form.inputVideoLane2.videoSink)
-        if (form.outputVideoLane2 && form.outputVideoLane2.videoSink)
+        } else {
+            console.warn("[QML] Lane 2 input video or videoSink not available")
+        }
+
+        if (form.outputVideoLane2 && form.outputVideoLane2.videoSink) {
             cameraLane2.setOutputVideoSink(form.outputVideoLane2.videoSink)
+        } else {
+            console.warn("[QML] Lane 2 output video or videoSink not available")
+        }
 
         // Start streams with RTSP options
         cameraLogic.startStreams()

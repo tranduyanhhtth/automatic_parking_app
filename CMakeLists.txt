@@ -142,32 +142,22 @@ if (WIN32 AND ENABLE_TESSERACT)
     COMMENT "Copy vendor tesseract DLLs for $<CONFIG> to output")
 endif()
 
-# Link GStreamer từ vendor (Windows only) — hỗ trợ cả 2 layout:
-# 1) lib/gstreamer/{include,lib,bin}
-# 2) lib/gstreamer/1.0/msvc_x86_64/{include,lib,bin}
-set(_GSTREAMER_BASE "${CMAKE_SOURCE_DIR}/lib/gstreamer")
-set(GSTREAMER_VENDOR_DIR "")
+# Link GStreamer từ Program Files (Windows only, direct install)
+# Cho phép override qua -DGSTREAMER_ROOT=... khi cần.
+set(GSTREAMER_ROOT "C:/Program Files/gstreamer/1.0/msvc_x86_64" CACHE PATH "Path to GStreamer MSVC x64 installation")
 
-if (EXISTS "${_GSTREAMER_BASE}/include/gstreamer-1.0" AND EXISTS "${_GSTREAMER_BASE}/lib")
-    # Flat layout
-    set(GSTREAMER_VENDOR_DIR "${_GSTREAMER_BASE}")
-elseif (EXISTS "${_GSTREAMER_BASE}/1.0/msvc_x86_64/include/gstreamer-1.0" AND EXISTS "${_GSTREAMER_BASE}/1.0/msvc_x86_64/lib")
-    # Nested layout from official MSVC bundles
-    set(GSTREAMER_VENDOR_DIR "${_GSTREAMER_BASE}/1.0/msvc_x86_64")
+if (NOT EXISTS "${GSTREAMER_ROOT}/include/gstreamer-1.0" OR NOT EXISTS "${GSTREAMER_ROOT}/lib")
+    message(FATAL_ERROR "Không tìm thấy GStreamer tại ${GSTREAMER_ROOT}.\nHãy cài GStreamer msvc_x86_64 hoặc đặt -DGSTREAMER_ROOT=...")
 endif()
 
-if (GSTREAMER_VENDOR_DIR STREQUAL "")
-    message(FATAL_ERROR "Không tìm thấy GStreamer vendor.\n  Đã thử: ${_GSTREAMER_BASE} và ${_GSTREAMER_BASE}/1.0/msvc_x86_64.\nHãy đặt include/, lib/ và (bin/ hoặc debug/bin) đúng cấu trúc.")
-endif()
-
-message(STATUS "Linking vendored GStreamer from ${GSTREAMER_VENDOR_DIR}")
+message(STATUS "Linking GStreamer from ${GSTREAMER_ROOT}")
 target_include_directories(appsmart_parking_system PRIVATE
-    "${GSTREAMER_VENDOR_DIR}/include/gstreamer-1.0"
-    "${GSTREAMER_VENDOR_DIR}/include"
-    "${GSTREAMER_VENDOR_DIR}/include/glib-2.0"
-    "${GSTREAMER_VENDOR_DIR}/lib/glib-2.0/include"
+    "${GSTREAMER_ROOT}/include/gstreamer-1.0"
+    "${GSTREAMER_ROOT}/include"
+    "${GSTREAMER_ROOT}/include/glib-2.0"
+    "${GSTREAMER_ROOT}/lib/glib-2.0/include"
 )
-target_link_directories(appsmart_parking_system PRIVATE "${GSTREAMER_VENDOR_DIR}/lib")
+target_link_directories(appsmart_parking_system PRIVATE "${GSTREAMER_ROOT}/lib")
 target_link_libraries(appsmart_parking_system PRIVATE
     gstapp-1.0
     gstvideo-1.0
@@ -178,18 +168,19 @@ target_link_libraries(appsmart_parking_system PRIVATE
     intl
 )
 
-# Copy GStreamer runtime DLLs to the output. Prefer debug/bin when present; otherwise use bin.
-if (EXISTS "${GSTREAMER_VENDOR_DIR}/debug/bin")
+# Copy GStreamer runtime DLLs to the output
+if (EXISTS "${GSTREAMER_ROOT}/bin")
     add_custom_command(TARGET appsmart_parking_system POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${GSTREAMER_VENDOR_DIR}/debug/bin" "$<TARGET_FILE_DIR:appsmart_parking_system>"
-        COMMENT "Copy vendored GStreamer debug/bin to output")
+                "${GSTREAMER_ROOT}/bin" "$<TARGET_FILE_DIR:appsmart_parking_system>"
+        COMMENT "Copy GStreamer bin to output")
 endif()
-if (EXISTS "${GSTREAMER_VENDOR_DIR}/bin")
+if (EXISTS "${GSTREAMER_ROOT}/lib/gstreamer-1.0")
     add_custom_command(TARGET appsmart_parking_system POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-                "${GSTREAMER_VENDOR_DIR}/bin" "$<TARGET_FILE_DIR:appsmart_parking_system>"
-        COMMENT "Copy vendored GStreamer bin to output")
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:appsmart_parking_system>/gstreamer-1.0"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${GSTREAMER_ROOT}/lib/gstreamer-1.0" "$<TARGET_FILE_DIR:appsmart_parking_system>/gstreamer-1.0"
+    COMMENT "Copy GStreamer plugins (lib/gstreamer-1.0) to output/gstreamer-1.0")
 endif()
 
 # Windows: link D3D11/DXGI for GPU availability detection and user32 for Raw Input

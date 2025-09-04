@@ -6,12 +6,59 @@
 #include <QDateTime>
 #include "utils/gstreamer/gstreamerplayer.h"
 #include "utils/gstreamer/videoframeproducer.h"
+#include <QUrl>
+#include <QUrlQuery>
+#include <QSet>
 
 static QImage ensureFormat(const QImage &src)
 {
     if (src.format() == QImage::Format_ARGB32 || src.format() == QImage::Format_RGB32 || src.format() == QImage::Format_RGB888)
         return src;
     return src.convertToFormat(QImage::Format_ARGB32);
+}
+
+static QString sanitizeRtspUrl(const QString &in)
+{
+    if (in.trimmed().isEmpty())
+        return in;
+    QUrl url(in);
+    if (!url.isValid())
+        return in;
+    const QString scheme = url.scheme().toLower();
+    if (scheme != QLatin1String("rtsp") && scheme != QLatin1String("rtsps"))
+        return in;
+    static const QSet<QString> blocked{
+        QStringLiteral("rtsp_transport"),
+        QStringLiteral("stimeout"),
+        QStringLiteral("audio"),
+        QStringLiteral("fflags"),
+        QStringLiteral("probesize"),
+        QStringLiteral("analyzeduration"),
+        QStringLiteral("max_delay"),
+        QStringLiteral("buffer_size"),
+        QStringLiteral("reorder_queue_size")};
+    QUrlQuery q(url);
+    bool removed = false;
+    QList<QPair<QString, QString>> kept;
+    const auto items = q.queryItems(QUrl::FullyDecoded);
+    for (const auto &kv : items)
+    {
+        if (blocked.contains(kv.first))
+        {
+            removed = true;
+            continue;
+        }
+        kept.append(kv);
+    }
+    if (removed)
+    {
+        QUrlQuery nq;
+        for (const auto &kv : kept)
+            nq.addQueryItem(kv.first, kv.second);
+        url.setQuery(nq);
+        return url.toString(QUrl::FullyEncoded);
+    }
+    return in;
 }
 
 CameraManager::CameraManager(QObject *parent)
@@ -82,9 +129,12 @@ void CameraManager::setOutputVideoSink(QVideoSink *sink)
         m_lastOutputFrame = frame;
         m_lastOutputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_outputStalled) { m_outputStalled = false; } });
+
     emit outputVideoSinkChanged();
     if (m_outProducer)
+    {
         m_outProducer->setVideoSink(m_outputSink);
+    }
 }
 
 QByteArray CameraManager::encodeJpeg(const QImage &img, int quality)
@@ -135,13 +185,20 @@ bool CameraManager::startInputStream(const QString &url)
         m_gstIn = new GStreamerPlayer(this);
         connect(m_gstIn, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
-            if (m_inProducer) m_inProducer->pushImage(img); });
+            if (m_inProducer) {
+                m_inProducer->pushImage(img);
+            } else {
+                qWarning() << "[CAMERA] Input producer not available";
+            } });
         connect(m_gstIn, &GStreamerPlayer::errorOccured, this, [](const QString &msg)
                 { qWarning() << "[GStreamer In]" << msg; });
         connect(m_gstIn, &GStreamerPlayer::stateChanged, this, [](const QString &s)
                 { qInfo() << "[GStreamer In] state" << s; });
     }
-    return m_gstIn->start(url);
+
+    const QString cleaned = sanitizeRtspUrl(url);
+    bool result = m_gstIn->start(cleaned);
+    return result;
 }
 
 bool CameraManager::startOutputStream(const QString &url)
@@ -151,13 +208,20 @@ bool CameraManager::startOutputStream(const QString &url)
         m_gstOut = new GStreamerPlayer(this);
         connect(m_gstOut, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
-            if (m_outProducer) m_outProducer->pushImage(img); });
+            if (m_outProducer) {
+                m_outProducer->pushImage(img);
+            } else {
+                qWarning() << "[CAMERA] Output producer not available";
+            } });
         connect(m_gstOut, &GStreamerPlayer::errorOccured, this, [](const QString &msg)
                 { qWarning() << "[GStreamer Out]" << msg; });
         connect(m_gstOut, &GStreamerPlayer::stateChanged, this, [](const QString &s)
                 { qInfo() << "[GStreamer Out] state" << s; });
     }
-    return m_gstOut->start(url);
+
+    const QString cleaned = sanitizeRtspUrl(url);
+    bool result = m_gstOut->start(cleaned);
+    return result;
 }
 
 void CameraManager::stopStreams()

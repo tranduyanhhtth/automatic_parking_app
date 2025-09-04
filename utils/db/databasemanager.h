@@ -62,6 +62,7 @@ public:
                                const QString &plate,
                                const QString &vehicleType) override;
     Q_INVOKABLE int createSubscription(int userId,
+                                       int pricingId,
                                        const QString &plate,
                                        const QString &rfid,
                                        const QString &planType,
@@ -70,6 +71,16 @@ public:
                                        const QString &paymentMode,
                                        int price,
                                        const QString &status) override;
+    Q_INVOKABLE bool updateSubscription(int id,
+                                        int userId,
+                                        const QString &plate,
+                                        const QString &rfid,
+                                        const QString &planType,
+                                        const QString &startDate,
+                                        const QString &endDate,
+                                        const QString &paymentMode,
+                                        int price,
+                                        const QString &status) override;
     Q_INVOKABLE QVariantMap findActiveSubscription(const QString &rfid,
                                                    const QString &plate,
                                                    const QString &nowIso) override;
@@ -103,17 +114,34 @@ public:
     Q_INVOKABLE QVariantMap getLatestPricing(const QString &vehicleType,
                                              const QString &ticketType) override;
 
+    // Danh sách subscriptions
+    Q_INVOKABLE QList<QVariantMap> listSubscriptions(int limit = 500,
+                                                     int offset = 0) override;
+    Q_INVOKABLE int getPricingId(const QString &vehicleType,
+                                 const QString &ticketType) override;
+
 private:
     QSqlDatabase DB_Connection;
 
     bool ensureSchema();
+    bool ensureDefaultPricing();
     // Truy vấn bản ghi đang mở
     std::optional<QVariantMap> findOpenByRfid(const QString &encodedRfid);
     // Nội bộ: tra user theo RFID/Plate
     std::optional<QVariantMap> findUserByRfidOrPlate(const QString &rfid, const QString &plate);
-    // Nội bộ: tính phí theo pricing cơ bản
+    // Nội bộ: tra pricing id theo loại xe + loại vé
+    int getPricingIdFor(const QString &vehicleType, const QString &ticketType);
+    QString normalizeVehicle(const QString &vt) const; // motorbike->bike
+    QString normalizePlan(const QString &plan) const;  // tháng->monthly
+    // Nội bộ: tính phí theo row pricing đã chọn
+    int computeFeeFromPricing(int baseFee,
+                              int durationMinutes,
+                              int incrementalFee,
+                              int graceMinutes,
+                              int capPerDay,
+                              const QDateTime &checkin,
+                              const QDateTime &checkout);
     int computeFee(const QString &vehicleType, qint64 durationMinutes);
-    // Nội bộ: tính phí theo JSON time_slots
     int computeFeeJson(const QString &vehicleType,
                        const QDateTime &checkin,
                        const QDateTime &checkout,

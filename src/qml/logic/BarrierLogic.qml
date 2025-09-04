@@ -12,10 +12,10 @@ Item {
     Connections {
         target: form.miCamera
         function onTriggered() {
-            form.tfCam1.text = urlHead(settings.camera1Url)
-            form.tfCam2.text = urlHead(settings.camera2Url)
-            form.tfCam3.text = urlHead(settings.camera3Url)
-            form.tfCam4.text = urlHead(settings.camera4Url)
+            form.tfCam1.text = sourceToString(settings.camera1Url)
+            form.tfCam2.text = sourceToString(settings.camera2Url)
+            form.tfCam3.text = sourceToString(settings.camera3Url)
+            form.tfCam4.text = sourceToString(settings.camera4Url)
             form.cameraSettingsDialog.dialog.open()
         }
     }
@@ -38,15 +38,15 @@ Item {
     Connections {
         target: form.cameraSettingsDialog.dialog
         function onAccepted() {
-            settings.camera1Url = applyRtspOptions(form.tfCam1.text)
-            settings.camera2Url = applyRtspOptions(form.tfCam2.text)
-            settings.camera3Url = applyRtspOptions(form.tfCam3.text)
-            settings.camera4Url = applyRtspOptions(form.tfCam4.text)
+            settings.camera1Url = form.tfCam1.text
+            settings.camera2Url = form.tfCam2.text
+            settings.camera3Url = form.tfCam3.text
+            settings.camera4Url = form.tfCam4.text
             settings.save()
-            cameraLane1.startInputStream(applyRtspOptions(settings.camera1Url))
-            cameraLane1.startOutputStream(applyRtspOptions(settings.camera2Url))
-            cameraLane2.startInputStream(applyRtspOptions(settings.camera3Url))
-            cameraLane2.startOutputStream(applyRtspOptions(settings.camera4Url))
+            cameraLane1.startInputStream(settings.camera1Url)
+            cameraLane1.startOutputStream(settings.camera2Url)
+            cameraLane2.startInputStream(settings.camera3Url)
+            cameraLane2.startOutputStream(settings.camera4Url)
         }
     }
     Connections {

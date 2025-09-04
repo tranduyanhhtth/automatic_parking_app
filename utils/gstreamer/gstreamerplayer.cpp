@@ -2,18 +2,86 @@
 #include <QDebug>
 #include <QAtomicInt>
 #include <QByteArray>
+#include <QCoreApplication>
+#include <QDir>
 
 // GStreamer includes
 #include <gst/gst.h>
 #include <gst/app/app.h>
+#include <gst/video/video.h>
 
 GStreamerPlayer::GStreamerPlayer(QObject *parent) : QObject(parent)
 {
     static QAtomicInt inited{0};
     if (inited.fetchAndAddRelaxed(0) == 0)
     {
+        // Prefer the system-installed plugin directory; fall back to a local bundled folder
+        if (qEnvironmentVariableIsEmpty("GST_PLUGIN_PATH"))
+        {
+            const QString systemPlugins = QStringLiteral("C:/Program Files/gstreamer/1.0/msvc_x86_64/lib/gstreamer-1.0");
+            const QString appDir = QCoreApplication::applicationDirPath();
+            const QString localPlugins = QDir::toNativeSeparators(appDir + "/gstreamer-1.0");
+
+            const bool hasSystem = QDir(systemPlugins).exists();
+            const bool hasLocal = QDir(localPlugins).exists();
+            if (hasSystem && hasLocal)
+            {
+                // On Windows, ';' separates multiple paths
+                const QString combined = QDir(systemPlugins).absolutePath() + ";" + localPlugins;
+                qputenv("GST_PLUGIN_PATH", combined.toUtf8());
+            }
+            else if (hasSystem)
+            {
+                qputenv("GST_PLUGIN_PATH", QDir(systemPlugins).absolutePath().toUtf8());
+            }
+            else if (hasLocal)
+            {
+                qputenv("GST_PLUGIN_PATH", localPlugins.toUtf8());
+            }
+        }
+
+        // Prefer RTSP over TCP to work reliably behind NAT/firewalls unless overridden
+        if (qEnvironmentVariableIsEmpty("GST_RTSP_TCP"))
+        {
+            qputenv("GST_RTSP_TCP", QByteArray("1"));
+        }
+        // Allow user override; otherwise enable moderate debug
+        if (qEnvironmentVariableIsEmpty("GST_DEBUG"))
+        {
+            qputenv("GST_DEBUG", QByteArray("2"));
+        }
+
+        // Ensure system GStreamer bin is on PATH for loader resolution when launched from IDE
+        const QString gstBin = QStringLiteral("C:/Program Files/gstreamer/1.0/msvc_x86_64/bin");
+        if (QDir(gstBin).exists())
+        {
+            const QByteArray currentPath = qgetenv("PATH");
+            const QString prefix = QDir::toNativeSeparators(gstBin);
+            if (!QString::fromUtf8(currentPath).contains(prefix, Qt::CaseInsensitive))
+            {
+                qputenv("PATH", (prefix + ";" + QString::fromUtf8(currentPath)).toUtf8());
+            }
+        }
+
         gst_init(nullptr, nullptr);
         inited.storeRelease(1);
+
+        qDebug() << "GStreamer initialized. GST_PLUGIN_PATH=" << qEnvironmentVariable("GST_PLUGIN_PATH")
+                 << " GST_RTSP_TCP=" << qEnvironmentVariable("GST_RTSP_TCP")
+                 << " GST_DEBUG=" << qEnvironmentVariable("GST_DEBUG");
+
+        // Quick diagnostics for common missing plugins
+        auto warnMissing = [](const char *elem, const char *pkg)
+        {
+            if (!hasElement(elem))
+            {
+                qWarning() << "[GStreamer] Missing element" << elem << "- install package:" << pkg;
+            }
+        };
+        warnMissing("rtspsrc", "gst-plugins-good");
+        warnMissing("playbin", "gstreamer");
+        warnMissing("uridecodebin", "gstreamer");
+        warnMissing("videoconvert", "gst-plugins-base");
     }
 
     // Timers
@@ -77,6 +145,15 @@ bool GStreamerPlayer::startAttempt(int attempt)
     if (!buildPipelineForAttempt(attempt))
     {
         emit errorOccured(QStringLiteral("Failed to build pipeline (attempt %1)").arg(attempt));
+
+        // Try next attempt if available
+        int nextAttempt = (attempt + 1) % 2;
+        if (nextAttempt != attempt && nextAttempt != m_attempt)
+        {
+            scheduleRetry(500);
+            return false;
+        }
+
         return false;
     }
 
@@ -87,7 +164,8 @@ bool GStreamerPlayer::startAttempt(int attempt)
     gst_element_set_state(m_pipeline, GST_STATE_PLAYING);
     emit stateChanged(QStringLiteral("PLAYING"));
     m_firstFrameSeen = false;
-    armNoFrameTimer(3000);
+    // Allow more time for initial keyframe on some RTSP cams
+    armNoFrameTimer(8000);
     return true;
 }
 
@@ -104,58 +182,109 @@ void GStreamerPlayer::teardownPipeline()
 
 bool GStreamerPlayer::buildPipelineForAttempt(int attempt)
 {
-    // attempt 0: uridecodebin (codec agnostic), attempt 1: explicit rtspsrc+h264
-    const bool hasD3D11 = hasElement("d3d11h264dec") && hasElement("d3d11convert") && hasElement("d3d11download");
+    // attempt 0: playbin(playbin3) with custom appsink video-sink (codec agnostic)
+    // attempt 1: fallback using uridecodebin (also codec agnostic, simpler linking)
+    const bool hasD3D11 = hasElement("d3d11h265dec") && hasElement("d3d11convert") && hasElement("d3d11download");
     bool useHw = m_preferHwDecode && hasD3D11;
-    QString qUrl = m_url;
-    qUrl.replace("\"", "\\\"");
-    QByteArray quotedUrl = QByteArray("\"") + qUrl.toUtf8() + QByteArray("\"");
 
-    QByteArray pipeStr;
     if (attempt == 0)
     {
-        // uridecodebin handles rtsp:// gracefully and picks depay/parse/decoder
-        pipeStr = QByteArray("uridecodebin uri=") + quotedUrl +
-                  QByteArray(" ! videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
+        // Build playbin and route its video to our appsink; drop audio
+        GstElement *player = gst_element_factory_make("playbin3", "player");
+        if (!player)
+            player = gst_element_factory_make("playbin", "player");
+        if (!player)
+        {
+            emit errorOccured(QStringLiteral("Failed to create playbin"));
+            return false;
+        }
+
+        // Video sink bin: convert to RGBA on CPU and push to appsink
+        GError *err = nullptr;
+        GstElement *videoBin = gst_parse_bin_from_description(
+            "videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true",
+            TRUE, &err);
+        if (!videoBin)
+        {
+            QString msg = QStringLiteral("Failed to create video sink bin: %1").arg(err ? QString::fromUtf8(err->message) : QString());
+            if (err)
+                g_error_free(err);
+            gst_object_unref(player);
+            emit errorOccured(msg);
+            return false;
+        }
+
+        // Audio sink: fakesink to ignore audio
+        GstElement *audioSink = gst_element_factory_make("fakesink", "audiosink0");
+        if (!audioSink)
+        {
+            gst_object_unref(videoBin);
+            gst_object_unref(player);
+            emit errorOccured(QStringLiteral("Failed to create fakesink"));
+            return false;
+        }
+
+        // Configure playbin
+        QByteArray uriUtf8 = m_url.toUtf8();
+        g_object_set(G_OBJECT(player), "uri", uriUtf8.constData(), nullptr);
+        g_object_set(G_OBJECT(player), "video-sink", videoBin, nullptr);
+        g_object_set(G_OBJECT(player), "audio-sink", audioSink, nullptr);
+
+        m_pipeline = player;
+        // Grab appsink from the video sink bin we just created
+        m_appsink = gst_bin_get_by_name(GST_BIN(videoBin), "mysink");
+        if (!m_appsink)
+        {
+            emit errorOccured(QStringLiteral("appsink not found in playbin"));
+            cleanup();
+            return false;
+        }
+        gst_app_sink_set_emit_signals((GstAppSink *)m_appsink, true);
+        gst_app_sink_set_drop((GstAppSink *)m_appsink, true);
+        gst_app_sink_set_max_buffers((GstAppSink *)m_appsink, 1);
+        GstAppSinkCallbacks cbs = {};
+        cbs.new_sample = &GStreamerPlayer::onNewSample;
+        gst_app_sink_set_callbacks(GST_APP_SINK(m_appsink), &cbs, this, nullptr);
+        return true;
     }
     else
     {
-        QByteArray decoder;
-        if (useHw && hasD3D11)
-            decoder = QByteArray("d3d11h264dec ! d3d11convert ! d3d11download !");
-        else
-            decoder = QByteArray("decodebin !");
-        pipeStr = QByteArray("rtspsrc location=") + quotedUrl +
-                  QByteArray(" protocols=tcp latency=0 ! rtph264depay ! h264parse ! queue max-size-buffers=1 leaky=downstream ! ") +
-                  decoder + QByteArray(" videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
-    }
+        // Simpler, codec-agnostic chain via uridecodebin
+        QString qUrl = m_url;
+        qUrl.replace("\"", "\\\"");
+        QByteArray quotedUrl = QByteArray("\"") + qUrl.toUtf8() + QByteArray("\"");
 
-    GError *err = nullptr;
-    m_pipeline = gst_parse_launch(pipeStr.constData(), &err);
-    if (!m_pipeline)
-    {
-        QString msg = QStringLiteral("GStreamer parse error: %1").arg(err ? QString::fromUtf8(err->message) : QStringLiteral("unknown"));
-        if (err)
-            g_error_free(err);
-        emit errorOccured(msg);
-        return false;
-    }
+        // uridecodebin handles RTSP and dynamic pads; link to videoconvert -> appsink
+        // uridecodebin will internally use rtspsrc; prefer TCP via GST_RTSP_TCP env
+        QByteArray pipeStr = QByteArray("uridecodebin uri=") + quotedUrl +
+                             QByteArray(" ! videoconvert ! video/x-raw,format=RGBA ! appsink name=mysink sync=false max-buffers=1 drop=true");
 
-    m_appsink = gst_bin_get_by_name(GST_BIN(m_pipeline), "mysink");
-    if (!m_appsink)
-    {
-        emit errorOccured(QStringLiteral("appsink not found"));
-        cleanup();
-        return false;
-    }
-    gst_app_sink_set_emit_signals((GstAppSink *)m_appsink, true);
-    gst_app_sink_set_drop((GstAppSink *)m_appsink, true);
-    gst_app_sink_set_max_buffers((GstAppSink *)m_appsink, 1);
+        GError *err = nullptr;
+        m_pipeline = gst_parse_launch(pipeStr.constData(), &err);
+        if (!m_pipeline)
+        {
+            QString msg = QStringLiteral("GStreamer parse error: %1").arg(err ? QString::fromUtf8(err->message) : QStringLiteral("unknown"));
+            if (err)
+                g_error_free(err);
+            emit errorOccured(msg);
+            return false;
+        }
 
-    GstAppSinkCallbacks cbs = {};
-    cbs.new_sample = &GStreamerPlayer::onNewSample;
-    gst_app_sink_set_callbacks(GST_APP_SINK(m_appsink), &cbs, this, nullptr);
-    return true;
+        m_appsink = gst_bin_get_by_name(GST_BIN(m_pipeline), "mysink");
+        if (!m_appsink)
+        {
+            emit errorOccured(QStringLiteral("appsink not found"));
+            cleanup();
+            return false;
+        }
+        gst_app_sink_set_emit_signals((GstAppSink *)m_appsink, true);
+        gst_app_sink_set_drop((GstAppSink *)m_appsink, true);
+        gst_app_sink_set_max_buffers((GstAppSink *)m_appsink, 1);
+        GstAppSinkCallbacks cbs = {};
+        cbs.new_sample = &GStreamerPlayer::onNewSample;
+        gst_app_sink_set_callbacks(GST_APP_SINK(m_appsink), &cbs, this, nullptr);
+        return true;
+    }
 }
 
 void GStreamerPlayer::armNoFrameTimer(int ms)
@@ -252,17 +381,23 @@ QImage GStreamerPlayer::sampleToImage(GstSample *sample)
     if (!buffer || !caps)
         return {};
 
+    GstVideoInfo vinfo;
+    if (!gst_video_info_from_caps(&vinfo, caps))
+        return {};
+
     GstMapInfo map;
     if (!gst_buffer_map(buffer, &map, GST_MAP_READ))
         return {};
 
-    // Try to read video info from caps
-    GstStructure *s = gst_caps_get_structure(caps, 0);
-    int width = 0, height = 0;
-    gst_structure_get_int(s, "width", &width);
-    gst_structure_get_int(s, "height", &height);
-    QImage img((const uchar *)map.data, width, height, QImage::Format_RGBA8888);
-    img = img.copy();
+    // Respect stride from caps
+    int width = GST_VIDEO_INFO_WIDTH(&vinfo);
+    int height = GST_VIDEO_INFO_HEIGHT(&vinfo);
+    int stride = GST_VIDEO_INFO_PLANE_STRIDE(&vinfo, 0);
+    if (stride <= 0)
+        stride = width * 4; // fallback for RGBA
+
+    QImage img((const uchar *)map.data, width, height, stride, QImage::Format_RGBA8888);
+    QImage copy = img.copy();
     gst_buffer_unmap(buffer, &map);
-    return img;
+    return copy;
 }

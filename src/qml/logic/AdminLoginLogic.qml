@@ -1,6 +1,19 @@
 import QtQuick
 
 Item {
+    function buildPricingPreview() {
+        try {
+            var js = {
+                base_fee: parseInt(adminPage.pricingBaseFee.text) || 0,
+                grace_minutes: parseInt(adminPage.pricingGraceMinutes.text) || 0,
+                incremental: { every: parseInt(adminPage.pricingIncEvery.text) || 60, fee: parseInt(adminPage.pricingIncFee.text) || 0 },
+                cap: parseInt(adminPage.pricingCap.text) || 0
+            };
+            return JSON.stringify(js, null, 2);
+        } catch (e) {
+            return "";
+        }
+    }
     // Handle login request from AdminPage overlay
     Connections {
         target: adminPage
@@ -63,5 +76,84 @@ Item {
             if (root && root.showToast) root.showToast(ok ? "Đã xóa user" : "Lỗi xóa user");
             adminPage.triggerDeleteUser = false;
         }
+        function onTriggerAddPricingChanged() {
+            console.log("onTriggerAddPricingChanged fired, triggerAddPricing=", adminPage.triggerAddPricing)
+            if (!adminPage.triggerAddPricing) return;
+            if (!root.isAuthenticated) {
+                if (root && root.showToast) root.showToast("Vui lòng đăng nhập để thao tác bảng giá");
+                adminPage.triggerAddPricing = false;
+                return;
+            }
+            // Prepare a blank pricing JSON template
+            var tpl = {
+                base_fee: 0,
+                grace_minutes: 0,
+                incremental: { every: 60, fee: 0 },
+                cap: 0
+            };
+            adminPage.pricingJson.text = JSON.stringify(tpl, null, 2);
+            if (root && root.showToast) root.showToast("Đã tạo mẫu bảng giá mới (chỉnh sửa rồi Lưu)");
+            adminPage.triggerAddPricing = false;
+        }
+        function onTriggerSavePricingChanged() {
+            console.log("onTriggerSavePricingChanged fired, triggerSavePricing=", adminPage.triggerSavePricing)
+            if (!adminPage.triggerSavePricing) return;
+            if (!root.isAuthenticated) {
+                if (root && root.showToast) root.showToast("Vui lòng đăng nhập để thao tác bảng giá");
+                adminPage.triggerSavePricing = false;
+                return;
+            }
+            if (root && root.showToast) root.showToast("Đang lưu bảng giá...");
+            var vehicle = adminPage.pricingVehicle.currentText || "Xe máy";
+            var type = adminPage.pricingType.currentText || "per_entry";
+            // Prefer structured fields if present
+            var js = null;
+            try {
+                if (adminPage.pricingBaseFee) {
+                    js = {
+                        base_fee: parseInt(adminPage.pricingBaseFee.text) || 0,
+                        grace_minutes: parseInt(adminPage.pricingGraceMinutes.text) || 0,
+                        incremental: { every: parseInt(adminPage.pricingIncEvery.text) || 60, fee: parseInt(adminPage.pricingIncFee.text) || 0 },
+                        cap: parseInt(adminPage.pricingCap.text) || 0
+                    };
+                } else {
+                    js = JSON.parse(adminPage.pricingJson.text || "{}");
+                }
+                var ok = repo && repo.savePricingJson ? repo.savePricingJson(vehicle, type, JSON.stringify(js), "ui") : false;
+                if (root && root.showToast) root.showToast(ok ? "Đã lưu bảng giá" : "Lỗi lưu bảng giá");
+            } catch (e) {
+                if (root && root.showToast) root.showToast("JSON không hợp lệ: " + e.message);
+            }
+            adminPage.triggerSavePricing = false;
+        }
+        function onTriggerDeletePricingChanged() {
+            console.log("onTriggerDeletePricingChanged fired, triggerDeletePricing=", adminPage.triggerDeletePricing)
+            if (!adminPage.triggerDeletePricing) return;
+            if (!root.isAuthenticated) {
+                if (root && root.showToast) root.showToast("Vui lòng đăng nhập để thao tác bảng giá");
+                adminPage.triggerDeletePricing = false;
+                return;
+            }
+            if (root && root.showToast) root.showToast("Đang xóa bảng giá...");
+            var vehicle = adminPage.pricingVehicle.currentText || "Xe máy";
+            var type = adminPage.pricingType.currentText || "per_entry";
+            var ok = repo && repo.deletePricing ? repo.deletePricing(vehicle, type) : false;
+            if (root && root.showToast) root.showToast(ok ? "Đã xóa bảng giá" : "Lỗi xóa bảng giá");
+            adminPage.triggerDeletePricing = false;
+        }
     }
+
+    // Update pricing preview when structured fields change (Connections at Item scope)
+    // Guarded connections: only bind when fields exist
+    Connections { target: adminPage && adminPage.pricingBaseFee ? adminPage.pricingBaseFee : null; function onTextChanged() { if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview() } }
+    Connections { target: adminPage && adminPage.pricingGraceMinutes ? adminPage.pricingGraceMinutes : null; function onTextChanged() { if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview() } }
+    Connections { target: adminPage && adminPage.pricingIncEvery ? adminPage.pricingIncEvery : null; function onTextChanged() { if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview() } }
+    Connections { target: adminPage && adminPage.pricingIncFee ? adminPage.pricingIncFee : null; function onTextChanged() { if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview() } }
+    Connections { target: adminPage && adminPage.pricingCap ? adminPage.pricingCap : null; function onTextChanged() { if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview() } }
+
+    // Initialize preview on component completed
+    Component.onCompleted: {
+        if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview();
+    }
+
 }

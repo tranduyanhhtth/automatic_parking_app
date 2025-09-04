@@ -4,7 +4,7 @@
 #include <QString>
 #include <QTimer>
 
-// GStreamer core headers are required here for callback typedefs (gboolean, gpointer, GstFlowReturn)
+// GStreamer headers chính cần để định nghĩa callback (gboolean, gpointer, GstFlowReturn)
 #include <gst/gst.h>
 #include <gst/app/app.h>
 
@@ -38,11 +38,11 @@ private:
     GstElement *m_pipeline{nullptr};
     GstElement *m_appsink{nullptr};
     QString m_url;
-    bool m_preferHwDecode{true}; // kept internal; auto-selected by element availability
+    bool m_preferHwDecode{true}; // tự động chọn phần cứng
 
     // Resilience
     int m_attempt{0};
-    QTimer m_retryTimer;   // backoff retry when error/no frames
-    QTimer m_noFrameTimer; // detect no frames after PLAYING
+    QTimer m_retryTimer;   // tự động thử lại khi có lỗi
+    QTimer m_noFrameTimer; // phát hiện không có khung hình sau khi PLAYING
     bool m_firstFrameSeen{false};
 };

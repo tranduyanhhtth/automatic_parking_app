@@ -4,7 +4,7 @@
         <file>MainWindowForm.ui.qml</file>
         <file>components/LaneComponent.qml</file>
         <file>components/ToastComponent.qml</file>
-        <file>components/NavDrawer.ui.qml<file>
+        <file>components/NavDrawer.ui.qml</file>
         <file>components/HidLogPanel.qml</file>
         <file>dialogs/AdminDialog.qml</file>
         <file>dialogs/CameraSettingsDialog.qml</file>
@@ -18,7 +18,11 @@
         <file>logic/PricingLogic.qml</file>
         <file>logic/SearchLogic.qml</file>
         <file>logic/HidLogLogic.qml</file>
-        <file>pages/AdminPage.ui.qml<file>
-        <file>pages/SearchPage.ui.qml<file>
+        <file>logic/AdminPricingLogic.qml</file>
+        <file>logic/AdminPricingActions.qml</file>
+        <file>logic/AdminSubscriptionsLogic.qml</file>
+    <file>logic/AdminSubscriptionsCrud.qml</file>
+        <file>pages/AdminPage.ui.qml</file>
+        <file>pages/SearchPage.ui.qml</file>
     </qresource>
 </RCC>

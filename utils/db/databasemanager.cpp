@@ -57,11 +57,12 @@ bool DatabaseManager::ensureSchema()
         return false;
     }
 
-    // 2) parking_sessions
+    // 2) parking_sessions (new schema adds pricing_id and status constraints)
     if (!q.exec(R"(
         CREATE TABLE IF NOT EXISTS parking_sessions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
+            user_id INTEGER NOT NULL,
+            pricing_id INTEGER,
             rfid TEXT,
             plate TEXT,
             checkin_time TEXT NOT NULL,
@@ -72,8 +73,9 @@ bool DatabaseManager::ensureSchema()
             checkout_image2 BLOB,
             duration_minutes INTEGER,
             fee INTEGER,
-            status TEXT,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+            status TEXT CHECK (status IN ('checked_in','checked_out','pending')),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE SET NULL
         )
     )"))
     {
@@ -99,19 +101,21 @@ bool DatabaseManager::ensureSchema()
     q.exec("ALTER TABLE parking_sessions ADD COLUMN checkout_image1 BLOB");
     q.exec("ALTER TABLE parking_sessions ADD COLUMN checkout_image2 BLOB");
 
-    // 3) pricing
+    // 3) pricing (new normalized schema)
     if (!q.exec(R"(
         CREATE TABLE IF NOT EXISTS pricing (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            vehicle_type TEXT NOT NULL,
-            ticket_type TEXT NOT NULL,
+            vehicle_type TEXT NOT NULL CHECK (vehicle_type IN ('car','bike','truck')),
+            ticket_type TEXT NOT NULL CHECK (ticket_type IN ('hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly')),
             base_fee INTEGER NOT NULL,
-            time_slot TEXT NOT NULL,
-            grace_period INTEGER,
+            duration_minutes INTEGER,
             incremental_fee INTEGER,
-            decremental_fee INTEGER,
             max_daily_fee INTEGER,
-            description TEXT
+            discount_percentage REAL DEFAULT 0,
+            grace_period INTEGER DEFAULT 0,
+            description TEXT,
+            start_time TEXT,
+            end_time TEXT
         )
     )"))
     {
@@ -121,20 +125,22 @@ bool DatabaseManager::ensureSchema()
     }
     q.exec("CREATE INDEX IF NOT EXISTS idx_pricing_vt_tt ON pricing(vehicle_type, ticket_type)");
 
-    // 4) subscriptions
+    // 4) subscriptions (link pricing_id)
     if (!q.exec(R"(
         CREATE TABLE IF NOT EXISTS subscriptions (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
+            pricing_id INTEGER NOT NULL,
             plate TEXT,
             rfid TEXT,
-            plan_type TEXT NOT NULL,
+            plan_type TEXT NOT NULL CHECK (plan_type IN ('monthly','quarterly','yearly')),
             start_date TEXT NOT NULL,
             end_date TEXT NOT NULL,
-            payment_mode TEXT NOT NULL,
+            payment_mode TEXT NOT NULL CHECK (payment_mode IN ('prepaid','postpaid')),
             price INTEGER NOT NULL,
-            status TEXT DEFAULT 'active',
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            status TEXT DEFAULT 'active' CHECK (status IN ('active','expired','canceled')),
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE CASCADE
         )
     )"))
     {
@@ -146,21 +152,23 @@ bool DatabaseManager::ensureSchema()
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_dates ON subscriptions(start_date, end_date)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_plate_rfid ON subscriptions(plate, rfid)");
 
-    // 5) revenues
+    // 5) revenues (link pricing_id and stricter enums)
     if (!q.exec(R"(
         CREATE TABLE IF NOT EXISTS revenues (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             session_id INTEGER,
             subscription_id INTEGER,
-            user_id INTEGER,
+            user_id INTEGER NOT NULL,
+            pricing_id INTEGER,
             amount INTEGER NOT NULL,
-            payment_type TEXT NOT NULL,
-            revenue_type TEXT NOT NULL,
+            payment_type TEXT NOT NULL CHECK (payment_type IN ('cash','card','transfer','prepaid','postpaid')),
+            revenue_type TEXT NOT NULL CHECK (revenue_type IN ('parking_session','subscription','other')),
             created_at TEXT,
             note TEXT,
             FOREIGN KEY(session_id) REFERENCES parking_sessions(id) ON DELETE SET NULL,
             FOREIGN KEY(subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE SET NULL
         )
     )"))
     {
@@ -173,7 +181,101 @@ bool DatabaseManager::ensureSchema()
     q.exec("CREATE INDEX IF NOT EXISTS idx_rev_user ON revenues(user_id)");
 
     DB_Connection.commit();
+    // Seed default pricing if table is empty
+    ensureDefaultPricing();
     return true;
+}
+
+bool DatabaseManager::ensureDefaultPricing()
+{
+    QSqlQuery q(DB_Connection);
+    if (q.exec("SELECT COUNT(1) FROM pricing") && q.next() && q.value(0).toInt() > 0)
+        return true;
+    // Insert the provided defaults
+    const char *sql = R"SQL(
+INSERT INTO pricing (vehicle_type, ticket_type, base_fee, duration_minutes, incremental_fee, max_daily_fee, discount_percentage, grace_period, description, start_time, end_time) VALUES
+('bike','hourly',5000,60,5000,30000,0,15,'Phí giờ xe máy',NULL,NULL),
+('bike','daily_day',20000,720,NULL,30000,0,15,'Vé ngày ban ngày xe máy','06:00','18:00'),
+('bike','daily_night',25000,720,NULL,40000,0,15,'Vé ngày ban đêm xe máy','18:00','06:00'),
+('bike','overnight',30000,NULL,NULL,NULL,0,0,'Vé qua đêm xe máy','18:00','06:00'),
+('bike','monthly',200000,NULL,NULL,NULL,0,0,'Vé tháng xe máy',NULL,NULL),
+('bike','quarterly',540000,NULL,NULL,NULL,10,0,'Vé quý xe máy',NULL,NULL),
+('bike','yearly',1920000,NULL,NULL,NULL,20,0,'Vé năm xe máy',NULL,NULL),
+('car','hourly',20000,60,20000,240000,0,15,'Phí giờ ô tô',NULL,NULL),
+('car','daily_day',150000,720,NULL,240000,0,15,'Vé ngày ban ngày ô tô','06:00','18:00'),
+('car','daily_night',180000,720,NULL,300000,0,15,'Vé ngày ban đêm ô tô','18:00','06:00'),
+('car','overnight',120000,NULL,NULL,NULL,0,0,'Vé qua đêm ô tô','18:00','06:00'),
+('car','monthly',1500000,NULL,NULL,NULL,0,0,'Vé tháng ô tô',NULL,NULL),
+('car','quarterly',4050000,NULL,NULL,NULL,10,0,'Vé quý ô tô',NULL,NULL),
+('car','yearly',14400000,NULL,NULL,NULL,20,0,'Vé năm ô tô',NULL,NULL);
+)SQL";
+    if (!q.exec(sql))
+        qWarning() << "Seed pricing failed:" << q.lastError().text();
+    return true;
+}
+
+QString DatabaseManager::normalizeVehicle(const QString &vt) const
+{
+    if (vt == "motorbike" || vt == "bike")
+        return "bike";
+    if (vt == "car")
+        return "car";
+    if (vt == "truck")
+        return "truck";
+    return vt.toLower();
+}
+QString DatabaseManager::normalizePlan(const QString &plan) const
+{
+    const QString p = plan.toLower();
+    if (p.startsWith("tháng") || p == "month" || p == "monthly")
+        return "monthly";
+    if (p.startsWith("quý") || p == "quarter" || p == "quarterly")
+        return "quarterly";
+    if (p.startsWith("năm") || p == "year" || p == "yearly")
+        return "yearly";
+    return p;
+}
+
+int DatabaseManager::getPricingIdFor(const QString &vehicleType, const QString &ticketType)
+{
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT id FROM pricing WHERE vehicle_type=:vt AND ticket_type=:tt ORDER BY id DESC LIMIT 1");
+    q.bindValue(":vt", normalizeVehicle(vehicleType));
+    q.bindValue(":tt", ticketType);
+    if (q.exec() && q.next())
+        return q.value(0).toInt();
+    return -1;
+}
+
+int DatabaseManager::computeFeeFromPricing(int baseFee,
+                                           int durationMinutes,
+                                           int incrementalFee,
+                                           int graceMinutes,
+                                           int capPerDay,
+                                           const QDateTime &checkin,
+                                           const QDateTime &checkout)
+{
+    // Basic block pricing: grace once, base applies for first duration, then incremental per durationMinutes
+    qint64 totalMin = qMax<qint64>(0, checkin.secsTo(checkout) / 60);
+    if (totalMin <= graceMinutes)
+        return 0;
+    if (durationMinutes <= 0)
+        durationMinutes = 60;
+    int fee = 0;
+    // First block
+    if (totalMin > 0)
+    {
+        fee += baseFee;
+        totalMin -= qMin<qint64>(totalMin, durationMinutes);
+    }
+    if (totalMin > 0 && incrementalFee > 0)
+    {
+        const int steps = static_cast<int>((totalMin + durationMinutes - 1) / durationMinutes);
+        fee += steps * incrementalFee;
+    }
+    if (capPerDay > 0)
+        fee = std::min(fee, capPerDay);
+    return fee;
 }
 
 bool DatabaseManager::hasOpenSession(const QString &rfid)
@@ -273,6 +375,7 @@ int DatabaseManager::upsertUser(const QString &fullName,
 }
 
 int DatabaseManager::createSubscription(int userId,
+                                        int pricingId,
                                         const QString &plate,
                                         const QString &rfid,
                                         const QString &planType,
@@ -284,10 +387,11 @@ int DatabaseManager::createSubscription(int userId,
 {
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        INSERT INTO subscriptions (user_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status)
-        VALUES (:uid,:pl,:rf,:pt,:sd,:ed,:pm,:pr,:st)
+        INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status)
+        VALUES (:uid,:pid,:pl,:rf,:pt,:sd,:ed,:pm,:pr,:st)
     )");
     q.bindValue(":uid", userId);
+    q.bindValue(":pid", pricingId);
     q.bindValue(":pl", plate);
     q.bindValue(":rf", rfid);
     q.bindValue(":pt", planType);
@@ -302,6 +406,55 @@ int DatabaseManager::createSubscription(int userId,
         return -1;
     }
     return q.lastInsertId().toInt();
+}
+
+bool DatabaseManager::updateSubscription(int id,
+                                         int userId,
+                                         const QString &plate,
+                                         const QString &rfid,
+                                         const QString &planType,
+                                         const QString &startDate,
+                                         const QString &endDate,
+                                         const QString &paymentMode,
+                                         int price,
+                                         const QString &status)
+{
+    // Determine pricing_id from user vehicle type and normalized plan type
+    QString vt = QStringLiteral("car");
+    {
+        QSqlQuery uq(DB_Connection);
+        uq.prepare("SELECT vehicle_type FROM users WHERE id=:id LIMIT 1");
+        uq.bindValue(":id", userId);
+        if (uq.exec() && uq.next())
+            vt = uq.value(0).toString();
+        if (vt.isEmpty())
+            vt = QStringLiteral("car");
+    }
+    const QString ticket = normalizePlan(planType);
+    const int pid = getPricingIdFor(vt, ticket);
+    QSqlQuery q(DB_Connection);
+    q.prepare(R"(
+        UPDATE subscriptions SET user_id=:uid, pricing_id=:pid, plate=:pl, rfid=:rf, plan_type=:pt, start_date=:sd, end_date=:ed,
+               payment_mode=:pm, price=:pr, status=:st
+        WHERE id=:id
+    )");
+    q.bindValue(":uid", userId);
+    q.bindValue(":pid", pid > 0 ? QVariant(pid) : QVariant(QVariant::Int));
+    q.bindValue(":pl", plate);
+    q.bindValue(":rf", rfid);
+    q.bindValue(":pt", ticket);
+    q.bindValue(":sd", startDate);
+    q.bindValue(":ed", endDate);
+    q.bindValue(":pm", paymentMode);
+    q.bindValue(":pr", price);
+    q.bindValue(":st", status);
+    q.bindValue(":id", id);
+    if (!q.exec())
+    {
+        qWarning() << "updateSubscription:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
 }
 
 QVariantMap DatabaseManager::findActiveSubscription(const QString &rfid,
@@ -489,21 +642,33 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
     const QString nowTxt = nowIso8601();
     // Gán user nếu có, và kiểm tra subscription active
     int userId = -1;
+    QString vehicleType = QStringLiteral("car");
     if (auto u = findUserByRfidOrPlate(encRfid, encPlate))
+    {
         userId = u->value("id").toInt();
+        vehicleType = u->value("vehicle_type").toString();
+        if (vehicleType.isEmpty())
+            vehicleType = QStringLiteral("car");
+    }
     auto sub = findActiveSubscription(encRfid, encPlate, QString());
+    int pricingId = -1;
+    if (!sub.isEmpty() && sub.contains("pricing_id"))
+        pricingId = sub.value("pricing_id").toInt();
+    if (pricingId <= 0)
+        pricingId = getPricingIdFor(vehicleType, QStringLiteral("hourly"));
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        INSERT INTO parking_sessions (user_id, rfid, plate, checkin_time, checkin_image1, checkin_image2, status)
-        VALUES(:uid, :rfid, :plate, :ts, :img1, :img2, :st)
+        INSERT INTO parking_sessions (user_id, pricing_id, rfid, plate, checkin_time, checkin_image1, checkin_image2, status)
+        VALUES(:uid, :pid, :rfid, :plate, :ts, :img1, :img2, :st)
     )");
     q.bindValue(":uid", userId > 0 ? QVariant(userId) : QVariant(QVariant::Int));
+    q.bindValue(":pid", pricingId > 0 ? QVariant(pricingId) : QVariant(QVariant::Int));
     q.bindValue(":rfid", encRfid);
     q.bindValue(":plate", encPlate);
     q.bindValue(":ts", nowTxt);
     q.bindValue(":img1", image1);
     q.bindValue(":img2", image2);
-    q.bindValue(":st", QStringLiteral("in"));
+    q.bindValue(":st", QStringLiteral("checked_in"));
     if (!q.exec())
     {
         qWarning() << "checkIn error:" << q.lastError().text();
@@ -556,7 +721,7 @@ CheckOutResult DatabaseManager::checkOut(const QString &rfid,
     if (!hasSub)
         fee = computeFeeForSession(id, coTs, false);
     q.bindValue(":fee", fee);
-    q.bindValue(":st", QStringLiteral("out"));
+    q.bindValue(":st", QStringLiteral("checked_out"));
     q.bindValue(":id", id);
     if (!q.exec())
     {
@@ -620,7 +785,7 @@ CheckOutResult DatabaseManager::checkOutRfidOnly(const QString &rfid, QString *c
     QSqlQuery q(DB_Connection);
     q.prepare("UPDATE parking_sessions SET checkout_time = :ts, status = :st WHERE id = :id");
     q.bindValue(":ts", ts);
-    q.bindValue(":st", QStringLiteral("out"));
+    q.bindValue(":st", QStringLiteral("checked_out"));
     q.bindValue(":id", id);
     if (!q.exec())
     {
@@ -646,7 +811,7 @@ CheckOutResult DatabaseManager::checkOutRfidWithImages(const QString &rfid,
     QSqlQuery q(DB_Connection);
     q.prepare("UPDATE parking_sessions SET checkout_time = :ts, status = :st, checkout_image1 = :img1, checkout_image2 = :img2 WHERE id = :id");
     q.bindValue(":ts", ts);
-    q.bindValue(":st", QStringLiteral("out"));
+    q.bindValue(":st", QStringLiteral("checked_out"));
     q.bindValue(":img1", image1);
     q.bindValue(":img2", image2);
     q.bindValue(":id", id);
@@ -769,7 +934,7 @@ int DatabaseManager::computeFee(const QString &vehicleType, qint64 durationMinut
     int inc = 5000;
     int cap = 0;
     QSqlQuery q(DB_Connection);
-    q.prepare("SELECT base_fee, grace_period, incremental_fee, max_daily_fee FROM pricing WHERE vehicle_type=:vt AND ticket_type='per_use' ORDER BY id DESC LIMIT 1");
+    q.prepare("SELECT base_fee, grace_period, incremental_fee, max_daily_fee FROM pricing WHERE vehicle_type=:vt AND ticket_type='hourly' ORDER BY id DESC LIMIT 1");
     q.bindValue(":vt", vehicleType);
     if (q.exec() && q.next())
     {
@@ -801,7 +966,7 @@ int DatabaseManager::computeFeeJson(const QString &vehicleType,
     Q_UNUSED(vehicleType);
     // fetch latest JSON pricing for this vehicle type & per_use
     QSqlQuery q(DB_Connection);
-    q.prepare("SELECT time_slot, base_fee, grace_period, incremental_fee, max_daily_fee FROM pricing WHERE vehicle_type = :vt AND ticket_type = 'per_use' ORDER BY id DESC LIMIT 1");
+    q.prepare("SELECT description, base_fee, grace_period, incremental_fee, max_daily_fee FROM pricing WHERE vehicle_type = :vt AND ticket_type = 'per_use' ORDER BY id DESC LIMIT 1");
     q.bindValue(":vt", vehicleType);
     QString jsonText;
     int fallbackBase = 5000, fallbackGrace = 0, fallbackInc = 5000, fallbackCap = 0;
@@ -982,9 +1147,12 @@ int DatabaseManager::computeFeeForSession(int sessionId,
     q.prepare(R"(
         SELECT s.id, s.user_id, s.rfid, s.plate, s.checkin_time,
                COALESCE(s.checkout_time, :now) AS co,
-               u.vehicle_type
+               s.pricing_id,
+               u.vehicle_type,
+               p.base_fee, p.duration_minutes, p.incremental_fee, p.grace_period, p.max_daily_fee
         FROM parking_sessions s
         LEFT JOIN users u ON u.id = s.user_id
+        LEFT JOIN pricing p ON p.id = s.pricing_id
         WHERE s.id = :id
     )");
     q.bindValue(":now", now);
@@ -994,6 +1162,37 @@ int DatabaseManager::computeFeeForSession(int sessionId,
     const QString vt = q.value("vehicle_type").toString().isEmpty() ? QStringLiteral("car") : q.value("vehicle_type").toString();
     const QDateTime tin = QDateTime::fromString(q.value("checkin_time").toString(), Qt::ISODate);
     const QDateTime tout = QDateTime::fromString(q.value("co").toString(), Qt::ISODate);
+    if (lostCard)
+        return 100000; // simple rule for now
+
+    // If we have pricing joined, compute from normalized fields
+    if (!q.value("base_fee").isNull())
+    {
+        const int baseFee = q.value("base_fee").toInt();
+        const int durMin = q.value("duration_minutes").isNull() ? 60 : q.value("duration_minutes").toInt();
+        const int incFee = q.value("incremental_fee").isNull() ? 0 : q.value("incremental_fee").toInt();
+        const int grace = q.value("grace_period").isNull() ? 0 : q.value("grace_period").toInt();
+        const int cap = q.value("max_daily_fee").isNull() ? 0 : q.value("max_daily_fee").toInt();
+        return computeFeeFromPricing(baseFee, durMin, incFee, grace, cap, tin, tout);
+    }
+    // Fallback to hourly pricing by vehicle
+    const int pid = getPricingIdFor(vt, QStringLiteral("hourly"));
+    if (pid > 0)
+    {
+        QSqlQuery qp(DB_Connection);
+        qp.prepare("SELECT base_fee, duration_minutes, incremental_fee, grace_period, max_daily_fee FROM pricing WHERE id=:id");
+        qp.bindValue(":id", pid);
+        if (qp.exec() && qp.next())
+        {
+            const int baseFee = qp.value(0).toInt();
+            const int durMin = qp.value(1).isNull() ? 60 : qp.value(1).toInt();
+            const int incFee = qp.value(2).isNull() ? 0 : qp.value(2).toInt();
+            const int grace = qp.value(3).isNull() ? 0 : qp.value(3).toInt();
+            const int cap = qp.value(4).isNull() ? 0 : qp.value(4).toInt();
+            return computeFeeFromPricing(baseFee, durMin, incFee, grace, cap, tin, tout);
+        }
+    }
+    // Last resort: legacy JSON
     return computeFeeJson(vt, tin, tout, lostCard);
 }
 
@@ -1003,14 +1202,14 @@ bool DatabaseManager::savePricingJson(const QString &vehicleType,
                                       const QString &description)
 {
     QSqlQuery q(DB_Connection);
+    // Compatibility: store JSON text into description field for the given ticket type
     q.prepare(R"(
-        INSERT INTO pricing (vehicle_type, ticket_type, base_fee, time_slot, grace_period, incremental_fee, decremental_fee, max_daily_fee, description)
-        VALUES (:vt, :tt, 0, :js, 0, 0, 0, 0, :desc)
+        INSERT INTO pricing (vehicle_type, ticket_type, base_fee, duration_minutes, incremental_fee, max_daily_fee, discount_percentage, grace_period, description, start_time, end_time)
+        VALUES (:vt, :tt, 0, NULL, NULL, NULL, 0, 0, :desc, NULL, NULL)
     )");
     q.bindValue(":vt", vehicleType);
     q.bindValue(":tt", ticketType);
-    q.bindValue(":js", jsonText);
-    q.bindValue(":desc", description);
+    q.bindValue(":desc", jsonText.isEmpty() ? description : jsonText);
     if (!q.exec())
     {
         qWarning() << "savePricingJson:" << q.lastError().text();
@@ -1025,7 +1224,7 @@ QVariantMap DatabaseManager::getLatestPricing(const QString &vehicleType,
     QVariantMap out;
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        SELECT id, vehicle_type, ticket_type, time_slot, description, base_fee, grace_period, incremental_fee, decremental_fee, max_daily_fee
+        SELECT id, vehicle_type, ticket_type, description, base_fee, grace_period, incremental_fee, max_daily_fee
         FROM pricing
         WHERE vehicle_type = :vt AND ticket_type = :tt
         ORDER BY id DESC LIMIT 1
@@ -1037,21 +1236,66 @@ QVariantMap DatabaseManager::getLatestPricing(const QString &vehicleType,
         out.insert("id", q.value("id"));
         out.insert("vehicle_type", q.value("vehicle_type"));
         out.insert("ticket_type", q.value("ticket_type"));
-        out.insert("description", q.value("description"));
-        // Parse JSON text field into an object
-        const QString js = q.value("time_slot").toString();
+        const QString descOrJson = q.value("description").toString();
+        out.insert("description", descOrJson);
+        // For compatibility, expose as json/time_slot_text if it looks like JSON
         QJsonParseError perr;
-        const auto doc = QJsonDocument::fromJson(js.toUtf8(), &perr);
+        const auto doc = QJsonDocument::fromJson(descOrJson.toUtf8(), &perr);
         if (perr.error == QJsonParseError::NoError && doc.isObject())
             out.insert("json", doc.object().toVariantMap());
         else
             out.insert("json", QVariant());
-        out.insert("time_slot_text", js);
+        out.insert("time_slot_text", descOrJson);
         out.insert("base_fee", q.value("base_fee"));
         out.insert("grace_period", q.value("grace_period"));
         out.insert("incremental_fee", q.value("incremental_fee"));
-        out.insert("decremental_fee", q.value("decremental_fee"));
         out.insert("max_daily_fee", q.value("max_daily_fee"));
     }
     return out;
+}
+
+QList<QVariantMap> DatabaseManager::listSubscriptions(int limit, int offset)
+{
+    QList<QVariantMap> out;
+    QSqlQuery q(DB_Connection);
+    q.prepare(R"(
+        SELECT s.id, s.user_id, u.full_name, u.vehicle_type, s.plate, s.rfid, s.plan_type,
+               s.start_date, s.end_date, s.payment_mode, s.price, s.status
+        FROM subscriptions s
+        LEFT JOIN users u ON u.id = s.user_id
+        ORDER BY s.id DESC
+        LIMIT :limit OFFSET :offset
+    )");
+    q.bindValue(":limit", limit);
+    q.bindValue(":offset", offset);
+    if (q.exec())
+    {
+        while (q.next())
+        {
+            QVariantMap m;
+            m.insert("id", q.value("id"));
+            m.insert("user_id", q.value("user_id"));
+            m.insert("full_name", q.value("full_name"));
+            m.insert("vehicle_type", q.value("vehicle_type"));
+            m.insert("plate", q.value("plate"));
+            m.insert("rfid", q.value("rfid"));
+            m.insert("plan_type", q.value("plan_type"));
+            m.insert("start_date", q.value("start_date"));
+            m.insert("end_date", q.value("end_date"));
+            m.insert("payment_mode", q.value("payment_mode"));
+            m.insert("price", q.value("price"));
+            m.insert("status", q.value("status"));
+            out.append(m);
+        }
+    }
+    else
+    {
+        qWarning() << "listSubscriptions:" << q.lastError().text();
+    }
+    return out;
+}
+
+int DatabaseManager::getPricingId(const QString &vehicleType, const QString &ticketType)
+{
+    return getPricingIdFor(vehicleType, ticketType);
 }
