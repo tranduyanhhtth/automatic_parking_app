@@ -37,6 +37,8 @@ bool DatabaseManager::initialize()
 bool DatabaseManager::ensureSchema()
 {
     QSqlQuery q(DB_Connection);
+    // Ensure SQLite enforces foreign keys
+    q.exec("PRAGMA foreign_keys=ON");
     DB_Connection.transaction();
     // 1) users
     if (!q.exec(R"(
@@ -75,7 +77,8 @@ bool DatabaseManager::ensureSchema()
             fee INTEGER,
             status TEXT CHECK (status IN ('checked_in','checked_out','pending')),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE RESTRICT,
-            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE RESTRICT
+            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE RESTRICT,
+            FOREIGN KEY (rfid) REFERENCES rfid_cards(rfid) ON DELETE SET NULL
         )
     )"))
     {
@@ -155,6 +158,8 @@ bool DatabaseManager::ensureSchema()
         return false;
     }
     q.exec("CREATE INDEX IF NOT EXISTS idx_pricing_vt_tt ON pricing(vehicle_type, ticket_type)");
+    // Ensure vehicle_type+ticket_type unique for FK reference from rfid_cards
+    q.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_pricing_vt_tt ON pricing(vehicle_type, ticket_type)");
 
     // 4) subscriptions (link pricing_id)
     if (!q.exec(R"(
@@ -171,7 +176,8 @@ bool DatabaseManager::ensureSchema()
             price INTEGER NOT NULL,
             status TEXT DEFAULT 'active' CHECK (status IN ('active','expired','canceled')),
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE CASCADE
+            FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE CASCADE,
+            FOREIGN KEY(rfid) REFERENCES rfid_cards(rfid) ON DELETE SET NULL
         )
     )"))
     {
@@ -212,6 +218,92 @@ bool DatabaseManager::ensureSchema()
     q.exec("CREATE INDEX IF NOT EXISTS idx_rev_user ON revenues(user_id)");
 
     DB_Connection.commit();
+    // Create rfid_cards table and triggers outside the above transaction to avoid interfering with existing DB creation
+    {
+        QSqlQuery qr(DB_Connection);
+        if (!qr.exec(R"(
+            CREATE TABLE IF NOT EXISTS rfid_cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rfid TEXT NOT NULL UNIQUE,
+                vehicle_type TEXT NOT NULL CHECK (vehicle_type IN ('car','bike')),
+                ticket_type TEXT NOT NULL CHECK (ticket_type IN ('hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly')),
+                user_id INTEGER,
+                status TEXT NOT NULL CHECK (status IN ('available','assigned','lost','damaged')),
+                created_at TEXT NOT NULL,
+                assigned_at TEXT,
+                description TEXT,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (vehicle_type, ticket_type) REFERENCES pricing(vehicle_type, ticket_type) ON UPDATE CASCADE ON DELETE RESTRICT
+            )
+        )"))
+        {
+            qWarning() << "DDL rfid_cards:" << qr.lastError().text();
+        }
+        qr.exec("CREATE INDEX IF NOT EXISTS idx_rfid_cards_status ON rfid_cards(status)");
+        qr.exec("CREATE INDEX IF NOT EXISTS idx_rfid_cards_vt_tt ON rfid_cards(vehicle_type, ticket_type)");
+
+        // Triggers to enforce rfid in users/subscriptions/parking_sessions must exist in rfid_cards if not NULL
+        qr.exec(R"(
+            CREATE TRIGGER IF NOT EXISTS trg_users_rfid_fk_ins
+            BEFORE INSERT ON users FOR EACH ROW
+            WHEN NEW.rfid IS NOT NULL AND NEW.rfid <> '' AND NOT EXISTS (
+                SELECT 1 FROM rfid_cards rc WHERE rc.rfid = NEW.rfid AND rc.status NOT IN ('lost','damaged')
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'RFID invalid or not found in rfid_cards');
+            END;
+        )");
+        qr.exec(R"(
+            CREATE TRIGGER IF NOT EXISTS trg_users_rfid_fk_upd
+            BEFORE UPDATE OF rfid ON users FOR EACH ROW
+            WHEN NEW.rfid IS NOT NULL AND NEW.rfid <> '' AND NOT EXISTS (
+                SELECT 1 FROM rfid_cards rc WHERE rc.rfid = NEW.rfid AND rc.status NOT IN ('lost','damaged')
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'RFID invalid or not found in rfid_cards');
+            END;
+        )");
+        qr.exec(R"(
+            CREATE TRIGGER IF NOT EXISTS trg_subs_rfid_fk_ins
+            BEFORE INSERT ON subscriptions FOR EACH ROW
+            WHEN NEW.rfid IS NOT NULL AND NEW.rfid <> '' AND NOT EXISTS (
+                SELECT 1 FROM rfid_cards rc WHERE rc.rfid = NEW.rfid AND rc.status NOT IN ('lost','damaged')
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'RFID invalid or not found in rfid_cards');
+            END;
+        )");
+        qr.exec(R"(
+            CREATE TRIGGER IF NOT EXISTS trg_subs_rfid_fk_upd
+            BEFORE UPDATE OF rfid ON subscriptions FOR EACH ROW
+            WHEN NEW.rfid IS NOT NULL AND NEW.rfid <> '' AND NOT EXISTS (
+                SELECT 1 FROM rfid_cards rc WHERE rc.rfid = NEW.rfid AND rc.status NOT IN ('lost','damaged')
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'RFID invalid or not found in rfid_cards');
+            END;
+        )");
+        qr.exec(R"(
+            CREATE TRIGGER IF NOT EXISTS trg_sessions_rfid_fk_ins
+            BEFORE INSERT ON parking_sessions FOR EACH ROW
+            WHEN NEW.rfid IS NOT NULL AND NEW.rfid <> '' AND NOT EXISTS (
+                SELECT 1 FROM rfid_cards rc WHERE rc.rfid = NEW.rfid AND rc.status NOT IN ('lost','damaged')
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'RFID invalid or not found in rfid_cards');
+            END;
+        )");
+        qr.exec(R"(
+            CREATE TRIGGER IF NOT EXISTS trg_sessions_rfid_fk_upd
+            BEFORE UPDATE OF rfid ON parking_sessions FOR EACH ROW
+            WHEN NEW.rfid IS NOT NULL AND NEW.rfid <> '' AND NOT EXISTS (
+                SELECT 1 FROM rfid_cards rc WHERE rc.rfid = NEW.rfid AND rc.status NOT IN ('lost','damaged')
+            )
+            BEGIN
+                SELECT RAISE(ABORT, 'RFID invalid or not found in rfid_cards');
+            END;
+        )");
+    }
     // Seed default pricing if table is empty
     ensureDefaultPricing();
 
@@ -257,6 +349,178 @@ INSERT INTO pricing (vehicle_type, ticket_type, base_fee, duration_minutes, incr
     if (!q.exec(sql))
         qWarning() << "Seed pricing failed:" << q.lastError().text();
     return true;
+}
+
+bool DatabaseManager::upsertRfidCard(const QString &rfid,
+                                     const QString &vehicleType,
+                                     const QString &ticketType,
+                                     const QString &status,
+                                     const QString &description)
+{
+    if (rfid.trimmed().isEmpty())
+        return false;
+    const QString vt = normalizeVehicle(vehicleType);
+    QSqlQuery q(DB_Connection);
+    // Try update first
+    q.prepare(R"(
+        UPDATE rfid_cards
+        SET vehicle_type=:vt, ticket_type=:tt, status=:st, description=:desc
+        WHERE rfid=:rfid
+    )");
+    q.bindValue(":vt", vt);
+    q.bindValue(":tt", ticketType);
+    q.bindValue(":st", status);
+    q.bindValue(":desc", description);
+    q.bindValue(":rfid", rfid);
+    if (!q.exec())
+    {
+        qWarning() << "upsertRfidCard update:" << q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() > 0)
+        return true;
+
+    // Insert
+    QSqlQuery qi(DB_Connection);
+    qi.prepare(R"(
+        INSERT INTO rfid_cards (rfid, vehicle_type, ticket_type, user_id, status, created_at, assigned_at, description)
+        VALUES (:rfid, :vt, :tt, NULL, :st, :created, NULL, :desc)
+    )");
+    qi.bindValue(":rfid", rfid);
+    qi.bindValue(":vt", vt);
+    qi.bindValue(":tt", ticketType);
+    qi.bindValue(":st", status.isEmpty() ? QStringLiteral("available") : status);
+    qi.bindValue(":created", nowIso8601());
+    qi.bindValue(":desc", description);
+    if (!qi.exec())
+    {
+        qWarning() << "upsertRfidCard insert:" << qi.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::assignRfidCard(const QString &rfid, int userId)
+{
+    if (rfid.trimmed().isEmpty() || userId <= 0)
+        return false;
+    QSqlQuery q(DB_Connection);
+    // Ensure card exists
+    q.prepare("SELECT id FROM rfid_cards WHERE rfid=:rfid");
+    q.bindValue(":rfid", rfid);
+    if (!q.exec() || !q.next())
+        return false;
+    // Set unique in users: clear any other user with same rfid, then set
+    QSqlQuery qu(DB_Connection);
+    qu.prepare("UPDATE users SET rfid=NULL WHERE rfid=:rfid");
+    qu.bindValue(":rfid", rfid);
+    qu.exec();
+    qu.prepare("UPDATE users SET rfid=:rfid WHERE id=:uid");
+    qu.bindValue(":rfid", rfid);
+    qu.bindValue(":uid", userId);
+    if (!qu.exec())
+    {
+        qWarning() << "assignRfidCard users:" << qu.lastError().text();
+        return false;
+    }
+    // Update card
+    QSqlQuery qc(DB_Connection);
+    qc.prepare(R"(
+        UPDATE rfid_cards SET user_id=:uid, status='assigned', assigned_at=:ts WHERE rfid=:rfid
+    )");
+    qc.bindValue(":uid", userId);
+    qc.bindValue(":ts", nowIso8601());
+    qc.bindValue(":rfid", rfid);
+    if (!qc.exec())
+    {
+        qWarning() << "assignRfidCard card:" << qc.lastError().text();
+        return false;
+    }
+    return qc.numRowsAffected() > 0;
+}
+
+bool DatabaseManager::unassignRfidCard(const QString &rfid)
+{
+    if (rfid.trimmed().isEmpty())
+        return false;
+    QSqlQuery qu(DB_Connection);
+    qu.prepare("UPDATE users SET rfid=NULL WHERE rfid=:rfid");
+    qu.bindValue(":rfid", rfid);
+    qu.exec();
+    QSqlQuery qc(DB_Connection);
+    qc.prepare("UPDATE rfid_cards SET user_id=NULL, status='available' WHERE rfid=:rfid");
+    qc.bindValue(":rfid", rfid);
+    if (!qc.exec())
+    {
+        qWarning() << "unassignRfidCard:" << qc.lastError().text();
+        return false;
+    }
+    return qc.numRowsAffected() > 0;
+}
+
+QList<QVariantMap> DatabaseManager::listRfidCards(const QString &status,
+                                                  const QString &vehicleType,
+                                                  const QString &ticketType,
+                                                  int limit,
+                                                  int offset)
+{
+    QList<QVariantMap> out;
+    QString sql = "SELECT id, rfid, vehicle_type, ticket_type, user_id, status, created_at, assigned_at, description FROM rfid_cards WHERE 1=1";
+    if (!status.isEmpty())
+        sql += " AND status = :st";
+    if (!vehicleType.isEmpty())
+        sql += " AND vehicle_type = :vt";
+    if (!ticketType.isEmpty())
+        sql += " AND ticket_type = :tt";
+    sql += " ORDER BY id DESC LIMIT :limit OFFSET :offset";
+    QSqlQuery q(DB_Connection);
+    q.prepare(sql);
+    if (!status.isEmpty())
+        q.bindValue(":st", status);
+    if (!vehicleType.isEmpty())
+        q.bindValue(":vt", normalizeVehicle(vehicleType));
+    if (!ticketType.isEmpty())
+        q.bindValue(":tt", ticketType);
+    q.bindValue(":limit", limit);
+    q.bindValue(":offset", offset);
+    if (q.exec())
+    {
+        while (q.next())
+        {
+            QVariantMap m;
+            m.insert("id", q.value("id"));
+            m.insert("rfid", q.value("rfid"));
+            m.insert("vehicle_type", q.value("vehicle_type"));
+            m.insert("ticket_type", q.value("ticket_type"));
+            m.insert("user_id", q.value("user_id"));
+            m.insert("status", q.value("status"));
+            m.insert("created_at", q.value("created_at"));
+            m.insert("assigned_at", q.value("assigned_at"));
+            m.insert("description", q.value("description"));
+            out.append(m);
+        }
+    }
+    else
+    {
+        qWarning() << "listRfidCards:" << q.lastError().text();
+    }
+    return out;
+}
+
+bool DatabaseManager::setRfidCardStatus(const QString &rfid, const QString &status)
+{
+    if (rfid.trimmed().isEmpty())
+        return false;
+    QSqlQuery q(DB_Connection);
+    q.prepare("UPDATE rfid_cards SET status=:st WHERE rfid=:rfid");
+    q.bindValue(":st", status);
+    q.bindValue(":rfid", rfid);
+    if (!q.exec())
+    {
+        qWarning() << "setRfidCardStatus:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
 }
 
 bool DatabaseManager::migrateParkingSessionsPricingNotNull()

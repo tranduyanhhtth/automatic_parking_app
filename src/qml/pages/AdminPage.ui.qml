@@ -96,6 +96,9 @@ Item {
 						TabButton {
 							text: "Doanh thu"
 						}
+						TabButton {
+							text: "Thẻ RFID"
+						}
 					}
 					StackLayout {
 						Layout.fillWidth: true
@@ -969,6 +972,64 @@ Item {
 									}
 									pricingJson.text = json
 									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
+								}
+							}
+							// RFID Cards
+							Rectangle {
+								color: "lightgray"
+								Layout.fillWidth: true
+								Layout.fillHeight: true
+								border.color: "darkgray"
+								ColumnLayout {
+									anchors.fill: parent
+									anchors.margins: 10
+									spacing: 8
+									RfidCardsLogic { id: rfidLogic; adminPage: adminPage; notify: (m)=> toast.show(m) }
+									RowLayout {
+										Layout.fillWidth: true
+										spacing: 8
+										TextField { id: tfRfid; Layout.preferredWidth: 200; placeholderText: "Quét/nhập RFID"; color: "white"; placeholderTextColor: "white"; background: Rectangle{color:'#222';radius:8;border.color:'#555'} }
+										ComboBox { id: cbVehicle; Layout.preferredWidth: 120; model: ["Xe máy","Ô tô"]; background: Rectangle{radius:8} }
+										ComboBox { id: cbTicket; Layout.preferredWidth: 180; model: ["Giờ","Ngày (ngày)","Ngày (đêm)","Qua đêm","Tháng","Quý","Năm"]; background: Rectangle{radius:8} }
+										ComboBox { id: cbStatus; Layout.preferredWidth: 140; model: ["available","assigned","lost","damaged"]; background: Rectangle{radius:8} }
+										TextField { id: tfDesc; Layout.fillWidth: true; placeholderText: "Mô tả"; color: "white"; placeholderTextColor: "white"; background: Rectangle{color:'#222';radius:8;border.color:'#555'} }
+										Rectangle { width: 110; height: 28; radius: 8; color: "#2b7"
+											Text{anchors.centerIn: parent; text: "Lưu"; color: "white"}
+											MouseArea{ anchors.fill: parent; onClicked: rfidLogic.triggerSave = !rfidLogic.triggerSave }
+										}
+										Rectangle { width: 110; height: 28; radius: 8; color: "#2b7"
+											Text{anchors.centerIn: parent; text: "Làm mới"; color: "white"}
+											MouseArea{ anchors.fill: parent; onClicked: rfidLogic.triggerRefresh = !rfidLogic.triggerRefresh }
+										}
+									}
+									Rectangle {
+										Layout.fillWidth: true
+										Layout.fillHeight: true
+										color: "#222"; border.color: "#333"; radius: 8
+										ColumnLayout { anchors.fill: parent; anchors.margins:8; spacing:6
+											RowLayout { Layout.fillWidth: true; spacing:8
+												Text{ text:"RFID"; color:"white"; Layout.preferredWidth: 160 }
+												Text{ text:"Loại xe"; color:"white"; Layout.preferredWidth: 100 }
+												Text{ text:"Loại vé"; color:"white"; Layout.preferredWidth: 140 }
+												Text{ text:"User"; color:"white"; Layout.preferredWidth: 80 }
+												Text{ text:"Trạng thái"; color:"white"; Layout.preferredWidth: 120 }
+												Text{ text:"Gán lúc"; color:"white"; Layout.preferredWidth: 160 }
+												Text{ text:"Mô tả"; color:"white"; Layout.fillWidth: true }
+											}
+											ListView { Layout.fillWidth: true; Layout.fillHeight: true; model: rfidLogic.listModel
+												delegate: RowLayout {
+													width: parent ? parent.width : 0; spacing: 8
+													Text{ text: rfid; color: "white"; Layout.preferredWidth: 160; elide: Text.ElideRight }
+													Text{ text: vehicle_type; color: "white"; Layout.preferredWidth: 100 }
+													Text{ text: ticket_type; color: "white"; Layout.preferredWidth: 140 }
+													Text{ text: (user_id||''); color: "white"; Layout.preferredWidth: 80 }
+													Text{ text: status; color: "white"; Layout.preferredWidth: 120 }
+													Text{ text: (assigned_at||''); color: "white"; Layout.preferredWidth: 160 }
+													Text{ text: (description||''); color: "#ddd"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+												}
+											}
+										}
+									}
 								}
 							}
 						}
