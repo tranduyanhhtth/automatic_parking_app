@@ -1,33 +1,21 @@
 import QtQuick
 
-// Logic cho phần Đăng ký vé tháng/quý/năm trong trang Admin
-// Gắn với các trigger trong AdminPage.ui.qml để thực hiện hành động
 Item {
-    id: adminSubscriptionsLogic
-    // Trang UI cần gán: adminPage object
+    id: subsLogic
     property Item adminPage
-    // Hàm thông báo (truyền từ MainWindow): notify(msg)
     property var notify
 
     function validate() {
-        if (!adminPage) return "Trang Admin chưa sẵn sàng";
+        if (!adminPage) return 'Trang Admin chưa sẵn sàng';
         if (!adminPage.subUser || adminPage.subUser.currentIndex < 0)
-            return "Vui lòng chọn người dùng";
+            return 'Vui lòng chọn người dùng';
         if (!adminPage.subPlate || !adminPage.subPlate.text || adminPage.subPlate.text.length < 5)
-            return "Biển số không hợp lệ";
+            return 'Biển số không hợp lệ';
         if (!adminPage.subRfid || !adminPage.subRfid.text || adminPage.subRfid.text.length < 3)
-            return "ID thẻ không hợp lệ";
+            return 'ID thẻ không hợp lệ';
         if (!adminPage.subPrice || !adminPage.subPrice.text)
-            return "Chưa nhập giá";
-        return "";
-    }
-
-    // Helpers
-    function vehicleTextToCode(txt) {
-        const t = (''+txt).toLowerCase()
-        if (t.indexOf('xe máy') === 0 || t.indexOf('xemay') === 0 || t === 'bike' || t === 'motorbike') return 'motorbike'
-        if (t.indexOf('ô tô') === 0 || t.indexOf('o to') === 0 || t.indexOf('oto') === 0 || t === 'car') return 'car'
-        return 'motorbike'
+            return 'Chưa nhập giá';
+        return '';
     }
     function planToTicket(planTxt) {
         const p = (''+planTxt).toLowerCase()
@@ -49,7 +37,6 @@ Item {
     function updateSuggestions() {
         if (!adminPage) return
         const ticket = planToTicket(adminPage.subPlan && adminPage.subPlan.currentText)
-        // Gợi ý ngày kết thúc dựa vào ngày bắt đầu và gói
         const start = adminPage.subStart ? adminPage.subStart.text : ''
         if (start && adminPage.subEnd) {
             const months = ticket === 'monthly' ? 1 : (ticket === 'quarterly' ? 3 : (ticket === 'yearly' ? 12 : 0))
@@ -57,13 +44,12 @@ Item {
         }
     }
 
-    // Lắng nghe các trigger từ UI
+    // Triggers
     Connections {
         target: adminPage
         function onTriggerSubCreateChanged() {
             if (!adminPage.triggerSubCreate) return
-            const err = validate();
-            if (err) { if (notify) notify(err); return }
+            const err = validate(); if (err) { if (notify) notify(err); return }
             const name = adminPage.subUser.currentText
             const plate = adminPage.subPlate.text
             const rfid = adminPage.subRfid.text
@@ -72,7 +58,6 @@ Item {
             const endDate = adminPage.subEnd.text
             const payment = adminPage.subPayment.currentText
             const price = parseInt(adminPage.subPrice.text || '0') || 0
-            // upsert user
             const vtDefault = 'motorbike'
             var userId = (typeof repo !== 'undefined' && repo.upsertUser) ? repo.upsertUser(name, '', rfid, plate, vtDefault) : -1
             if (userId <= 0) { if (notify) notify('Không tạo được người dùng'); return }
@@ -90,8 +75,7 @@ Item {
         }
         function onTriggerSubExtendChanged() {
             if (!adminPage.triggerSubExtend) return
-            const err = validate();
-            if (err) { if (notify) notify(err); return }
+            const err = validate(); if (err) { if (notify) notify(err); return }
             const name = adminPage.subUser.currentText
             const plate = adminPage.subPlate.text
             const rfid = adminPage.subRfid.text
@@ -122,14 +106,6 @@ Item {
         }
     }
 
-    // Gợi ý khi người dùng đổi gói hoặc ngày bắt đầu
-    Connections {
-        target: adminPage ? adminPage.subPlan : null
-        function onCurrentIndexChanged() { updateSuggestions() }
-        function onCurrentTextChanged() { updateSuggestions() }
-    }
-    Connections {
-        target: adminPage ? adminPage.subStart : null
-        function onTextChanged() { updateSuggestions() }
-    }
+    Connections { target: adminPage ? adminPage.subPlan : null; function onCurrentIndexChanged() { updateSuggestions() } function onCurrentTextChanged() { updateSuggestions() } }
+    Connections { target: adminPage ? adminPage.subStart : null; function onTextChanged() { updateSuggestions() } }
 }

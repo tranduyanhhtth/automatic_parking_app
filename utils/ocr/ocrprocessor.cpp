@@ -456,7 +456,7 @@ QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
                 return {};
             QPainter p(&img);
             p.setRenderHint(QPainter::Antialiasing, true);
-            QPen pen(Qt::red);
+            QPen pen(Qt::green);
             pen.setWidth(3);
             p.setPen(pen);
             for (const QRectF &rc : boxes)

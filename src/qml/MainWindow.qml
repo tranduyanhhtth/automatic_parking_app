@@ -145,8 +145,19 @@ Item {
         }
     }
 
-    // Admin page login logic
-    AdminLoginLogic { id: adminLoginLogic }
+    // Admin orchestrator (handles login, users, pricing save, subscriptions, etc.)
+    Loader {
+        id: adminLogicLoader
+        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminLogic.qml"
+        active: true
+        onLoaded: {
+            if (item) {
+                item.adminPage = adminPage
+                item.notify = (msg) => root.showToast(msg)
+                item.allowedAccounts = root.allowedAccounts
+            }
+        }
+    }
     Connections {
         target: searchPage
         function onTriggerCloseChanged() {
@@ -170,49 +181,7 @@ Item {
     PricingLogic {
         id: pricingLogic
     }
-    Loader {
-        id: adminSubscriptionsLogicLoader
-        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminSubscriptionsLogic.qml"
-        active: true
-        onLoaded: {
-            if (item) {
-                item.adminPage = adminPage
-                item.notify = (msg) => root.showToast(msg)
-            }
-        }
-    }
-    // Subscriptions CRUD (edit/view + save)
-    Loader {
-        id: adminSubscriptionsCrudLoader
-        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminSubscriptionsCrud.qml"
-        active: true
-        onLoaded: {
-            if (item) {
-                item.adminPage = adminPage
-                item.notify = (msg) => root.showToast(msg)
-                // Load data once so the list shows in view-only mode
-                if (item.load) item.load()
-            }
-        }
-    }
-    // Logic bảng giá cho trang quản trị (điều khiển min/max các loại vé)
-    Loader {
-        id: adminPricingLogicLoader
-        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminPricingLogic.qml"
-        active: true
-    }
-    Loader {
-        id: adminPricingActionsLoader
-        source: "qrc:/qt/qml/smart_parking_system/src/qml/logic/AdminPricingActions.qml"
-        active: true
-        onLoaded: {
-            if (item) {
-                item.adminPage = adminPage
-                item.pricingLogic = adminPricingLogicLoader.item
-                item.notify = (msg) => root.showToast(msg)
-            }
-        }
-    }
+    // Legacy loaders removed; AdminLogic handles all admin features
     SearchLogic {
         id: searchLogic
         searchPage: searchPage

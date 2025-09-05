@@ -17,6 +17,8 @@ Item {
 	property alias pricingIncEvery: pricingIncEvery
 	property alias pricingIncFee: pricingIncFee
 	property alias pricingCap: pricingCap
+	// Expose hidden JSON buffer so AdminLogic can read it
+	property alias pricingJson: pricingJson
 	// Expose vehicle combobox to external logic (AdminPricingActions)
 	property alias pricingVehicleCombo: pricingVehicle
 	// Login overlay state and triggers
@@ -67,7 +69,7 @@ Item {
 						}
 						MouseArea {
 							anchors.fill: parent
-							onClicked: adminPage.triggerLogoutAndClose = true
+							onClicked: adminPage.triggerLogoutAndClose = !adminPage.triggerLogoutAndClose
 						}
 					}
 				}
@@ -104,6 +106,7 @@ Item {
 							color: "lightgray"
 							Layout.fillWidth: true
 							Layout.fillHeight: true
+							border.color: "darkgray"
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
@@ -216,6 +219,7 @@ Item {
 							color: "lightgray"
 							Layout.fillWidth: true
 							Layout.fillHeight: true
+							border.color: "darkgray"
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
@@ -420,6 +424,7 @@ Item {
 							color: "lightgray"
 							Layout.fillWidth: true
 							Layout.fillHeight: true
+							border.color: "darkgray"
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
@@ -638,7 +643,7 @@ Item {
 							color: "lightgray"
 							Layout.fillWidth: true
 							Layout.fillHeight: true
-							// Use logic component to manage data/state
+							border.color: "darkgray"
 							PricingLogic {
 								id: pricingLogic
 							}
@@ -692,7 +697,7 @@ Item {
 										MouseArea {
 											anchors.fill: parent
 											enabled: pricingLogic.editMode
-											onClicked: pricingLogic.requestSave = true
+											onClicked: pricingLogic.requestSave = !pricingLogic.requestSave
 										}
 									}
 								}
@@ -807,6 +812,7 @@ Item {
 							color: "lightgray"
 							Layout.fillWidth: true
 							Layout.fillHeight: true
+							border.color: "darkgray"
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
@@ -962,7 +968,7 @@ Item {
 													e)
 									}
 									pricingJson.text = json
-									adminPage.triggerSavePricing = true
+									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
 								}
 							}
 						}
