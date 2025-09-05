@@ -77,68 +77,18 @@ Item {
             adminPage.triggerDeleteUser = false;
         }
         function onTriggerAddPricingChanged() {
-            console.log("onTriggerAddPricingChanged fired, triggerAddPricing=", adminPage.triggerAddPricing)
+            console.log("[AdminLoginLogic] (legacy) onTriggerAddPricingChanged -> ignored; handled by AdminPricingActions")
             if (!adminPage.triggerAddPricing) return;
-            if (!root.isAuthenticated) {
-                if (root && root.showToast) root.showToast("Vui lòng đăng nhập để thao tác bảng giá");
-                adminPage.triggerAddPricing = false;
-                return;
-            }
-            // Prepare a blank pricing JSON template
-            var tpl = {
-                base_fee: 0,
-                grace_minutes: 0,
-                incremental: { every: 60, fee: 0 },
-                cap: 0
-            };
-            adminPage.pricingJson.text = JSON.stringify(tpl, null, 2);
-            if (root && root.showToast) root.showToast("Đã tạo mẫu bảng giá mới (chỉnh sửa rồi Lưu)");
             adminPage.triggerAddPricing = false;
         }
         function onTriggerSavePricingChanged() {
-            console.log("onTriggerSavePricingChanged fired, triggerSavePricing=", adminPage.triggerSavePricing)
+            console.log("[AdminLoginLogic] (legacy) onTriggerSavePricingChanged -> ignored; handled by AdminPricingActions")
             if (!adminPage.triggerSavePricing) return;
-            if (!root.isAuthenticated) {
-                if (root && root.showToast) root.showToast("Vui lòng đăng nhập để thao tác bảng giá");
-                adminPage.triggerSavePricing = false;
-                return;
-            }
-            if (root && root.showToast) root.showToast("Đang lưu bảng giá...");
-            var vehicle = adminPage.pricingVehicle.currentText || "Xe máy";
-            var type = adminPage.pricingType.currentText || "per_entry";
-            // Prefer structured fields if present
-            var js = null;
-            try {
-                if (adminPage.pricingBaseFee) {
-                    js = {
-                        base_fee: parseInt(adminPage.pricingBaseFee.text) || 0,
-                        grace_minutes: parseInt(adminPage.pricingGraceMinutes.text) || 0,
-                        incremental: { every: parseInt(adminPage.pricingIncEvery.text) || 60, fee: parseInt(adminPage.pricingIncFee.text) || 0 },
-                        cap: parseInt(adminPage.pricingCap.text) || 0
-                    };
-                } else {
-                    js = JSON.parse(adminPage.pricingJson.text || "{}");
-                }
-                var ok = repo && repo.savePricingJson ? repo.savePricingJson(vehicle, type, JSON.stringify(js), "ui") : false;
-                if (root && root.showToast) root.showToast(ok ? "Đã lưu bảng giá" : "Lỗi lưu bảng giá");
-            } catch (e) {
-                if (root && root.showToast) root.showToast("JSON không hợp lệ: " + e.message);
-            }
             adminPage.triggerSavePricing = false;
         }
         function onTriggerDeletePricingChanged() {
-            console.log("onTriggerDeletePricingChanged fired, triggerDeletePricing=", adminPage.triggerDeletePricing)
+            console.log("[AdminLoginLogic] (legacy) onTriggerDeletePricingChanged -> ignored; handled by AdminPricingActions")
             if (!adminPage.triggerDeletePricing) return;
-            if (!root.isAuthenticated) {
-                if (root && root.showToast) root.showToast("Vui lòng đăng nhập để thao tác bảng giá");
-                adminPage.triggerDeletePricing = false;
-                return;
-            }
-            if (root && root.showToast) root.showToast("Đang xóa bảng giá...");
-            var vehicle = adminPage.pricingVehicle.currentText || "Xe máy";
-            var type = adminPage.pricingType.currentText || "per_entry";
-            var ok = repo && repo.deletePricing ? repo.deletePricing(vehicle, type) : false;
-            if (root && root.showToast) root.showToast(ok ? "Đã xóa bảng giá" : "Lỗi xóa bảng giá");
             adminPage.triggerDeletePricing = false;
         }
     }
@@ -155,5 +105,4 @@ Item {
     Component.onCompleted: {
         if (adminPage && adminPage.pricingJson) adminPage.pricingJson.text = buildPricingPreview();
     }
-
 }

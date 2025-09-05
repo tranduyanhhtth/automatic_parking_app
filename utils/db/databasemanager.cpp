@@ -1400,3 +1400,105 @@ int DatabaseManager::getPricingId(const QString &vehicleType, const QString &tic
 {
     return getPricingIdFor(vehicleType, ticketType);
 }
+
+bool DatabaseManager::upsertPricingRow(const QString &vehicleType,
+                                       const QString &ticketType,
+                                       int baseFee,
+                                       int durationMinutes,
+                                       int incrementalFee,
+                                       int maxDailyFee,
+                                       double discountPercentage,
+                                       int gracePeriod,
+                                       const QString &description,
+                                       const QString &startTime,
+                                       const QString &endTime)
+{
+    const QString vt = normalizeVehicle(vehicleType);
+    QSqlQuery q(DB_Connection);
+    // Try update first
+    q.prepare(R"(
+        UPDATE pricing
+        SET base_fee=:bf,
+            duration_minutes=:dm,
+            incremental_fee=:inc,
+            max_daily_fee=:cap,
+            discount_percentage=:disc,
+            grace_period=:gr,
+            description=:desc,
+            start_time=:st,
+            end_time=:et
+        WHERE vehicle_type=:vt AND ticket_type=:tt
+    )");
+    q.bindValue(":bf", baseFee);
+    if (durationMinutes <= 0)
+        q.bindValue(":dm", QVariant(QVariant::Int));
+    else
+        q.bindValue(":dm", durationMinutes);
+    if (incrementalFee <= 0)
+        q.bindValue(":inc", QVariant(QVariant::Int));
+    else
+        q.bindValue(":inc", incrementalFee);
+    if (maxDailyFee <= 0)
+        q.bindValue(":cap", QVariant(QVariant::Int));
+    else
+        q.bindValue(":cap", maxDailyFee);
+    q.bindValue(":disc", discountPercentage);
+    q.bindValue(":gr", gracePeriod);
+    q.bindValue(":desc", description);
+    if (startTime.isEmpty())
+        q.bindValue(":st", QVariant(QVariant::String));
+    else
+        q.bindValue(":st", startTime);
+    if (endTime.isEmpty())
+        q.bindValue(":et", QVariant(QVariant::String));
+    else
+        q.bindValue(":et", endTime);
+    q.bindValue(":vt", vt);
+    q.bindValue(":tt", ticketType);
+    if (!q.exec())
+    {
+        qWarning() << "upsertPricingRow update:" << q.lastError().text();
+        return false;
+    }
+    if (q.numRowsAffected() > 0)
+        return true;
+
+    // Insert if nothing updated
+    QSqlQuery qi(DB_Connection);
+    qi.prepare(R"(
+        INSERT INTO pricing (vehicle_type, ticket_type, base_fee, duration_minutes, incremental_fee, max_daily_fee, discount_percentage, grace_period, description, start_time, end_time)
+        VALUES (:vt, :tt, :bf, :dm, :inc, :cap, :disc, :gr, :desc, :st, :et)
+    )");
+    qi.bindValue(":vt", vt);
+    qi.bindValue(":tt", ticketType);
+    qi.bindValue(":bf", baseFee);
+    if (durationMinutes <= 0)
+        qi.bindValue(":dm", QVariant(QVariant::Int));
+    else
+        qi.bindValue(":dm", durationMinutes);
+    if (incrementalFee <= 0)
+        qi.bindValue(":inc", QVariant(QVariant::Int));
+    else
+        qi.bindValue(":inc", incrementalFee);
+    if (maxDailyFee <= 0)
+        qi.bindValue(":cap", QVariant(QVariant::Int));
+    else
+        qi.bindValue(":cap", maxDailyFee);
+    qi.bindValue(":disc", discountPercentage);
+    qi.bindValue(":gr", gracePeriod);
+    qi.bindValue(":desc", description);
+    if (startTime.isEmpty())
+        qi.bindValue(":st", QVariant(QVariant::String));
+    else
+        qi.bindValue(":st", startTime);
+    if (endTime.isEmpty())
+        qi.bindValue(":et", QVariant(QVariant::String));
+    else
+        qi.bindValue(":et", endTime);
+    if (!qi.exec())
+    {
+        qWarning() << "upsertPricingRow insert:" << qi.lastError().text();
+        return false;
+    }
+    return true;
+}

@@ -145,7 +145,7 @@ namespace
             return result;
         }
         // Pattern without letter: XX-ZZZZZ
-        QRegularExpression reNoLetter("^([0-9A-Z]{2})[-]?([0-9A-Z\.]{3,6})$");
+        static const QRegularExpression reNoLetter(R"(^([0-9A-Z]{2})[-]?([0-9A-Z\\.]{3,6})$)");
         m = reNoLetter.match(filtered);
         if (!m.hasMatch())
             return {};

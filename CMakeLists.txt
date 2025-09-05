@@ -39,12 +39,16 @@ qt_add_qml_module(appsmart_parking_system
         src/qml/pages/SearchPage.ui.qml
         src/qml/pages/AdminPage.ui.qml
         # Logic helpers
+        src/qml/logic/AdminLoginLogic.qml
+        src/qml/logic/AdminPricingLogic.qml
+        src/qml/logic/AdminPricingActions.qml
+        src/qml/logic/AdminSubscriptionsCrud.qml
+        src/qml/logic/AdminSubscriptionsLogic.qml
         src/qml/logic/CameraLogic.qml
         src/qml/logic/BarrierLogic.qml
         src/qml/logic/PricingLogic.qml
         src/qml/logic/SearchLogic.qml
         src/qml/logic/HidLogLogic.qml
-        src/qml/logic/AdminLoginLogic.qml
 
     SOURCES
         utils/camera/cameramanager.h utils/camera/cameramanager.cpp

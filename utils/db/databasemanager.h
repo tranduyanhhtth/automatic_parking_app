@@ -120,6 +120,19 @@ public:
     Q_INVOKABLE int getPricingId(const QString &vehicleType,
                                  const QString &ticketType) override;
 
+    // Lưu một dòng pricing chuẩn hóa (update nếu đã tồn tại theo vehicle_type + ticket_type)
+    Q_INVOKABLE bool upsertPricingRow(const QString &vehicleType,
+                                      const QString &ticketType,
+                                      int baseFee,
+                                      int durationMinutes,
+                                      int incrementalFee,
+                                      int maxDailyFee,
+                                      double discountPercentage,
+                                      int gracePeriod,
+                                      const QString &description,
+                                      const QString &startTime,
+                                      const QString &endTime);
+
 private:
     QSqlDatabase DB_Connection;
 

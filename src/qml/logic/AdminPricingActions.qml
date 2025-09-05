@@ -37,7 +37,7 @@ Item {
 
     // Mapping "Xe máy"/"Ô tô" -> repo keys
     function vehicleKey(label) {
-        return (label === "Xe máy") ? "motorbike" : "car";
+        return (label === "Xe máy") ? "bike" : "car";
     }
 
     // Load bảng giá (min/max) đã lưu trong DB cho phương tiện
@@ -65,23 +65,69 @@ Item {
         target: adminPage
         // Nhấn Lưu: cố gắng gọi repo.savePricingJson nếu có
         function onTriggerSavePricingChanged() {
-            if (!adminPage.triggerSavePricing) return
-            if (!pricingLogic) { if (notify) notify("Thiếu logic bảng giá"); return }
-            // Ghi dưới ticket type ổn định 'admin_table' để không ảnh hưởng công thức tính phí runtime
-            const vt = vehicleKey(adminPage.pricingVehicleCombo.currentText)
-            const wrapped = {}
-            wrapped[vt] = pricingLogic.table[vt]
-            const json = JSON.stringify(wrapped)
-            const ptype = "admin_table"
-            let ok = false
+            if (!adminPage || !adminPage.triggerSavePricing) return
+            // Log selected vehicle label if available
             try {
-                if (typeof repo !== 'undefined' && repo.savePricingJson) {
-                    ok = repo.savePricingJson(vt, ptype, json, "admin ui")
+                const label = (adminPage && adminPage.pricingVehicleCombo) ? adminPage.pricingVehicleCombo.currentText : '(unknown)'
+                console.log('[AdminPricingActions] Start save for vehicle label:', label)
+            } catch(e) {}
+            // Ưu tiên JSON do PricingLogic (UI) phát ra, nếu không có thì fallback bảng min/max
+            let json = null
+            try {
+                if (adminPage.pricingJson && adminPage.pricingJson.text && adminPage.pricingJson.text.length > 0) {
+                    json = adminPage.pricingJson.text
                 }
-            } catch(e) {
+            } catch(e) { json = null }
+            // Nếu không có JSON từ UI thì không thực hiện lưu
+            if (!json) {
+                try { console.log('[AdminPricingActions] No JSON from UI; aborting save') } catch(e) {}
+                adminPage.triggerSavePricing = false
+                if (notify) notify('Thiếu dữ liệu để lưu')
+                return
+            }
+            // Thử parse json như mảng các dòng pricing đã chuẩn hóa và upsert từng dòng
+            let ok = false
+            let savedCount = 0
+            try {
+                const arr = JSON.parse(json)
+                try { console.log('[AdminPricingActions] Parsed JSON type:', Array.isArray(arr) ? 'array' : (typeof arr), 'length:', Array.isArray(arr) ? arr.length : -1) } catch(e) {}
+                try { console.log('[AdminPricingActions] repo exists:', (typeof repo !== 'undefined'), 'has upsertPricingRow:', (repo && typeof repo.upsertPricingRow !== 'undefined')) } catch(e) {}
+                if (Array.isArray(arr) && typeof repo !== 'undefined' && repo.upsertPricingRow) {
+                    for (let i = 0; i < arr.length; ++i) {
+                        const r = arr[i] || {}
+                        const vtNorm = (r.vehicle_type || "").toString()
+                        const tt = (r.ticket_type || "").toString()
+                        const base = parseInt(r.base_fee || 0)
+                        const dur = (r.duration_minutes === null || r.duration_minutes === undefined) ? -1 : parseInt(r.duration_minutes)
+                        const inc = (r.incremental_fee === null || r.incremental_fee === undefined) ? -1 : parseInt(r.incremental_fee)
+                        const cap = (r.max_daily_fee === null || r.max_daily_fee === undefined) ? -1 : parseInt(r.max_daily_fee)
+                        const disc = (r.discount_percentage === null || r.discount_percentage === undefined) ? 0 : parseFloat(r.discount_percentage)
+                        const grace = (r.grace_period === null || r.grace_period === undefined) ? 0 : parseInt(r.grace_period)
+                        const desc = (r.description || "").toString()
+                        const st = (r.start_time || "").toString()
+                        const et = (r.end_time || "").toString()
+                        try { console.log('[AdminPricingActions] Upsert row', i, vtNorm, tt, 'base', base, 'dur', dur, 'cap', cap) } catch(e) {}
+                        const okRow = repo.upsertPricingRow(vtNorm, tt, base,
+                                                             dur, inc, cap,
+                                                             disc, grace,
+                                                             desc, st, et)
+                        try { console.log('[AdminPricingActions] upsertPricingRow returned:', okRow) } catch(e) {}
+                        if (okRow) savedCount++
+                    }
+                    ok = savedCount > 0
+                    try { console.log('[AdminPricingActions] Saved rows count:', savedCount) } catch(e) {}
+                } else {
+                    try { console.log('[AdminPricingActions] Not an array JSON or missing repo.upsertPricingRow; aborting save.') } catch(e) {}
+                    ok = false
+                }
+            } catch (e) {
+                // JSON không hợp lệ
+                try { console.log('[AdminPricingActions] JSON parse error:', e) } catch(e2) {}
                 ok = false
             }
-            if (notify) notify(ok ? "Đã lưu bảng giá" : "Đã cập nhật bảng giá (tạm) — không tìm thấy repo")
+            if (notify) notify(ok ? "Đã lưu bảng giá" : "Không thể lưu bảng giá")
+            // Reset trigger
+            adminPage.triggerSavePricing = false
         }
         // Nhấn Xóa: trả về mặc định
         function onTriggerDeletePricingChanged() {

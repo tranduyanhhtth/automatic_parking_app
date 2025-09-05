@@ -1,97 +1,206 @@
 import QtQuick
+import QtQml.Models
 
 Item {
-    Connections {
-        target: form.miAdmin
-        function onTriggered() { form.adminDialog.dialog.open() }
+    id: root
+    width: 0
+    height: 0
+
+    // Edit mode for table
+    property bool editMode: false
+    // Bind this from UI: "bike" or "car"
+    property string selectedVehicle: "bike"
+    // JSON payload after save
+    property string jsonPayload: "[]"
+    // UI-only trigger: when set to true from .ui.qml, perform save and reset.
+    property bool requestSave: false
+
+    // Expose the pricing model
+    property var pricingModel: model
+    // Filtered view per selected vehicle for UI binding
+    property var filteredModel: filtered
+
+    // Signal emitted when saved with JSON payload
+    signal saved(string json)
+
+    // The pricing data model for bike and car
+    ListModel {
+        id: model
+        // Bike (Xe máy)
+        ListElement { vehicle_type: "bike"; ticket_type: "hourly";      ticket_label: "Vé giờ (lượt)";       description: "Mỗi giờ đầu tiên (tối đa 60 phút/lượt); quá giờ tính thêm lượt mới."; price_hint: "5.000 - 8.000/lượt"; price_value: "" }
+        ListElement { vehicle_type: "bike"; ticket_type: "daily_day";   ticket_label: "Vé ngày (ban ngày)";  description: "Từ 6h-18h, tối đa 12 giờ; vượt quá tính thêm ngày.";                                 price_hint: "20.000 - 30.000/ngày"; price_value: "" }
+        ListElement { vehicle_type: "bike"; ticket_type: "daily_night"; ticket_label: "Vé ngày (ban đêm)";  description: "Từ 18h-6h, tối đa 12 giờ; qua đêm tính bằng 6 lượt.";                                price_hint: "25.000 - 40.000/ngày"; price_value: "" }
+        ListElement { vehicle_type: "bike"; ticket_type: "overnight";   ticket_label: "Vé qua đêm";         description: "Từ 18h hôm trước đến 6h hôm sau (tính 6 lượt).";                                   price_hint: "30.000 - 48.000/đêm"; price_value: "" }
+        ListElement { vehicle_type: "bike"; ticket_type: "monthly";     ticket_label: "Vé tháng";            description: "Đăng ký 1 tháng (30 ngày), sử dụng không giới hạn lượt ra vào.";                      price_hint: "200.000 - 300.000/tháng"; price_value: "" }
+        ListElement { vehicle_type: "bike"; ticket_type: "quarterly";   ticket_label: "Vé quý (3 tháng)";    description: "Đăng ký 3 tháng, giảm 10% so với tháng lẻ.";                                             price_hint: "540.000 - 810.000/quý"; price_value: "" }
+        ListElement { vehicle_type: "bike"; ticket_type: "yearly";      ticket_label: "Vé năm";              description: "Đăng ký 12 tháng, giảm 20% so với tháng lẻ.";                                           price_hint: "1.920.000 - 2.880.000/năm"; price_value: "" }
+        // Car (<9 seats)
+        ListElement { vehicle_type: "car"; ticket_type: "hourly";      ticket_label: "Vé giờ (lượt)";       description: "Mỗi giờ đầu tiên (tối đa 60 phút/lượt); quá giờ tính thêm lượt mới.";               price_hint: "20.000 - 30.000/lượt"; price_value: "" }
+        ListElement { vehicle_type: "car"; ticket_type: "daily_day";   ticket_label: "Vé ngày (ban ngày)";  description: "Từ 6h-18h, tối đa 12 giờ; vượt quá tính thêm ngày (theo block 4 giờ).";               price_hint: "150.000 - 240.000/ngày"; price_value: "" }
+        ListElement { vehicle_type: "car"; ticket_type: "daily_night"; ticket_label: "Vé ngày (ban đêm)";  description: "Từ 18h-6h, tối đa 12 giờ; qua đêm tính bằng 6 lượt.";                                price_hint: "180.000 - 300.000/ngày"; price_value: "" }
+        ListElement { vehicle_type: "car"; ticket_type: "overnight";   ticket_label: "Vé qua đêm";         description: "Từ 18h hôm trước đến 6h hôm sau (tính 6 lượt).";                                     price_hint: "120.000 - 180.000/đêm"; price_value: "" }
+        ListElement { vehicle_type: "car"; ticket_type: "monthly";     ticket_label: "Vé tháng";            description: "Đăng ký 1 tháng (30 ngày), sử dụng không giới hạn lượt ra vào.";                      price_hint: "1.500.000 - 2.000.000/tháng"; price_value: "" }
+        ListElement { vehicle_type: "car"; ticket_type: "quarterly";   ticket_label: "Vé quý (3 tháng)";    description: "Đăng ký 3 tháng, giảm 10% so với tháng lẻ.";                                             price_hint: "4.050.000 - 5.400.000/quý"; price_value: "" }
+        ListElement { vehicle_type: "car"; ticket_type: "yearly";      ticket_label: "Vé năm";              description: "Đăng ký 12 tháng, giảm 20% so với tháng lẻ.";                                           price_hint: "14.400.000 - 19.200.000/năm"; price_value: "" }
     }
-    Connections {
-        target: form.adminDialog.dialog
-        function onTriggerLoginChanged() {
-            const username = form.adminDialog.dialog.loginUser
-            const password = form.adminDialog.dialog.loginPass
-            const ok = root.allowedAccounts.some(a => a.username === username && a.password === password)
-            form.adminDialog.dialog.loggedIn = ok
-            form.adminDialog.dialog.error = ok ? "" : "Sai tài khoản hoặc mật khẩu"
-        }
-        function onTriggerSavePricingChanged() {
-            var base = {
-                grace_minutes: parseInt(form.pricingGrace.text) || 0,
-                base_minutes: parseInt(form.pricingBaseMinutes.text) || 0,
-                base_price: parseInt(form.pricingBasePrice.text) || 0,
-                increment_minutes: parseInt(form.pricingIncMinutes.text) || 0,
-                increment_price: parseInt(form.pricingIncPrice.text) || 0,
-                cap_per_day: parseInt(form.pricingCapPerDay.text) || 0
-            }
-            var slots = []
-            for (var i = 0; i < form.pricingSlotsModel.count; ++i) {
-                var it = form.pricingSlotsModel.get(i)
-                slots.push({
-                    start: it.start || "",
-                    end: it.end || "",
-                    pricing: {
-                        increment_minutes: parseInt(it.inc_minutes) || 0,
-                        increment_price: parseInt(it.inc_price) || 0,
-                        cap: parseInt(it.cap) || 0
-                    }
-                })
-            }
-            var json = {
-                base: base,
-                incremental: form.pricingIncremental.currentText,
-                time_slots: slots,
-                rules: {
-                    overnight_fee: parseInt(form.pricingOvernight.text) || 0,
-                    lost_card_penalty: parseInt(form.pricingLostCard.text) || 0
-                }
-            }
-            if (!repo) { root.showToast("Repo không sẵn sàng"); return }
-            const ok = repo.savePricingJson(form.pricingVehicleCombo.currentText, form.pricingTicketCombo.currentText, JSON.stringify(json), "ui update")
-            root.showToast(ok ? "Đã lưu bảng giá" : "Lỗi lưu bảng giá")
-        }
-        function onTriggerLoadPricingChanged() {
-            if (!repo) { root.showToast("Repo không sẵn sàng"); return }
-            const m = repo.getLatestPricing(form.pricingVehicleCombo.currentText, form.pricingTicketCombo.currentText)
-            if (!m) { root.showToast("Chưa có cấu hình"); return }
+
+    // Filtered model used by UI
+    ListModel {
+        id: filtered
+    }
+
+    // Prefill price_value from DB if available
+    function prefillFromDb() {
+        if (typeof repo === 'undefined' || !repo.getLatestPricing)
+            return;
+        var updated = false;
+        for (var i = 0; i < model.count; ++i) {
+            var it = model.get(i)
             try {
-                var js = null
-                if (m.json) {
-                    js = m.json
-                } else if (m.time_slot_text && m.time_slot_text.length > 0) {
-                    js = JSON.parse(m.time_slot_text)
-                }
-                if (!js) { root.showToast("Dữ liệu rỗng"); return }
-                form.pricingGrace.text = (js.base && js.base.grace_minutes != null) ? ("" + js.base.grace_minutes) : ""
-                form.pricingBaseMinutes.text = (js.base && js.base.base_minutes != null) ? ("" + js.base.base_minutes) : ""
-                form.pricingBasePrice.text = (js.base && js.base.base_price != null) ? ("" + js.base.base_price) : ""
-                form.pricingIncMinutes.text = (js.base && js.base.increment_minutes != null) ? ("" + js.base.increment_minutes) : ""
-                form.pricingIncPrice.text = (js.base && js.base.increment_price != null) ? ("" + js.base.increment_price) : ""
-                form.pricingCapPerDay.text = (js.base && js.base.cap_per_day != null) ? ("" + js.base.cap_per_day) : ""
-                var incIdx = ["flat", "increasing", "decreasing"].indexOf(js.incremental || "flat")
-                form.pricingIncremental.currentIndex = incIdx < 0 ? 0 : incIdx
-                form.pricingOvernight.text = (js.rules && js.rules.overnight_fee != null) ? ("" + js.rules.overnight_fee) : ""
-                form.pricingLostCard.text = (js.rules && js.rules.lost_card_penalty != null) ? ("" + js.rules.lost_card_penalty) : ""
-                form.pricingSlotsModel.clear()
-                if (js.time_slots && js.time_slots.length) {
-                    for (var i = 0; i < js.time_slots.length; ++i) {
-                        var s = js.time_slots[i]
-                        var p = s.pricing || {}
-                        form.pricingSlotsModel.append({
-                            start: s.start || "",
-                            end: s.end || "",
-                            inc_minutes: p.increment_minutes || 0,
-                            inc_price: p.increment_price || 0,
-                            cap: p.cap || 0
-                        })
+                var m = repo.getLatestPricing(it.vehicle_type, it.ticket_type)
+                if (m && m.base_fee !== undefined && m.base_fee !== null) {
+                    var val = m.base_fee
+                    if (typeof val === 'object' && val.hasOwnProperty('toString')) val = val.toString()
+                    // Convert QVariant to int then string
+                    var num = parseInt(val)
+                    if (!isNaN(num) && num > 0) {
+                        model.setProperty(i, 'price_value', '' + num)
+                        updated = true
                     }
                 }
-                root.showToast("Đã tải cấu hình")
-            } catch (e) {
-                root.showToast("Dữ liệu không hợp lệ")
+            } catch(e) {
+                // ignore per row errors
             }
         }
-        function onTriggerAddSlotChanged() {
-            form.pricingSlotsModel.append({ start: "07:00", end: "19:00", inc_minutes: 60, inc_price: 5000, cap: 0 })
+        if (updated)
+            updateFiltered()
+    }
+
+    function updateFiltered() {
+        filtered.clear()
+        for (var i = 0; i < model.count; ++i) {
+            var it = model.get(i)
+            if (it.vehicle_type !== selectedVehicle) continue
+            filtered.append({
+                vehicle_type: it.vehicle_type,
+                ticket_type: it.ticket_type,
+                ticket_label: it.ticket_label,
+                description: it.description,
+                price_hint: it.price_hint,
+                price_value: it.price_value
+            })
+        }
+    }
+
+    function setPriceFor(ticketType, value) {
+        // Update the source model, then refresh filtered view
+        for (var i = 0; i < model.count; ++i) {
+            var it = model.get(i)
+            if (it.vehicle_type === selectedVehicle && it.ticket_type === ticketType) {
+                model.setProperty(i, 'price_value', value)
+                break
+            }
+        }
+        updateFiltered()
+    }
+
+    onSelectedVehicleChanged: updateFiltered()
+    Component.onCompleted: {
+        prefillFromDb()
+        updateFiltered()
+    }
+
+    function mapDurationMinutes(ticket) {
+        if (ticket === "hourly") return 60;
+        if (ticket === "daily_day" || ticket === "daily_night") return 12 * 60;
+        return null;
+    }
+
+    function mapStartTime(ticket) {
+        if (ticket === "daily_day") return "06:00";
+        if (ticket === "daily_night") return "18:00";
+        return null;
+    }
+
+    function mapEndTime(ticket) {
+        if (ticket === "daily_day") return "18:00";
+        if (ticket === "daily_night") return "06:00";
+        return null;
+    }
+
+    function mapDiscount(ticket) {
+        if (ticket === "quarterly") return 10;
+        if (ticket === "yearly") return 20;
+        return 0;
+    }
+
+    function buildJsonAll() {
+        var arr = []
+        for (var i = 0; i < model.count; ++i) {
+            var it = model.get(i)
+            arr.push({
+                vehicle_type: it.vehicle_type,
+                ticket_type: it.ticket_type,
+                ticket_label: it.ticket_label,
+                description: it.description,
+                base_fee: (it.price_value && it.price_value.length ? (it.price_value - 0) : 0),
+                duration_minutes: mapDurationMinutes(it.ticket_type),
+                incremental_fee: null,
+                max_daily_fee: null,
+                discount_percentage: mapDiscount(it.ticket_type),
+                grace_period: 15,
+                start_time: mapStartTime(it.ticket_type),
+                end_time: mapEndTime(it.ticket_type)
+            })
+        }
+        return JSON.stringify(arr, null, 2)
+    }
+
+    function buildJsonForSelectedVehicle() {
+        var arr = []
+        for (var i = 0; i < model.count; ++i) {
+            var it = model.get(i)
+            if (it.vehicle_type !== selectedVehicle)
+                continue
+            var feeStr = (it.price_value && it.price_value.length) ? ("" + it.price_value) : ""
+            // strip separators like dots or spaces
+            var feeNum = 0
+            if (feeStr.length) {
+                var onlyDigits = feeStr.replace(/[^0-9]/g, "")
+                feeNum = onlyDigits.length ? parseInt(onlyDigits) : 0
+            }
+            arr.push({
+                vehicle_type: it.vehicle_type,
+                ticket_type: it.ticket_type,
+                ticket_label: it.ticket_label,
+                description: it.description,
+                base_fee: feeNum,
+                duration_minutes: mapDurationMinutes(it.ticket_type),
+                incremental_fee: null,
+                max_daily_fee: null,
+                discount_percentage: mapDiscount(it.ticket_type),
+                grace_period: 15,
+                start_time: mapStartTime(it.ticket_type),
+                end_time: mapEndTime(it.ticket_type)
+            })
+        }
+        return JSON.stringify(arr, null, 2)
+    }
+
+    function save() {
+        // Save only current vehicle rows by default
+        jsonPayload = buildJsonForSelectedVehicle()
+        try {
+            console.log('[PricingLogic] Save JSON length:', jsonPayload.length, 'vehicle:', selectedVehicle)
+        } catch(e) {}
+        editMode = false
+        saved(jsonPayload)
+    }
+
+    onRequestSaveChanged: {
+        if (requestSave) {
+            save()
+            requestSave = false
         }
     }
 }

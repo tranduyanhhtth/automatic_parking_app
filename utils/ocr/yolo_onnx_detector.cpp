@@ -131,9 +131,9 @@ bool YoloOnnxDetectorImpl::detectRgb(const uchar *data, int width, int height, i
         int dx = 0;
         int dy = 0;
         letterbox(src, m_inputW, m_inputH, input, scale, dx, dy);
-        qInfo() << "YOLO letterbox:" << "orig=" << width << "x" << height
-                << ", input=" << m_inputW << "x" << m_inputH
-                << ", scale=" << scale << ", dx=" << dx << ", dy=" << dy;
+        // qInfo() << "YOLO letterbox:" << "orig=" << width << "x" << height
+        //         << ", input=" << m_inputW << "x" << m_inputH
+        //         << ", scale=" << scale << ", dx=" << dx << ", dy=" << dy;
 
         const int C = 3, H = m_inputH, W = m_inputW;
         std::vector<float> blob(C * H * W);
@@ -204,10 +204,10 @@ bool YoloOnnxDetectorImpl::detectRgb(const uchar *data, int width, int height, i
             return false;
 
         // Log output shape and parsing decision
-        qInfo() << "YOLO outShape=" << outShape[0] << outShape[1] << outShape[2]
-                << ", layout=" << (dFirst ? "[1,D,N]" : "[1,N,D]")
-                << ", N=" << N << ", D=" << D
-                << ", conf>=" << m_confThreshold;
+        // qInfo() << "YOLO outShape=" << outShape[0] << outShape[1] << outShape[2]
+        //         << ", layout=" << (dFirst ? "[1,D,N]" : "[1,N,D]")
+        //         << ", N=" << N << ", D=" << D
+        //         << ", conf>=" << m_confThreshold;
 
         QVector<QRectF> b;
         b.reserve(N);
@@ -302,10 +302,10 @@ bool YoloOnnxDetectorImpl::detectRgb(const uchar *data, int width, int height, i
             sc.push_back(s);
 
             // Detailed per-candidate log (original image space)
-            qInfo() << "YOLO candidate" << i
-                    << ": x=" << mapped.x() << " y=" << mapped.y()
-                    << " w=" << mapped.width() << " h=" << mapped.height()
-                    << " conf=" << s;
+            // qInfo() << "YOLO candidate" << i
+            //         << ": x=" << mapped.x() << " y=" << mapped.y()
+            //         << " w=" << mapped.width() << " h=" << mapped.height()
+            //         << " conf=" << s;
         }
 
         QVector<int> keep;
@@ -327,10 +327,10 @@ bool YoloOnnxDetectorImpl::detectRgb(const uchar *data, int width, int height, i
             int idx = keep[k];
             boxes.push_back(b[idx]);
             scores.push_back(sc[idx]);
-            qInfo() << "YOLO kept" << k
-                    << ": x=" << boxes.back().x() << " y=" << boxes.back().y()
-                    << " w=" << boxes.back().width() << " h=" << boxes.back().height()
-                    << " conf=" << scores.back();
+            // qInfo() << "YOLO kept" << k
+            //         << ": x=" << boxes.back().x() << " y=" << boxes.back().y()
+            //         << " w=" << boxes.back().width() << " h=" << boxes.back().height()
+            //         << " conf=" << scores.back();
         }
         return true;
     }
