@@ -88,6 +88,10 @@ Item {
         anchors.top: parent.top
         z: 9999
     }
+    
+    NotifyLogic { 
+        id: notifyLogic 
+    }
 
     // HID Log panel
     HidLogPanel {
@@ -230,9 +234,15 @@ Item {
     }
 
     // Bridge functions that were removed from UI files
-    function showToast(msg) {
-        toast.message = msg
-        toast.triggerShow = !toast.triggerShow
+    function showToast(msg, severity) {
+        if (notifyLogic && notifyLogic.push) {
+            notifyLogic.push(msg, severity)
+        } else if (typeof app !== 'undefined' && app.showToast) {
+            // fallback delegate to backend if exposed
+            app.showToast(msg)
+        } else {
+            console.log(msg)
+        }
     }
 
     // Preview source bindings for lanes (bind to alias properties on form)

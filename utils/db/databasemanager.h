@@ -133,6 +133,23 @@ public:
                                       const QString &startTime,
                                       const QString &endTime);
 
+    // RFID cards management (exposed to QML) -- moved to public to ensure meta-object visibility
+    Q_INVOKABLE bool upsertRfidCard(const QString &rfid,
+                                    const QString &vehicleType,
+                                    const QString &ticketType,
+                                    const QString &status,
+                                    const QString &description = QString());
+    Q_INVOKABLE bool assignRfidCard(const QString &rfid, int userId);
+    Q_INVOKABLE bool unassignRfidCard(const QString &rfid);
+    Q_INVOKABLE QList<QVariantMap> listRfidCards(const QString &status = QString(),
+                                                 const QString &vehicleType = QString(),
+                                                 const QString &ticketType = QString(),
+                                                 int limit = 500,
+                                                 int offset = 0);
+    Q_INVOKABLE bool setRfidCardStatus(const QString &rfid, const QString &status);
+    Q_INVOKABLE QVariantMap getRfidCard(const QString &rfid);
+    Q_INVOKABLE bool deleteRfidCard(const QString &rfid);
+
 private:
     QSqlDatabase DB_Connection;
 
@@ -162,20 +179,12 @@ private:
                        const QDateTime &checkout,
                        bool lostCard);
 
-    // RFID cards management (QML API)
-    Q_INVOKABLE bool upsertRfidCard(const QString &rfid,
-                                    const QString &vehicleType,
-                                    const QString &ticketType,
-                                    const QString &status,
-                                    const QString &description = QString());
-    Q_INVOKABLE bool assignRfidCard(const QString &rfid, int userId);
-    Q_INVOKABLE bool unassignRfidCard(const QString &rfid);
-    Q_INVOKABLE QList<QVariantMap> listRfidCards(const QString &status = QString(),
-                                                 const QString &vehicleType = QString(),
-                                                 const QString &ticketType = QString(),
-                                                 int limit = 500,
-                                                 int offset = 0);
-    Q_INVOKABLE bool setRfidCardStatus(const QString &rfid, const QString &status);
+    // Users management extensions (for Admin UI)
+    Q_INVOKABLE QList<QVariantMap> listUsers(int limit = 500, int offset = 0);
+    Q_INVOKABLE bool softDeleteUser(int userId); // mark inactive instead of hard delete
+    Q_INVOKABLE bool cancelSubscription(int subId);
+    Q_INVOKABLE bool markSubscriptionLostCard(int subId);
+    Q_INVOKABLE int expireDueSubscriptions(const QString &todayIso);
 
     // // Mã hóa đơn giản cho trường nhạy cảm (RFID, biển số)
     // QString encodeText(const QString &plain) const;

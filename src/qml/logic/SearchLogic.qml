@@ -133,8 +133,14 @@ Item {
 
             let fromIso = searchPage.dpFrom.text ? normalizeDateTime(searchPage.dpFrom.text, searchPage.fromHour.currentIndex, searchPage.fromMinute.currentIndex) : "";
             let toIso = searchPage.dpTo.text ? normalizeDateTime(searchPage.dpTo.text, searchPage.toHour.currentIndex, searchPage.toMinute.currentIndex) : "";
-            let query = (searchPage.tfQuery.text || "").toLowerCase();
-            let status = searchPage.cbStatus.currentIndex === 0 ? "" : searchPage.cbStatus.currentIndex === 1 ? "in" : "out";
+            // Không ép lowercase ở đây để vẫn có thể hiển thị đúng nguyên bản; dùng so khớp không phân biệt hoa/thường phía dưới
+            let query = (searchPage.tfQuery.text || "").trim();
+            // Map combobox -> giá trị thực trong DB: parking_sessions.status IN ('checked_in','checked_out','pending')
+            let status = "";
+            if (searchPage.cbStatus.currentIndex === 1)
+                status = "checked_in";
+            else if (searchPage.cbStatus.currentIndex === 2)
+                status = "checked_out";
 
             console.log("Search Parameters:", {
                 query: query || "(not set)",
@@ -142,21 +148,22 @@ Item {
                 fromIso: fromIso || "(not set)",
                 toIso: toIso || "(not set)"
             });
-
+            // Thứ tự hàm C++: searchSessions(plate, rfid, fromIso, toIso, status, limit, offset)
+            // Ta truyền plate nếu có; rfid để trống vì chưa có input.
             const results = repo.searchSessions(
-                query || "", // Nếu không nhập biển số, để trống
-                status || "", // Nếu không chọn trạng thái, để trống
-                fromIso || "", // Nếu không chọn ngày giờ từ, để trống
-                toIso || "", // Nếu không chọn ngày giờ đến, để trống
-                "", 200, 0
+                query || "",
+                "",
+                fromIso || "",
+                toIso || "",
+                status || "",
+                200,
+                0
             );
 
-            const filteredResults = results.filter(r => {
-                if (query && r.plate) {
-                    return r.plate === query;
-                }
-                return true;
-            });
+            // Bổ sung lọc không phân biệt hoa/thường (nếu user nhập plate)
+            const filteredResults = (!query)
+                ? results
+                : results.filter(r => (r.plate || "").toString().toLowerCase() === query.toLowerCase());
 
             searchPage.resultsModel.clear();
             var total = 0;
@@ -176,12 +183,13 @@ Item {
                 });
             }
             if (searchPage.lblSummary)
-                searchPage.lblSummary.text = "Tìm thấy: " + results.length + " bản ghi";
+                searchPage.lblSummary.text = "Tìm thấy: " + filteredResults.length + " bản ghi";
             if (searchPage.lblRevenue)
                 searchPage.lblRevenue.text = "Tổng doanh thu trong kết quả: " + total + " VNĐ";
         }
 
         function onTriggerCloseChanged() {
+            if (!searchPage.triggerClose) return; // chỉ xử lý khi vừa toggle
             searchPage.tfQuery.text = "";
             searchPage.cbStatus.currentIndex = 0;
             searchPage.dpFrom.text = "";
@@ -195,7 +203,8 @@ Item {
                 searchPage.lblSummary.text = "0 kết quả";
             if (searchPage.lblRevenue)
                 searchPage.lblRevenue.text = "Tổng doanh thu trong kết quả: 0 VNĐ";
-            searchPage.triggerClose = true
+            // reset về false để lần sau toggle lại sẽ kích hoạt
+            searchPage.triggerClose = false;
         }
     }
 

@@ -215,16 +215,16 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("barrier2", barrier2);
     engine.rootContext()->setContextProperty("settings", settings);
 
-    // Đăng ký đối tượng backend dạng QML singleton (tuỳ chọn, vẫn giữ context properties)
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "App", &controller);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Settings", settings);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Repo", db);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane1", cameraLane1);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane2", cameraLane2);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier1", barrier1);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier2", barrier2);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderEntrance", cardReaderEntrance);
-    qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderExit", cardReaderExit);
+    // // Đăng ký đối tượng backend dạng QML singleton (tuỳ chọn, vẫn giữ context properties)
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "App", &controller);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Settings", settings);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Repo", db);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane1", cameraLane1);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane2", cameraLane2);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier1", barrier1);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier2", barrier2);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderEntrance", cardReaderEntrance);
+    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderExit", cardReaderExit);
 
     // Phần này là để xử lý khi QML khởi tạo, bao gồm cả Window và Item
     QQuickWindow *createdWindow = nullptr;

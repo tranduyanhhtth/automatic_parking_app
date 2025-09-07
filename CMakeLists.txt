@@ -45,8 +45,9 @@ qt_add_qml_module(appsmart_parking_system
         src/qml/logic/DashboardLogic.qml
         src/qml/logic/HidLogLogic.qml
         src/qml/logic/LoginLogic.qml
+        src/qml/logic/NotifyLogic.qml
         src/qml/logic/PricingLogic.qml
-    src/qml/logic/RfidCardsLogic.qml
+        src/qml/logic/RfidCardsLogic.qml
         src/qml/logic/RevenueLogic.qml
         src/qml/logic/SearchLogic.qml
         src/qml/logic/SubscriptionsLogic.qml

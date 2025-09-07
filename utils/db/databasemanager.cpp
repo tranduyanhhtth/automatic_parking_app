@@ -12,7 +12,9 @@
 DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
 {
     DB_Connection = QSqlDatabase::addDatabase("QSQLITE");
-    DB_Connection.setDatabaseName(QCoreApplication::applicationDirPath() + "/../../database/parking.db");
+    const QString dbPath = QCoreApplication::applicationDirPath() + "/../../database/parking.db";
+    qDebug() << "[DB] Expected database path:" << dbPath;
+    DB_Connection.setDatabaseName(dbPath);
     if (DB_Connection.open())
     {
         qDebug() << "Database Is Connected";
@@ -31,6 +33,7 @@ bool DatabaseManager::initialize()
         qWarning() << "Không thể mở cơ sở dữ liệu:" << DB_Connection.lastError().text();
         return false;
     }
+    qDebug() << "[DB] initialize() using file:" << DB_Connection.databaseName();
     return ensureSchema();
 }
 
@@ -523,6 +526,44 @@ bool DatabaseManager::setRfidCardStatus(const QString &rfid, const QString &stat
     return q.numRowsAffected() > 0;
 }
 
+QVariantMap DatabaseManager::getRfidCard(const QString &rfid)
+{
+    QVariantMap m;
+    if (rfid.trimmed().isEmpty())
+        return m;
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT id, rfid, vehicle_type, ticket_type, user_id, status, created_at, assigned_at, description FROM rfid_cards WHERE rfid=:rfid LIMIT 1");
+    q.bindValue(":rfid", rfid);
+    if (q.exec() && q.next())
+    {
+        m.insert("id", q.value("id"));
+        m.insert("rfid", q.value("rfid"));
+        m.insert("vehicle_type", q.value("vehicle_type"));
+        m.insert("ticket_type", q.value("ticket_type"));
+        m.insert("user_id", q.value("user_id"));
+        m.insert("status", q.value("status"));
+        m.insert("created_at", q.value("created_at"));
+        m.insert("assigned_at", q.value("assigned_at"));
+        m.insert("description", q.value("description"));
+    }
+    return m;
+}
+
+bool DatabaseManager::deleteRfidCard(const QString &rfid)
+{
+    if (rfid.trimmed().isEmpty())
+        return false;
+    QSqlQuery q(DB_Connection);
+    q.prepare("DELETE FROM rfid_cards WHERE rfid=:rfid");
+    q.bindValue(":rfid", rfid);
+    if (!q.exec())
+    {
+        qWarning() << "deleteRfidCard:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
+}
+
 bool DatabaseManager::migrateParkingSessionsPricingNotNull()
 {
     // Backfill NULL pricing_id using users.vehicle_type -> pricing(hourly)
@@ -652,6 +693,128 @@ QString DatabaseManager::sanitizeForFile(const QString &s) const
     QString r = s;
     r.replace(QRegularExpression("[^A-Za-z0-9_-]"), "_");
     return r;
+}
+
+QList<QVariantMap> DatabaseManager::listUsers(int limit, int offset)
+{
+    QList<QVariantMap> out;
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT id, full_name, phone, rfid, plate, vehicle_type, status, created_at FROM users ORDER BY id DESC LIMIT :limit OFFSET :offset");
+    q.bindValue(":limit", limit);
+    q.bindValue(":offset", offset);
+    if (q.exec())
+    {
+        while (q.next())
+        {
+            QVariantMap m;
+            m.insert("id", q.value("id"));
+            m.insert("full_name", q.value("full_name"));
+            m.insert("phone", q.value("phone"));
+            m.insert("rfid", q.value("rfid"));
+            m.insert("plate", q.value("plate"));
+            m.insert("vehicle_type", q.value("vehicle_type"));
+            m.insert("status", q.value("status"));
+            m.insert("created_at", q.value("created_at"));
+            out.append(m);
+        }
+    }
+    else
+    {
+        qWarning() << "listUsers:" << q.lastError().text();
+    }
+    return out;
+}
+
+bool DatabaseManager::softDeleteUser(int userId)
+{
+    if (userId <= 0)
+        return false;
+    DB_Connection.transaction();
+    // Mark user inactive and clear rfid from user row
+    QSqlQuery q(DB_Connection);
+    q.prepare("UPDATE users SET status='inactive', rfid=NULL WHERE id=:id");
+    q.bindValue(":id", userId);
+    if (!q.exec())
+    {
+        qWarning() << "softDeleteUser user update:" << q.lastError().text();
+        DB_Connection.rollback();
+        return false;
+    }
+    // Free any cards assigned to this user
+    QSqlQuery qc(DB_Connection);
+    qc.prepare("UPDATE rfid_cards SET user_id=NULL, status='available' WHERE user_id=:id");
+    qc.bindValue(":id", userId);
+    if (!qc.exec())
+    {
+        qWarning() << "softDeleteUser free cards:" << qc.lastError().text();
+        DB_Connection.rollback();
+        return false;
+    }
+    DB_Connection.commit();
+    return true;
+}
+
+bool DatabaseManager::cancelSubscription(int subId)
+{
+    if (subId <= 0)
+        return false;
+    QSqlQuery q(DB_Connection);
+    q.prepare("UPDATE subscriptions SET status='canceled' WHERE id=:id AND status='active'");
+    q.bindValue(":id", subId);
+    if (!q.exec())
+    {
+        qWarning() << "cancelSubscription:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
+}
+
+bool DatabaseManager::markSubscriptionLostCard(int subId)
+{
+    if (subId <= 0)
+        return false;
+    // Mark subscription card lost and free assignment from rfid_cards table
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT rfid FROM subscriptions WHERE id=:id LIMIT 1");
+    q.bindValue(":id", subId);
+    QString rfid;
+    if (q.exec() && q.next())
+        rfid = q.value(0).toString();
+    if (rfid.isEmpty())
+        return false;
+    QSqlQuery qc(DB_Connection);
+    qc.prepare("UPDATE rfid_cards SET status='lost', user_id=NULL WHERE rfid=:rfid");
+    qc.bindValue(":rfid", rfid);
+    if (!qc.exec())
+    {
+        qWarning() << "markSubscriptionLostCard card:" << qc.lastError().text();
+        return false;
+    }
+    QSqlQuery qs(DB_Connection);
+    qs.prepare("UPDATE subscriptions SET rfid=NULL WHERE id=:id");
+    qs.bindValue(":id", subId);
+    if (!qs.exec())
+    {
+        qWarning() << "markSubscriptionLostCard sub:" << qs.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+int DatabaseManager::expireDueSubscriptions(const QString &todayIso)
+{
+    // Expect todayIso format YYYY-MM-DD; treat subscriptions with end_date < today as expired
+    if (todayIso.isEmpty())
+        return 0;
+    QSqlQuery q(DB_Connection);
+    q.prepare("UPDATE subscriptions SET status='expired' WHERE status='active' AND end_date < :today");
+    q.bindValue(":today", todayIso);
+    if (!q.exec())
+    {
+        qWarning() << "expireDueSubscriptions:" << q.lastError().text();
+        return 0;
+    }
+    return q.numRowsAffected();
 }
 
 QString DatabaseManager::nowIso8601() const

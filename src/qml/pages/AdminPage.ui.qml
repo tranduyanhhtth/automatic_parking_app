@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../logic"
+import "../components"
 
 Item {
 	id: adminPage
@@ -28,12 +29,51 @@ Item {
 	property alias loginUserField: tfLoginUser
 	property alias loginPassField: tfLoginPass
 	property alias loginErrorLabel: loginError
+	// Expose form fields cho UsersLogic
+	property alias userName: userName
+	property alias userPhone: userPhone
+	property alias userRfid: userRfid
+	property alias userPlate: userPlate
+	property alias userVehicleType: userVehicleType
+	property alias userNote: userNote
 	// Expose minimal aliases for logic wiring later
 	property alias tabBar: tabbar
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
 	property bool triggerUpdateUser: false
 	property bool triggerDeleteUser: false
+	// Triggers cho subscriptions
+	property bool triggerSubCreate: false
+	property bool triggerSubExtend: false
+	property bool triggerSubLostDelete: false
+	property bool triggerSubCancel: false
+	property bool triggerSubFilterChanged: false
+	property bool triggerExportExpired: false
+	// buffer for generated expired CSV
+	property string expiredCsvBuffer: ""
+	property bool triggerUsersChanged: false
+	// Row selection via index (single-expression onClicked)
+	property int pendingSelectUserIndex: -1
+	property int pendingSelectSubIndex: -1
+
+	// Logic instances
+	ToastComponent {
+		id: toastOverlay
+	}
+	NotifyLogic {
+		id: notifyLogic
+		toast: toastOverlay
+	}
+	UsersLogic {
+		id: usersLogic
+		adminPage: adminPage
+		notify: notifyLogic.push
+	}
+	SubscriptionsLogic {
+		id: subsLogic
+		adminPage: adminPage
+		notify: notifyLogic.push
+	}
 	// Content root to be blurred when login overlay is visible
 	Item {
 		id: contentRoot
@@ -69,7 +109,8 @@ Item {
 						}
 						MouseArea {
 							anchors.fill: parent
-							onClicked: adminPage.triggerLogoutAndClose = !adminPage.triggerLogoutAndClose
+							onClicked: adminPage.triggerLogoutAndClose
+									   = !adminPage.triggerLogoutAndClose
 						}
 					}
 				}
@@ -97,7 +138,7 @@ Item {
 							text: "Doanh thu"
 						}
 						TabButton {
-							text: "Thẻ RFID"
+							text: "Phân loại thẻ"
 						}
 					}
 					StackLayout {
@@ -179,6 +220,28 @@ Item {
 												id: cardRevenueToday
 												text: "0 VNĐ"
 												color: "#4ec9b0"
+												font.pixelSize: 22
+												font.bold: true
+											}
+										}
+									}
+									Rectangle {
+										Layout.fillWidth: true
+										height: 90
+										radius: 8
+										color: "#222"
+										border.color: "#333"
+										Column {
+											anchors.centerIn: parent
+											spacing: 4
+											Text {
+												text: "Vé tháng hết hạn"
+												color: "#bbb"
+											}
+											Text {
+												id: cardExpiredSubs
+												text: "0"
+												color: "#e53935"
 												font.pixelSize: 22
 												font.bold: true
 											}
@@ -322,10 +385,7 @@ Item {
 											text: "Thêm"
 											color: "white"
 										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerAddUser = true
-										}
+										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerAddUser = !adminPage.triggerAddUser }
 									}
 									Rectangle {
 										width: 110
@@ -337,10 +397,7 @@ Item {
 											text: "Cập nhật"
 											color: "white"
 										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerUpdateUser = true
-										}
+										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerUpdateUser = !adminPage.triggerUpdateUser }
 									}
 									Rectangle {
 										width: 110
@@ -352,10 +409,7 @@ Item {
 											text: "Xóa"
 											color: "white"
 										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerDeleteUser = true
-										}
+										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerDeleteUser = !adminPage.triggerDeleteUser }
 									}
 									Item {
 										Layout.fillWidth: true
@@ -415,8 +469,65 @@ Item {
 											}
 										}
 										ListView {
+											id: usersListView
 											Layout.fillWidth: true
 											Layout.fillHeight: true
+											model: usersLogic ? usersLogic.listModel : null
+											clip: true
+											delegate: Rectangle {
+												color: (usersLogic
+														&& usersLogic.selectedUserId
+														=== id) ? "#334455" : "transparent"
+												border.color: "#444"
+												border.width: 1
+												width: parent.width
+												height: 28
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: id
+														color: "white"
+														Layout.preferredWidth: 60
+													}
+													Text {
+														text: full_name
+														color: "white"
+														Layout.preferredWidth: 160
+														elide: Text.ElideRight
+													}
+													Text {
+														text: phone
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: rfid
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: plate
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: vehicle_type
+														color: "white"
+														Layout.preferredWidth: 100
+													}
+													Text {
+														text: status
+														color: status
+															   === 'inactive' ? '#ff9800' : '#ccc'
+														Layout.preferredWidth: 80
+													}
+													Item {
+														Layout.fillWidth: true
+													}
+												}
+												MouseArea { anchors.fill: parent; onClicked: adminPage.pendingSelectUserIndex = index }
+											}
 										}
 									}
 								}
@@ -537,6 +648,11 @@ Item {
 											text: "Đăng ký mới"
 											color: "white"
 										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubCreate
+													   = !adminPage.triggerSubCreate
+										}
 									}
 									Rectangle {
 										width: 110
@@ -547,6 +663,11 @@ Item {
 											anchors.centerIn: parent
 											text: "Gia hạn"
 											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubExtend
+													   = !adminPage.triggerSubExtend
 										}
 									}
 									Rectangle {
@@ -559,6 +680,11 @@ Item {
 											text: "Xóa thẻ mất"
 											color: "white"
 										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubLostDelete
+													   = !adminPage.triggerSubLostDelete
+										}
 									}
 									Rectangle {
 										width: 110
@@ -569,6 +695,11 @@ Item {
 											anchors.centerIn: parent
 											text: "Hủy"
 											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubCancel
+													   = !adminPage.triggerSubCancel
 										}
 									}
 									Item {
@@ -586,6 +717,38 @@ Item {
 										anchors.fill: parent
 										anchors.margins: 8
 										spacing: 6
+										RowLayout {
+											// filter + export controls
+											Layout.fillWidth: true
+											spacing: 8
+											ComboBox {
+												id: subFilter
+												model: ["Tất cả", "Hết hạn", "Đang hoạt động"]
+												Layout.preferredWidth: 160
+												onCurrentIndexChanged: adminPage.triggerSubFilterChanged = !adminPage.triggerSubFilterChanged
+											}
+											Rectangle {
+												width: 130
+												height: 28
+												radius: 8
+												color: "#2b7"
+												Text {
+													anchors.centerIn: parent
+													text: "Xuất CSV Hết hạn"
+													color: 'white'
+													wrapMode: Text.Wrap
+													horizontalAlignment: Text.AlignHCenter
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: adminPage.triggerExportExpired
+															   = !adminPage.triggerExportExpired
+												}
+											}
+											Item {
+												Layout.fillWidth: true
+											}
+										}
 										RowLayout {
 											Layout.fillWidth: true
 											spacing: 8
@@ -634,8 +797,69 @@ Item {
 											}
 										}
 										ListView {
+											id: subsListView
 											Layout.fillWidth: true
 											Layout.fillHeight: true
+											model: subsLogic ? subsLogic.listModel : null
+											clip: true
+											delegate: Rectangle {
+												color: (subsLogic
+														&& subsLogic.selectedSubId
+														=== id) ? "#344" : "transparent"
+												border.color: "#555"
+												border.width: 1
+												width: parent.width
+												height: 30
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: id
+														color: "white"
+														Layout.preferredWidth: 60
+													}
+													Text {
+														text: full_name
+														color: "white"
+														Layout.preferredWidth: 160
+														elide: Text.ElideRight
+													}
+													Text {
+														text: plate
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: rfid
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: start_date
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: end_date
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: status
+														color: status === 'canceled' ? '#ff9800' : (status === 'expired' ? '#e53935' : '#cfd8dc')
+														Layout.preferredWidth: 90
+													}
+													Text {
+														text: payment_mode
+														color: "white"
+														Layout.preferredWidth: 90
+													}
+													Item {
+														Layout.fillWidth: true
+													}
+												}
+												MouseArea { anchors.fill: parent; onClicked: adminPage.pendingSelectSubIndex = index }
+											}
 										}
 									}
 								}
@@ -700,7 +924,8 @@ Item {
 										MouseArea {
 											anchors.fill: parent
 											enabled: pricingLogic.editMode
-											onClicked: pricingLogic.requestSave = !pricingLogic.requestSave
+											onClicked: pricingLogic.requestSave
+													   = !pricingLogic.requestSave
 										}
 									}
 								}
@@ -974,58 +1199,239 @@ Item {
 									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
 								}
 							}
-							// RFID Cards
-							Rectangle {
-								color: "lightgray"
-								Layout.fillWidth: true
-								Layout.fillHeight: true
-								border.color: "darkgray"
-								ColumnLayout {
-									anchors.fill: parent
-									anchors.margins: 10
+						}
+						// RFID Cards
+						Rectangle {
+							color: "lightgray"
+							Layout.fillWidth: true
+							Layout.fillHeight: true
+							border.color: "darkgray"
+							ColumnLayout {
+								anchors.fill: parent
+								anchors.margins: 10
+								spacing: 8
+								RfidCardsLogic {
+									id: rfidLogic
+									adminPage: adminPage
+									tfRfid: tfRfid
+									cbVehicle: cbVehicle
+									cbTicket: cbTicket
+									cbStatus: cbStatus
+									tfDesc: tfDesc
+									repoRef: repo
+									notify: notifyLogic.push
+								}
+								RowLayout {
+									Layout.fillWidth: true
 									spacing: 8
-									RfidCardsLogic { id: rfidLogic; adminPage: adminPage; notify: (m)=> toast.show(m) }
-									RowLayout {
-										Layout.fillWidth: true
-										spacing: 8
-										TextField { id: tfRfid; Layout.preferredWidth: 200; placeholderText: "Quét/nhập RFID"; color: "white"; placeholderTextColor: "white"; background: Rectangle{color:'#222';radius:8;border.color:'#555'} }
-										ComboBox { id: cbVehicle; Layout.preferredWidth: 120; model: ["Xe máy","Ô tô"]; background: Rectangle{radius:8} }
-										ComboBox { id: cbTicket; Layout.preferredWidth: 180; model: ["Giờ","Ngày (ngày)","Ngày (đêm)","Qua đêm","Tháng","Quý","Năm"]; background: Rectangle{radius:8} }
-										ComboBox { id: cbStatus; Layout.preferredWidth: 140; model: ["available","assigned","lost","damaged"]; background: Rectangle{radius:8} }
-										TextField { id: tfDesc; Layout.fillWidth: true; placeholderText: "Mô tả"; color: "white"; placeholderTextColor: "white"; background: Rectangle{color:'#222';radius:8;border.color:'#555'} }
-										Rectangle { width: 110; height: 28; radius: 8; color: "#2b7"
-											Text{anchors.centerIn: parent; text: "Lưu"; color: "white"}
-											MouseArea{ anchors.fill: parent; onClicked: rfidLogic.triggerSave = !rfidLogic.triggerSave }
+									TextField {
+										id: tfRfid
+										Layout.preferredWidth: 200
+										placeholderText: "Quét/nhập RFID"
+										color: "white"
+										placeholderTextColor: "white"
+										background: Rectangle {
+											color: '#222'
+											radius: 8
+											border.color: '#555'
 										}
-										Rectangle { width: 110; height: 28; radius: 8; color: "#2b7"
-											Text{anchors.centerIn: parent; text: "Làm mới"; color: "white"}
-											MouseArea{ anchors.fill: parent; onClicked: rfidLogic.triggerRefresh = !rfidLogic.triggerRefresh }
+									}
+									ComboBox {
+										id: cbVehicle
+										Layout.preferredWidth: 180
+										Layout.preferredHeight: 24
+										model: ["Xe máy", "Ô tô"]
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: cbTicket
+										Layout.preferredWidth: 180
+										Layout.preferredHeight: 24
+										model: ["Giờ", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm", "Tháng", "Quý", "Năm"]
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: cbStatus
+										Layout.preferredWidth: 180
+										Layout.preferredHeight: 24
+										model: ["available", "assigned", "lost", "damaged"]
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									TextField {
+										id: tfDesc
+										Layout.fillWidth: true
+										placeholderText: "Mô tả"
+										color: "white"
+										placeholderTextColor: "white"
+										background: Rectangle {
+											color: '#222'
+											radius: 8
+											border.color: '#555'
 										}
 									}
 									Rectangle {
-										Layout.fillWidth: true
-										Layout.fillHeight: true
-										color: "#222"; border.color: "#333"; radius: 8
-										ColumnLayout { anchors.fill: parent; anchors.margins:8; spacing:6
-											RowLayout { Layout.fillWidth: true; spacing:8
-												Text{ text:"RFID"; color:"white"; Layout.preferredWidth: 160 }
-												Text{ text:"Loại xe"; color:"white"; Layout.preferredWidth: 100 }
-												Text{ text:"Loại vé"; color:"white"; Layout.preferredWidth: 140 }
-												Text{ text:"User"; color:"white"; Layout.preferredWidth: 80 }
-												Text{ text:"Trạng thái"; color:"white"; Layout.preferredWidth: 120 }
-												Text{ text:"Gán lúc"; color:"white"; Layout.preferredWidth: 160 }
-												Text{ text:"Mô tả"; color:"white"; Layout.fillWidth: true }
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Lưu"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: rfidLogic.triggerSave
+													   = !rfidLogic.triggerSave
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#c62828"
+										Text {
+											anchors.centerIn: parent
+											text: "Xóa thẻ"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: rfidLogic.triggerDelete
+													   = !rfidLogic.triggerDelete
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#ff9800"
+										Text {
+											anchors.centerIn: parent
+											text: "Mất"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: rfidLogic.triggerMarkLost
+													   = !rfidLogic.triggerMarkLost
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#b71c1c"
+										Text {
+											anchors.centerIn: parent
+											text: "Hỏng"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: rfidLogic.triggerMarkDamaged
+													   = !rfidLogic.triggerMarkDamaged
+										}
+									}
+								}
+								Rectangle {
+									Layout.fillWidth: true
+									Layout.fillHeight: true
+									color: "#222"
+									border.color: "#333"
+									radius: 8
+									ColumnLayout {
+										anchors.fill: parent
+										anchors.margins: 8
+										spacing: 6
+										RowLayout {
+											Layout.fillWidth: true
+											spacing: 8
+											Text {
+												text: "RFID"
+												color: "white"
+												Layout.preferredWidth: 160
 											}
-											ListView { Layout.fillWidth: true; Layout.fillHeight: true; model: rfidLogic.listModel
-												delegate: RowLayout {
-													width: parent ? parent.width : 0; spacing: 8
-													Text{ text: rfid; color: "white"; Layout.preferredWidth: 160; elide: Text.ElideRight }
-													Text{ text: vehicle_type; color: "white"; Layout.preferredWidth: 100 }
-													Text{ text: ticket_type; color: "white"; Layout.preferredWidth: 140 }
-													Text{ text: (user_id||''); color: "white"; Layout.preferredWidth: 80 }
-													Text{ text: status; color: "white"; Layout.preferredWidth: 120 }
-													Text{ text: (assigned_at||''); color: "white"; Layout.preferredWidth: 160 }
-													Text{ text: (description||''); color: "#ddd"; Layout.fillWidth: true; wrapMode: Text.Wrap }
+											Text {
+												text: "Loại xe"
+												color: "white"
+												Layout.preferredWidth: 100
+											}
+											Text {
+												text: "Loại vé"
+												color: "white"
+												Layout.preferredWidth: 140
+											}
+											Text {
+												text: "User"
+												color: "white"
+												Layout.preferredWidth: 80
+											}
+											Text {
+												text: "Trạng thái"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "Gán lúc"
+												color: "white"
+												Layout.preferredWidth: 160
+											}
+											Text {
+												text: "Mô tả"
+												color: "white"
+												Layout.fillWidth: true
+											}
+										}
+										ListView {
+											Layout.fillWidth: true
+											Layout.fillHeight: true
+											model: rfidLogic.listModel
+											delegate: RowLayout {
+												width: parent ? parent.width : 0
+												spacing: 8
+												Text {
+													text: rfid
+													color: "white"
+													Layout.preferredWidth: 160
+													elide: Text.ElideRight
+												}
+												Text {
+													text: vehicle_type
+													color: "white"
+													Layout.preferredWidth: 100
+												}
+												Text {
+													text: ticket_type
+													color: "white"
+													Layout.preferredWidth: 140
+												}
+												Text {
+													text: (user_id || '')
+													color: "white"
+													Layout.preferredWidth: 80
+												}
+												Text {
+													text: status
+													color: "white"
+													Layout.preferredWidth: 120
+												}
+												Text {
+													text: (assigned_at || '')
+													color: "white"
+													Layout.preferredWidth: 160
+												}
+												Text {
+													text: (description || '')
+													color: "#ddd"
+													Layout.fillWidth: true
+													wrapMode: Text.Wrap
 												}
 											}
 										}
