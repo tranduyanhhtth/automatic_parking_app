@@ -21,6 +21,7 @@
         <file>logic/SearchLogic.qml</file>
         <file>logic/HidLogLogic.qml</file>
         <file>logic/AdminLogic.qml</file>
+        <file>logic/DashboardLogic.qml</file>
         <file>logic/LoginLogic.qml</file>
         <file>logic/NotifyLogic.qml</file>
         <file>logic/UsersLogic.qml</file>

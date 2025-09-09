@@ -754,6 +754,66 @@ bool DatabaseManager::softDeleteUser(int userId)
     return true;
 }
 
+QVariantMap DatabaseManager::getDashboardStats(const QString &todayIso)
+{
+    QVariantMap out;
+    // total in/out today from parking_sessions
+    QSqlQuery q(DB_Connection);
+    q.prepare(R"(SELECT 
+        (SELECT COUNT(1) FROM parking_sessions WHERE DATE(checkin_time)=:d) AS in_total,
+        (SELECT COUNT(1) FROM parking_sessions WHERE DATE(checkout_time)=:d) AS out_total,
+        (SELECT IFNULL(SUM(amount),0) FROM revenues WHERE DATE(created_at)=:d) AS revenue_total,
+        (SELECT COUNT(1) FROM subscriptions WHERE status='expired') AS expired_subs
+    )");
+    q.bindValue(":d", todayIso);
+    if (q.exec() && q.next())
+    {
+        out.insert("in_today", q.value(0));
+        out.insert("out_today", q.value(1));
+        out.insert("revenue_today", q.value(2));
+        out.insert("expired_subscriptions", q.value(3));
+    }
+    return out;
+}
+
+QList<QVariantMap> DatabaseManager::listRevenueSummary(const QString &fromIso,
+                                                       const QString &toIso,
+                                                       const QString &typeFilter)
+{
+    QList<QVariantMap> out;
+    QString sql = R"(SELECT DATE(created_at) AS d,
+        SUM(CASE WHEN revenue_type='session' THEN 1 ELSE 0 END) AS session_count,
+        SUM(CASE WHEN revenue_type='subscription' THEN 1 ELSE 0 END) AS subscription_count,
+        SUM(amount) AS total_amount
+        FROM revenues
+        WHERE DATE(created_at) BETWEEN :f AND :t
+    )";
+    if (!typeFilter.isEmpty() && typeFilter != "all")
+    {
+        sql += QStringLiteral(" AND revenue_type=:rt");
+    }
+    sql += QStringLiteral(" GROUP BY d ORDER BY d DESC LIMIT 180");
+    QSqlQuery q(DB_Connection);
+    q.prepare(sql);
+    q.bindValue(":f", fromIso);
+    q.bindValue(":t", toIso);
+    if (!typeFilter.isEmpty() && typeFilter != "all")
+        q.bindValue(":rt", typeFilter);
+    if (q.exec())
+    {
+        while (q.next())
+        {
+            QVariantMap m;
+            m.insert("date", q.value(0));
+            m.insert("session_count", q.value(1));
+            m.insert("subscription_count", q.value(2));
+            m.insert("total_amount", q.value(3));
+            out.append(m);
+        }
+    }
+    return out;
+}
+
 bool DatabaseManager::cancelSubscription(int subId)
 {
     if (subId <= 0)
@@ -891,6 +951,30 @@ int DatabaseManager::createSubscription(int userId,
                                         int price,
                                         const QString &status)
 {
+    // Guard: prevent duplicate active subscriptions for the same user + RFID/plate overlapping the same period
+    {
+        QSqlQuery chk(DB_Connection);
+        chk.prepare(R"(
+            SELECT id FROM subscriptions
+            WHERE status='active'
+              AND user_id = :uid
+              AND ( ( :rf <> '' AND rfid = :rf ) OR ( :pl <> '' AND plate = :pl ) )
+              AND NOT (date(end_date) < date(:ns) OR date(start_date) > date(:ne))
+            LIMIT 1
+        )");
+        chk.bindValue(":uid", userId);
+        chk.bindValue(":rf", rfid);
+        chk.bindValue(":pl", plate);
+        chk.bindValue(":ns", startDate);
+        chk.bindValue(":ne", endDate);
+        if (chk.exec() && chk.next())
+        {
+            qWarning() << "createSubscription: duplicate active subscription exists for user" << userId << "rfid/plate" << rfid << plate;
+            // Return a negative code distinct from SQL error to indicate duplicate
+            return -2;
+        }
+    }
+
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
         INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status)
@@ -1826,6 +1910,36 @@ QList<QVariantMap> DatabaseManager::listSubscriptions(int limit, int offset)
 int DatabaseManager::getPricingId(const QString &vehicleType, const QString &ticketType)
 {
     return getPricingIdFor(vehicleType, ticketType);
+}
+
+QVariantMap DatabaseManager::getLatestSubscriptionForUser(int userId)
+{
+    QVariantMap out;
+    if (userId <= 0)
+        return out;
+    QSqlQuery q(DB_Connection);
+    q.prepare(R"(
+        SELECT s.id, s.user_id, s.plate, s.rfid, s.plan_type, s.start_date, s.end_date,
+               s.payment_mode, s.price, s.status
+        FROM subscriptions s
+        WHERE s.user_id = :uid
+        ORDER BY s.id DESC
+        LIMIT 1
+    )");
+    q.bindValue(":uid", userId);
+    if (q.exec() && q.next())
+    {
+        const QSqlRecord rec = q.record();
+        for (int i = 0; i < rec.count(); ++i)
+        {
+            out.insert(rec.fieldName(i), q.value(i));
+        }
+    }
+    else if (q.lastError().isValid())
+    {
+        qWarning() << "getLatestSubscriptionForUser:" << q.lastError().text();
+    }
+    return out;
 }
 
 bool DatabaseManager::upsertPricingRow(const QString &vehicleType,

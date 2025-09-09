@@ -36,6 +36,21 @@ Item {
 	property alias userPlate: userPlate
 	property alias userVehicleType: userVehicleType
 	property alias userNote: userNote
+	// Subscriptions new user text field alias
+	property alias subUserText: subUserText
+	// Subscriptions form control aliases for logic access
+	property alias subPlate: subPlate
+	property alias subRfid: subRfid
+	property alias subPlan: subPlan
+	property alias subStart: subStart
+	property alias subEnd: subEnd
+	property alias subPayment: subPayment
+	property alias subPrice: subPrice
+	property alias subFilter: subFilter
+	property alias subPlatePick: subPlatePick
+	// // Revenue summary aliases
+	// property alias revSummaryTotal: revSummaryTotal
+	// property alias revSummaryBreakdown: revSummaryBreakdown
 	// Expose minimal aliases for logic wiring later
 	property alias tabBar: tabbar
 	// Trigger cho thao tác user
@@ -49,6 +64,8 @@ Item {
 	property bool triggerSubCancel: false
 	property bool triggerSubFilterChanged: false
 	property bool triggerExportExpired: false
+	property bool triggerSubUserTextChanged: false
+	property bool triggerSubCancelExtend: false
 	// buffer for generated expired CSV
 	property string expiredCsvBuffer: ""
 	property bool triggerUsersChanged: false
@@ -71,6 +88,16 @@ Item {
 	}
 	SubscriptionsLogic {
 		id: subsLogic
+		adminPage: adminPage
+		notify: notifyLogic.push
+	}
+	DashboardLogic {
+		id: dashboardLogic
+		adminPage: adminPage
+		notify: notifyLogic.push
+	}
+	RevenueLogic {
+		id: revenueLogic
 		adminPage: adminPage
 		notify: notifyLogic.push
 	}
@@ -126,19 +153,19 @@ Item {
 							text: "Tổng quan"
 						}
 						TabButton {
+							text: "Bảng giá"
+						}
+						TabButton {
+							text: "Phân loại thẻ"
+						}
+						TabButton {
 							text: "Người dùng"
 						}
 						TabButton {
 							text: "Đăng kí"
 						}
 						TabButton {
-							text: "Bảng giá"
-						}
-						TabButton {
 							text: "Doanh thu"
-						}
-						TabButton {
-							text: "Phân loại thẻ"
 						}
 					}
 					StackLayout {
@@ -275,591 +302,6 @@ Item {
 											anchors.centerIn: parent
 											text: "Pie chart: vé tháng vs vé lượt (placeholder)"
 											color: "#777"
-										}
-									}
-								}
-							}
-						}
-						// Users
-						Rectangle {
-							color: "lightgray"
-							Layout.fillWidth: true
-							Layout.fillHeight: true
-							border.color: "darkgray"
-							ColumnLayout {
-								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 10
-								// Form thêm/sửa
-								RowLayout {
-									spacing: 8
-									Layout.fillWidth: true
-									TextField {
-										id: userName
-										placeholderText: "Họ tên"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 180
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									TextField {
-										id: userPhone
-										placeholderText: "Số điện thoại"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 160
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									TextField {
-										id: userRfid
-										placeholderText: "ID thẻ"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 140
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									TextField {
-										id: userPlate
-										placeholderText: "Biển số"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 140
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									ComboBox {
-										id: userVehicleType
-										model: ["Xe máy", "Ô tô"]
-										Layout.preferredWidth: 140
-										Layout.preferredHeight: 24
-										background: Rectangle {
-											radius: 8
-										}
-									}
-									Item {
-										Layout.fillWidth: true
-									}
-								}
-								RowLayout {
-									spacing: 8
-									Layout.fillWidth: true
-									TextArea {
-										id: userNote
-										Layout.fillWidth: true
-										height: 60
-										color: "white"
-										placeholderText: "Ghi chú"
-										placeholderTextColor: "white"
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-								}
-								RowLayout {
-									spacing: 8
-									Layout.fillWidth: true
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Thêm"
-											color: "white"
-										}
-										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerAddUser = !adminPage.triggerAddUser }
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Cập nhật"
-											color: "white"
-										}
-										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerUpdateUser = !adminPage.triggerUpdateUser }
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#a33"
-										Text {
-											anchors.centerIn: parent
-											text: "Xóa"
-											color: "white"
-										}
-										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerDeleteUser = !adminPage.triggerDeleteUser }
-									}
-									Item {
-										Layout.fillWidth: true
-									}
-								}
-								// Bảng Users
-								Rectangle {
-									Layout.fillWidth: true
-									Layout.fillHeight: true
-									color: "#222"
-									border.color: "#333"
-									radius: 8
-									ColumnLayout {
-										anchors.fill: parent
-										anchors.margins: 8
-										spacing: 6
-										RowLayout {
-											Layout.fillWidth: true
-											spacing: 8
-											Text {
-												text: "ID"
-												color: "white"
-												Layout.preferredWidth: 60
-											}
-											Text {
-												text: "Họ tên"
-												color: "white"
-												Layout.preferredWidth: 160
-											}
-											Text {
-												text: "SĐT"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "ID thẻ"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Biển số"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Loại xe"
-												color: "white"
-												Layout.preferredWidth: 100
-											}
-											Text {
-												text: "Ghi chú"
-												color: "white"
-												Layout.preferredWidth: 200
-											}
-											Item {
-												Layout.fillWidth: true
-											}
-										}
-										ListView {
-											id: usersListView
-											Layout.fillWidth: true
-											Layout.fillHeight: true
-											model: usersLogic ? usersLogic.listModel : null
-											clip: true
-											delegate: Rectangle {
-												color: (usersLogic
-														&& usersLogic.selectedUserId
-														=== id) ? "#334455" : "transparent"
-												border.color: "#444"
-												border.width: 1
-												width: parent.width
-												height: 28
-												RowLayout {
-													anchors.fill: parent
-													spacing: 8
-													Text {
-														text: id
-														color: "white"
-														Layout.preferredWidth: 60
-													}
-													Text {
-														text: full_name
-														color: "white"
-														Layout.preferredWidth: 160
-														elide: Text.ElideRight
-													}
-													Text {
-														text: phone
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: rfid
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: plate
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: vehicle_type
-														color: "white"
-														Layout.preferredWidth: 100
-													}
-													Text {
-														text: status
-														color: status
-															   === 'inactive' ? '#ff9800' : '#ccc'
-														Layout.preferredWidth: 80
-													}
-													Item {
-														Layout.fillWidth: true
-													}
-												}
-												MouseArea { anchors.fill: parent; onClicked: adminPage.pendingSelectUserIndex = index }
-											}
-										}
-									}
-								}
-							}
-						}
-						// Subscriptions
-						Rectangle {
-							color: "lightgray"
-							Layout.fillWidth: true
-							Layout.fillHeight: true
-							border.color: "darkgray"
-							ColumnLayout {
-								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 10
-								// Form đăng ký vé tháng
-								RowLayout {
-									spacing: 8
-									Layout.fillWidth: true
-									ComboBox {
-										id: subUser
-										model: ["Chọn user..."]
-										Layout.preferredWidth: 200
-										Layout.preferredHeight: 24
-										background: Rectangle {
-											radius: 8
-										}
-									}
-									TextField {
-										id: subPlate
-										placeholderText: "Biển số"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 140
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									TextField {
-										id: subRfid
-										placeholderText: "ID thẻ"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 140
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									ComboBox {
-										id: subPlan
-										model: ["Tháng", "Quý", "Năm"]
-										Layout.preferredWidth: 120
-										Layout.preferredHeight: 24
-										background: Rectangle {
-											radius: 8
-										}
-									}
-									TextField {
-										id: subStart
-										placeholderText: "Ngày bắt đầu (YYYY-MM-DD)"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 180
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									TextField {
-										id: subEnd
-										placeholderText: "Ngày kết thúc (YYYY-MM-DD)"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 180
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									ComboBox {
-										id: subPayment
-										model: ["Trả trước", "Trả sau"]
-										Layout.preferredWidth: 120
-										Layout.preferredHeight: 24
-										background: Rectangle {
-											radius: 8
-										}
-									}
-									TextField {
-										id: subPrice
-										placeholderText: "Giá vé"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 120
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-								}
-								RowLayout {
-									spacing: 8
-									Layout.fillWidth: true
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Đăng ký mới"
-											color: "white"
-										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerSubCreate
-													   = !adminPage.triggerSubCreate
-										}
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Gia hạn"
-											color: "white"
-										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerSubExtend
-													   = !adminPage.triggerSubExtend
-										}
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#a33"
-										Text {
-											anchors.centerIn: parent
-											text: "Xóa thẻ mất"
-											color: "white"
-										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerSubLostDelete
-													   = !adminPage.triggerSubLostDelete
-										}
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#777"
-										Text {
-											anchors.centerIn: parent
-											text: "Hủy"
-											color: "white"
-										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerSubCancel
-													   = !adminPage.triggerSubCancel
-										}
-									}
-									Item {
-										Layout.fillWidth: true
-									}
-								}
-								// Danh sách vé tháng
-								Rectangle {
-									Layout.fillWidth: true
-									Layout.fillHeight: true
-									color: "#222"
-									border.color: "#333"
-									radius: 8
-									ColumnLayout {
-										anchors.fill: parent
-										anchors.margins: 8
-										spacing: 6
-										RowLayout {
-											// filter + export controls
-											Layout.fillWidth: true
-											spacing: 8
-											ComboBox {
-												id: subFilter
-												model: ["Tất cả", "Hết hạn", "Đang hoạt động"]
-												Layout.preferredWidth: 160
-												onCurrentIndexChanged: adminPage.triggerSubFilterChanged = !adminPage.triggerSubFilterChanged
-											}
-											Rectangle {
-												width: 130
-												height: 28
-												radius: 8
-												color: "#2b7"
-												Text {
-													anchors.centerIn: parent
-													text: "Xuất CSV Hết hạn"
-													color: 'white'
-													wrapMode: Text.Wrap
-													horizontalAlignment: Text.AlignHCenter
-												}
-												MouseArea {
-													anchors.fill: parent
-													onClicked: adminPage.triggerExportExpired
-															   = !adminPage.triggerExportExpired
-												}
-											}
-											Item {
-												Layout.fillWidth: true
-											}
-										}
-										RowLayout {
-											Layout.fillWidth: true
-											spacing: 8
-											Text {
-												text: "ID"
-												color: "white"
-												Layout.preferredWidth: 60
-											}
-											Text {
-												text: "Người dùng"
-												color: "white"
-												Layout.preferredWidth: 160
-											}
-											Text {
-												text: "Biển số"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "ID thẻ"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Bắt đầu"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Kết thúc"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Trạng thái"
-												color: "white"
-												Layout.preferredWidth: 80
-											}
-											Text {
-												text: "Thanh toán"
-												color: "white"
-												Layout.preferredWidth: 100
-											}
-											Item {
-												Layout.fillWidth: true
-											}
-										}
-										ListView {
-											id: subsListView
-											Layout.fillWidth: true
-											Layout.fillHeight: true
-											model: subsLogic ? subsLogic.listModel : null
-											clip: true
-											delegate: Rectangle {
-												color: (subsLogic
-														&& subsLogic.selectedSubId
-														=== id) ? "#344" : "transparent"
-												border.color: "#555"
-												border.width: 1
-												width: parent.width
-												height: 30
-												RowLayout {
-													anchors.fill: parent
-													spacing: 8
-													Text {
-														text: id
-														color: "white"
-														Layout.preferredWidth: 60
-													}
-													Text {
-														text: full_name
-														color: "white"
-														Layout.preferredWidth: 160
-														elide: Text.ElideRight
-													}
-													Text {
-														text: plate
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: rfid
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: start_date
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: end_date
-														color: "white"
-														Layout.preferredWidth: 120
-													}
-													Text {
-														text: status
-														color: status === 'canceled' ? '#ff9800' : (status === 'expired' ? '#e53935' : '#cfd8dc')
-														Layout.preferredWidth: 90
-													}
-													Text {
-														text: payment_mode
-														color: "white"
-														Layout.preferredWidth: 90
-													}
-													Item {
-														Layout.fillWidth: true
-													}
-												}
-												MouseArea { anchors.fill: parent; onClicked: adminPage.pendingSelectSubIndex = index }
-											}
 										}
 									}
 								}
@@ -1032,171 +474,6 @@ Item {
 											}
 										}
 									}
-								}
-							}
-						}
-						// Revenue
-						Rectangle {
-							color: "lightgray"
-							Layout.fillWidth: true
-							Layout.fillHeight: true
-							border.color: "darkgray"
-							ColumnLayout {
-								anchors.fill: parent
-								anchors.margins: 10
-								spacing: 10
-								// Bộ lọc
-								RowLayout {
-									spacing: 8
-									Layout.fillWidth: true
-									TextField {
-										id: revFrom
-										placeholderText: "Từ ngày (YYYY-MM-DD)"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 180
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									TextField {
-										id: revTo
-										placeholderText: "Đến ngày (YYYY-MM-DD)"
-										placeholderTextColor: "white"
-										color: "white"
-										Layout.preferredWidth: 180
-										background: Rectangle {
-											color: "#222"
-											border.color: "#555"
-											radius: 8
-										}
-									}
-									ComboBox {
-										id: revType
-										model: ["Tất cả", "Vé lượt", "Vé tháng"]
-										Layout.preferredWidth: 160
-										Layout.preferredHeight: 24
-										background: Rectangle {
-											radius: 8
-										}
-									}
-									Item {
-										Layout.fillWidth: true
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Lọc"
-											color: "white"
-										}
-									}
-								}
-								// Bảng kết quả
-								Rectangle {
-									Layout.fillWidth: true
-									Layout.fillHeight: true
-									color: "#222"
-									border.color: "#333"
-									radius: 8
-									ColumnLayout {
-										anchors.fill: parent
-										anchors.margins: 8
-										spacing: 6
-										RowLayout {
-											Layout.fillWidth: true
-											spacing: 8
-											Text {
-												text: "Ngày"
-												color: "white"
-												Layout.preferredWidth: 140
-											}
-											Text {
-												text: "Tổng lượt xe"
-												color: "white"
-												Layout.preferredWidth: 140
-											}
-											Text {
-												text: "Tổng vé tháng"
-												color: "white"
-												Layout.preferredWidth: 140
-											}
-											Text {
-												text: "Doanh thu (VNĐ)"
-												color: "white"
-												Layout.preferredWidth: 180
-											}
-											Item {
-												Layout.fillWidth: true
-											}
-										}
-										ListView {
-											Layout.fillWidth: true
-											Layout.fillHeight: true
-										}
-									}
-								}
-								// Thống kê tổng + Export
-								RowLayout {
-									Layout.fillWidth: true
-									spacing: 12
-									Text {
-										text: "Tổng doanh thu: 0"
-										color: "white"
-									}
-									Text {
-										text: "Trong đó: vé lượt 0, vé tháng 0"
-										color: "white"
-									}
-									Item {
-										Layout.fillWidth: true
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Xuất CSV"
-											color: "white"
-										}
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Xuất PDF"
-											color: "white"
-										}
-									}
-								}
-							}
-							// Save hook back to admin
-							Connections {
-								target: pricingLogic
-								function onSaved(json) {
-									try {
-										console.log('[AdminPage] onSaved JSON length:',
-													(json || '').length)
-										const arr = JSON.parse(json)
-										console.log('[AdminPage] rows to upsert:',
-													Array.isArray(
-														arr) ? arr.length : -1)
-									} catch (e) {
-										console.log('[AdminPage] JSON parse failed:',
-													e)
-									}
-									pricingJson.text = json
-									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
 								}
 							}
 						}
@@ -1393,49 +670,830 @@ Item {
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: rfidLogic.listModel
-											delegate: RowLayout {
-												width: parent ? parent.width : 0
-												spacing: 8
-												Text {
-													text: rfid
-													color: "white"
-													Layout.preferredWidth: 160
-													elide: Text.ElideRight
-												}
-												Text {
-													text: vehicle_type
-													color: "white"
-													Layout.preferredWidth: 100
-												}
-												Text {
-													text: ticket_type
-													color: "white"
-													Layout.preferredWidth: 140
-												}
-												Text {
-													text: (user_id || '')
-													color: "white"
-													Layout.preferredWidth: 80
-												}
-												Text {
-													text: status
-													color: "white"
-													Layout.preferredWidth: 120
-												}
-												Text {
-													text: (assigned_at || '')
-													color: "white"
-													Layout.preferredWidth: 160
-												}
-												Text {
-													text: (description || '')
-													color: "#ddd"
-													Layout.fillWidth: true
-													wrapMode: Text.Wrap
+											clip: true
+											delegate: Rectangle {
+												color: (tfRfid && rfid === tfRfid.text) ? "#4ec9b0" : "transparent"
+												border.color: "#555"
+												border.width: 1
+												width: parent.width
+												height: 30
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: rfid
+														color: "white"
+														Layout.preferredWidth: 160
+														elide: Text.ElideRight
+													}
+													Text {
+														text: vehicle_type
+														color: "white"
+														Layout.preferredWidth: 100
+													}
+													Text {
+														text: ticket_type
+														color: "white"
+														Layout.preferredWidth: 140
+													}
+													Text {
+														text: (user_id || '')
+														color: "white"
+														Layout.preferredWidth: 80
+													}
+													Text {
+														text: status
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: (assigned_at || '')
+														color: "white"
+														Layout.preferredWidth: 160
+													}
+													Text {
+														text: (description || '')
+														color: "#ddd"
+														Layout.fillWidth: true
+														wrapMode: Text.Wrap
+													}
 												}
 											}
 										}
 									}
+								}
+							}
+						}
+						// Users
+						Rectangle {
+							color: "lightgray"
+							Layout.fillWidth: true
+							Layout.fillHeight: true
+							border.color: "darkgray"
+							ColumnLayout {
+								anchors.fill: parent
+								anchors.margins: 10
+								spacing: 10
+								// Form thêm/sửa
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									TextField {
+										id: userName
+										placeholderText: "Họ tên"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 180
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: userPhone
+										placeholderText: "Số điện thoại"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 160
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: userRfid
+										placeholderText: "ID thẻ"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 140
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: userPlate
+										placeholderText: "Biển số"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 140
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: userVehicleType
+										model: ["Xe máy", "Ô tô"]
+										Layout.preferredWidth: 140
+										Layout.preferredHeight: 24
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									Item {
+										Layout.fillWidth: true
+									}
+								}
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									TextArea {
+										id: userNote
+										Layout.fillWidth: true
+										height: 60
+										color: "white"
+										placeholderText: "Ghi chú"
+										placeholderTextColor: "white"
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+								}
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Thêm"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerAddUser
+													   = !adminPage.triggerAddUser
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Cập nhật"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerUpdateUser
+													   = !adminPage.triggerUpdateUser
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#a33"
+										Text {
+											anchors.centerIn: parent
+											text: "Xóa"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerDeleteUser
+													   = !adminPage.triggerDeleteUser
+										}
+									}
+									Item {
+										Layout.fillWidth: true
+									}
+								}
+								// Bảng Users
+								Rectangle {
+									Layout.fillWidth: true
+									Layout.fillHeight: true
+									color: "#222"
+									border.color: "#333"
+									radius: 8
+									ColumnLayout {
+										anchors.fill: parent
+										anchors.margins: 8
+										spacing: 6
+										RowLayout {
+											Layout.fillWidth: true
+											spacing: 8
+											Text {
+												text: "ID"
+												color: "white"
+												Layout.preferredWidth: 60
+											}
+											Text {
+												text: "Họ tên"
+												color: "white"
+												Layout.preferredWidth: 160
+											}
+											Text {
+												text: "SĐT"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "ID thẻ"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "Biển số"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "Loại xe"
+												color: "white"
+												Layout.preferredWidth: 100
+											}
+											Text {
+												text: "Ghi chú"
+												color: "white"
+												Layout.preferredWidth: 200
+											}
+											Item {
+												Layout.fillWidth: true
+											}
+										}
+										ListView {
+											id: usersListView
+											Layout.fillWidth: true
+											Layout.fillHeight: true
+											model: usersLogic ? usersLogic.listModel : null
+											clip: true
+											delegate: Rectangle {
+												color: (usersLogic
+														&& usersLogic.selectedUserId
+														=== id) ? "#334455" : "transparent"
+												border.color: "#444"
+												border.width: 1
+												width: parent.width
+												height: 28
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: id
+														color: "white"
+														Layout.preferredWidth: 60
+													}
+													Text {
+														text: full_name
+														color: "white"
+														Layout.preferredWidth: 160
+														elide: Text.ElideRight
+													}
+													Text {
+														text: phone
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: rfid
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: plate
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: vehicle_type
+														color: "white"
+														Layout.preferredWidth: 100
+													}
+													Text {
+														text: status
+														color: status
+															   === 'inactive' ? '#ff9800' : '#ccc'
+														Layout.preferredWidth: 80
+													}
+													Item {
+														Layout.fillWidth: true
+													}
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: adminPage.pendingSelectUserIndex
+															   = index
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+						// Subscriptions
+						Rectangle {
+							color: "lightgray"
+							Layout.fillWidth: true
+							Layout.fillHeight: true
+							border.color: "darkgray"
+							ColumnLayout {
+								anchors.fill: parent
+								anchors.margins: 10
+								spacing: 10
+								// Form đăng ký vé tháng
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									TextField {
+										id: subUserText
+										placeholderText: "Nhập tên user"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 220
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+										onTextChanged: adminPage.triggerSubUserTextChanged
+													   = !adminPage.triggerSubUserTextChanged
+									}
+									TextField {
+										id: subPlate
+										placeholderText: "Biển số"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
+										Layout.preferredWidth: 140
+										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: subRfid
+										placeholderText: "ID thẻ"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
+										Layout.preferredWidth: 140
+										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: subPlatePick
+										visible: subsLogic && subsLogic.dupPlates && subsLogic.dupPlates.length > 1
+										Layout.preferredWidth: 160
+										Layout.preferredHeight: 24
+										model: subsLogic ? subsLogic.dupPlates : []
+										background: Rectangle { radius: 8 }
+										onCurrentIndexChanged: adminPage.triggerSubUserTextChanged = !adminPage.triggerSubUserTextChanged
+									}
+									ComboBox {
+										id: subPlan
+										model: ["Tháng", "Quý", "Năm"]
+										Layout.preferredWidth: 120
+										Layout.preferredHeight: 24
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									TextField {
+										id: subStart
+										placeholderText: "Ngày bắt đầu (YYYY-MM-DD)"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
+										Layout.preferredWidth: 180
+										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: subEnd
+										placeholderText: "Ngày kết thúc (YYYY-MM-DD)"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
+										Layout.preferredWidth: 180
+										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: subPayment
+										model: ["Trả trước", "Trả sau"]
+										Layout.preferredWidth: 120
+										Layout.preferredHeight: 24
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									TextField {
+										id: subPrice
+										placeholderText: "Giá vé"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
+										Layout.preferredWidth: 120
+										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+								}
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Đăng ký mới"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubCreate
+													   = !adminPage.triggerSubCreate
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Gia hạn"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubExtend
+													   = !adminPage.triggerSubExtend
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#ff9800"
+										Text {
+											anchors.centerIn: parent
+											text: "Hủy gia hạn"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubCancelExtend
+													   = !adminPage.triggerSubCancelExtend
+										}
+									}
+									Item {
+										Layout.fillWidth: true
+									}
+								}
+								// Danh sách vé tháng
+								Rectangle {
+									Layout.fillWidth: true
+									Layout.fillHeight: true
+									color: "#222"
+									border.color: "#333"
+									radius: 8
+									ColumnLayout {
+										anchors.fill: parent
+										anchors.margins: 8
+										spacing: 6
+										RowLayout {
+											// filter + export controls
+											Layout.fillWidth: true
+											spacing: 8
+											ComboBox {
+												id: subFilter
+												model: ["Tất cả", "Hết hạn", "Đang hoạt động"]
+												Layout.preferredWidth: 160
+												onCurrentIndexChanged: adminPage.triggerSubFilterChanged = !adminPage.triggerSubFilterChanged
+											}
+											Rectangle {
+												width: 130
+												height: 28
+												radius: 8
+												color: "#2b7"
+												Text {
+													anchors.centerIn: parent
+													text: "Xuất CSV Hết hạn"
+													color: 'white'
+													wrapMode: Text.Wrap
+													horizontalAlignment: Text.AlignHCenter
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: adminPage.triggerExportExpired
+															   = !adminPage.triggerExportExpired
+												}
+											}
+											Item {
+												Layout.fillWidth: true
+											}
+										}
+										RowLayout {
+											Layout.fillWidth: true
+											spacing: 8
+											Text {
+												text: "ID"
+												color: "white"
+												Layout.preferredWidth: 60
+											}
+											Text {
+												text: "Người dùng"
+												color: "white"
+												Layout.preferredWidth: 160
+											}
+											Text {
+												text: "Biển số"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "ID thẻ"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "Bắt đầu"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "Kết thúc"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
+												text: "Trạng thái"
+												color: "white"
+												Layout.preferredWidth: 80
+											}
+											Text {
+												text: "Thanh toán"
+												color: "white"
+												Layout.preferredWidth: 100
+											}
+											Item {
+												Layout.fillWidth: true
+											}
+										}
+										ListView {
+											id: subsListView
+											Layout.fillWidth: true
+											Layout.fillHeight: true
+											model: subsLogic ? subsLogic.listModel : null
+											clip: true
+											delegate: Rectangle {
+												color: (subsLogic
+														&& subsLogic.selectedSubId
+														=== id) ? "#344" : "transparent"
+												border.color: "#555"
+												border.width: 1
+												width: parent.width
+												height: 30
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: id
+														color: "white"
+														Layout.preferredWidth: 60
+													}
+													Text {
+														text: full_name
+														color: "white"
+														Layout.preferredWidth: 160
+														elide: Text.ElideRight
+													}
+													Text {
+														text: plate
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: rfid
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: start_date
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: end_date
+														color: "white"
+														Layout.preferredWidth: 120
+													}
+													Text {
+														text: status
+														color: status === 'canceled' ? '#ff9800' : (status === 'expired' ? '#e53935' : '#cfd8dc')
+														Layout.preferredWidth: 90
+													}
+													Text {
+														text: payment_mode
+														color: "white"
+														Layout.preferredWidth: 90
+													}
+													Item {
+														Layout.fillWidth: true
+													}
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: adminPage.pendingSelectSubIndex
+															   = index
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+						// Revenue
+						Rectangle {
+							color: "lightgray"
+							Layout.fillWidth: true
+							Layout.fillHeight: true
+							border.color: "darkgray"
+							ColumnLayout {
+								anchors.fill: parent
+								anchors.margins: 10
+								spacing: 10
+								// Bộ lọc
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									TextField {
+										id: revFrom
+										placeholderText: "Từ ngày (YYYY-MM-DD)"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 180
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: revTo
+										placeholderText: "Đến ngày (YYYY-MM-DD)"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 180
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: revType
+										model: ["Tất cả", "Vé lượt", "Vé tháng"]
+										Layout.preferredWidth: 160
+										Layout.preferredHeight: 24
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									Item {
+										Layout.fillWidth: true
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Lọc"
+											color: "white"
+										}
+									}
+								}
+								// Bảng kết quả
+								Rectangle {
+									Layout.fillWidth: true
+									Layout.fillHeight: true
+									color: "#222"
+									border.color: "#333"
+									radius: 8
+									ColumnLayout {
+										anchors.fill: parent
+										anchors.margins: 8
+										spacing: 6
+										RowLayout {
+											Layout.fillWidth: true
+											spacing: 8
+											Text {
+												text: "Ngày"
+												color: "white"
+												Layout.preferredWidth: 140
+											}
+											Text {
+												text: "Tổng lượt xe"
+												color: "white"
+												Layout.preferredWidth: 140
+											}
+											Text {
+												text: "Tổng vé tháng"
+												color: "white"
+												Layout.preferredWidth: 140
+											}
+											Text {
+												text: "Doanh thu (VNĐ)"
+												color: "white"
+												Layout.preferredWidth: 180
+											}
+											Item {
+												Layout.fillWidth: true
+											}
+										}
+										ListView {
+											Layout.fillWidth: true
+											Layout.fillHeight: true
+										}
+									}
+								}
+								// Thống kê tổng + Export
+								RowLayout {
+									Layout.fillWidth: true
+									spacing: 12
+									Text {
+										text: "Tổng doanh thu: 0"
+										color: "white"
+									}
+									Text {
+										text: "Trong đó: vé lượt 0, vé tháng 0"
+										color: "white"
+									}
+									Item {
+										Layout.fillWidth: true
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Xuất CSV"
+											color: "white"
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Xuất PDF"
+											color: "white"
+										}
+									}
+								}
+							}
+							// Save hook back to admin
+							Connections {
+								target: pricingLogic
+								function onSaved(json) {
+									try {
+										console.log('[AdminPage] onSaved JSON length:',
+													(json || '').length)
+										const arr = JSON.parse(json)
+										console.log('[AdminPage] rows to upsert:',
+													Array.isArray(
+														arr) ? arr.length : -1)
+									} catch (e) {
+										console.log('[AdminPage] JSON parse failed:',
+													e)
+									}
+									pricingJson.text = json
+									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
 								}
 							}
 						}

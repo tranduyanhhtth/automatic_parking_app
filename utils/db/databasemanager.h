@@ -117,6 +117,7 @@ public:
     // Danh sách subscriptions
     Q_INVOKABLE QList<QVariantMap> listSubscriptions(int limit = 500,
                                                      int offset = 0) override;
+    Q_INVOKABLE QVariantMap getLatestSubscriptionForUser(int userId);
     Q_INVOKABLE int getPricingId(const QString &vehicleType,
                                  const QString &ticketType) override;
 
@@ -150,6 +151,19 @@ public:
     Q_INVOKABLE QVariantMap getRfidCard(const QString &rfid);
     Q_INVOKABLE bool deleteRfidCard(const QString &rfid);
 
+    // Dashboard & Revenue summaries
+    Q_INVOKABLE QVariantMap getDashboardStats(const QString &todayIso);
+    Q_INVOKABLE QList<QVariantMap> listRevenueSummary(const QString &fromIso,
+                                                      const QString &toIso,
+                                                      const QString &typeFilter);
+
+    // Users management (Admin UI)
+    Q_INVOKABLE QList<QVariantMap> listUsers(int limit = 500, int offset = 0);
+    Q_INVOKABLE bool softDeleteUser(int userId); // mark inactive instead of hard delete
+    Q_INVOKABLE bool cancelSubscription(int subId);
+    Q_INVOKABLE bool markSubscriptionLostCard(int subId);
+    Q_INVOKABLE int expireDueSubscriptions(const QString &todayIso);
+
 private:
     QSqlDatabase DB_Connection;
 
@@ -180,11 +194,6 @@ private:
                        bool lostCard);
 
     // Users management extensions (for Admin UI)
-    Q_INVOKABLE QList<QVariantMap> listUsers(int limit = 500, int offset = 0);
-    Q_INVOKABLE bool softDeleteUser(int userId); // mark inactive instead of hard delete
-    Q_INVOKABLE bool cancelSubscription(int subId);
-    Q_INVOKABLE bool markSubscriptionLostCard(int subId);
-    Q_INVOKABLE int expireDueSubscriptions(const QString &todayIso);
 
     // // Mã hóa đơn giản cho trường nhạy cảm (RFID, biển số)
     // QString encodeText(const QString &plain) const;

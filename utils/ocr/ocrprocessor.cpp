@@ -40,7 +40,7 @@ namespace
         case 'G':
             return '6';
         case 'C':
-            return '0'; // or '6', pick '0' as more common visually
+            return '0'; // or '6'
         case 'B':
             return '8';
         case 'Q':
