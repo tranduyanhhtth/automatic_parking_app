@@ -54,8 +54,13 @@ Item {
         var name = fName.text
         if (!name || name.length < 2) { if (notify) notify('Tên không hợp lệ'); return }
         var phone = fPhone.text
+        if (!phone || !phone.length) { if (notify) notify('Vui lòng nhập số điện thoại'); return }
         var rfid = fRfid.text
+        if (!rfid || !rfid.length) { if (notify) notify('Vui lòng nhập ID thẻ'); return }
+
         var plate = fPlate.text
+        if (!plate || !plate.length) { if (notify) notify('Vui lòng nhập biển số xe'); return }
+
         var vt = normalizeVehicleLabel(fVt.currentText)
         const r = rRepo()
         if (!r || !r.upsertUser) { if (notify) notify('Thiếu repo.upsertUser'); return }

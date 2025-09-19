@@ -27,9 +27,39 @@ Item {
 
     function msg(m){ if(notify) notify(m); else console.log(m) }
     function planToTicket(p){ p=(''+p).toLowerCase(); if(p.indexOf('th')===0||p.indexOf('month')===0) return 'monthly'; if(p.indexOf('qu')===0||p.indexOf('quarter')===0) return 'quarterly'; if(p.indexOf('nă')===0||p.indexOf('ye')===0||p.indexOf('year')===0) return 'yearly'; return p }
+    function labelFromTicket(t){ if(t==='monthly') return 'Tháng'; if(t==='quarterly') return 'Quý'; if(t==='yearly') return 'Năm'; return '' }
+    function readPlanText(){
+        if(!adminPage || !adminPage.subPlan) return ''
+        // Prefer TextField semantics; fallback to ComboBox
+        if('text' in adminPage.subPlan) return adminPage.subPlan.text || ''
+        if('currentText' in adminPage.subPlan) return adminPage.subPlan.currentText || ''
+        return ''
+    }
+    function setPlanLabel(ticket){
+        if(!adminPage || !adminPage.subPlan) return
+        const lbl = labelFromTicket(ticket)
+        if('text' in adminPage.subPlan) adminPage.subPlan.text = lbl
+        else if('currentIndex' in adminPage.subPlan){ const map={'monthly':0,'quarterly':1,'yearly':2}; adminPage.subPlan.currentIndex = (ticket in map)? map[ticket]:0 }
+    }
+    function currentTicketFromRfid(){
+        if(!adminPage || !adminPage.subRfid) return ''
+        const code = adminPage.subRfid.text || ''
+        if(!code) return ''
+        const r = rRepo(); if(!r || !r.getRfidCard) return ''
+        const card = r.getRfidCard(code) || {}
+        return card.ticket_type || ''
+    }
     function pad2(n){ return n<10?('0'+n):''+n }
     function addMonths(iso, m){ if(!iso||m<=0) return iso||''; const parts=(''+iso).split('-'); if(parts.length<3) return iso; let y=parseInt(parts[0]); let mm=parseInt(parts[1])-1; let d=parseInt(parts[2]); const dt=new Date(y,mm,d); dt.setMonth(dt.getMonth()+m); return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate()) }
-    function updateEnd(){ if(!adminPage) return; const start=(adminPage.subStart&&adminPage.subStart.text)?adminPage.subStart.text:''; if(!start) return; const t=planToTicket(adminPage.subPlan.currentText); const m=t==='monthly'?1:(t==='quarterly'?3:(t==='yearly'?12:0)); if(m>0 && adminPage.subEnd) adminPage.subEnd.text=addMonths(start,m) }
+    function updateEnd(){
+        if(!adminPage) return;
+        const start=(adminPage.subStart&&adminPage.subStart.text)?adminPage.subStart.text:'';
+        if(!start) return;
+        const t = currentTicketFromRfid() || planToTicket(readPlanText());
+        setPlanLabel(t);
+        const m=t==='monthly'?1:(t==='quarterly'?3:(t==='yearly'?12:0));
+        if(m>0 && adminPage.subEnd) adminPage.subEnd.text=addMonths(start,m)
+    }
     function validate(){ if(!adminPage) return 'Trang Admin chưa sẵn sàng'; if(!adminPage.subUserText || !adminPage.subUserText.text || adminPage.subUserText.text.length<2) return 'Nhập tên user'; if(!(adminPage.subPlate&&adminPage.subPlate.text)||adminPage.subPlate.text.length<4) return 'Biển số không hợp lệ'; if(!(adminPage.subRfid&&adminPage.subRfid.text)||adminPage.subRfid.text.length<3) return 'RFID không hợp lệ'; if(!(adminPage.subPrice&&adminPage.subPrice.text)) return 'Thiếu giá'; return '' }
     function refreshUsers(){ const r=rRepo(); if(!r||!r.listUsers) return; usersCache=r.listUsers(500,0)||[] }
     function findUserByName(name){ 
@@ -88,7 +118,7 @@ Item {
         if(adminPage){
             if(adminPage.subPlate) adminPage.subPlate.text=plate;
             if(adminPage.subRfid) adminPage.subRfid.text=rfid;
-            if(adminPage.subPlan){ const map={'monthly':0,'quarterly':1,'yearly':2}; adminPage.subPlan.currentIndex=(plan_type in map)? map[plan_type]:0 }
+            if(adminPage.subPlan){ setPlanLabel(plan_type) }
             if(adminPage.subStart) adminPage.subStart.text=start_date;
             if(adminPage.subEnd) adminPage.subEnd.text=end_date;
             if(adminPage.subPayment) adminPage.subPayment.currentIndex= payment_mode==='postpaid'?1:0;
@@ -140,7 +170,8 @@ Item {
     function createOrExtend(isExtend){
         const err=validate(); if(err){ msg(err); return }
         console.log('[SubsLogic] createOrExtend start', {extend:isExtend})
-        const ticket=planToTicket(adminPage.subPlan.currentText);
+        const ticket = currentTicketFromRfid() || planToTicket(readPlanText());
+        if(ticket!=='monthly' && ticket!=='quarterly' && ticket!=='yearly'){ msg('Loại thẻ RFID không phải vé tháng/quý/năm'); return }
         var userId=-1; var userObj=null;
         if(adminPage && adminPage.subUserText){ userObj = findUserByName(adminPage.subUserText.text); if(userObj) userId=userObj.id }
         if(!userObj){ msg('Tên người dùng không tồn tại, không thể đăng ký'); return }
@@ -302,10 +333,7 @@ Item {
             const sub = r.getLatestSubscriptionForUser(userId)
             if(!sub || !sub.id){ return false }
             // Existing subscription => fill everything
-            if(adminPage.subPlan) {
-                const map = { 'monthly':0, 'quarterly':1, 'yearly':2 }
-                adminPage.subPlan.currentIndex = (sub.plan_type in map) ? map[sub.plan_type] : 0
-            }
+            if(adminPage.subPlan) { setPlanLabel(sub.plan_type) }
             if(adminPage.subStart) adminPage.subStart.text = sub.start_date
             if(adminPage.subEnd) adminPage.subEnd.text = sub.end_date
             if(adminPage.subPayment) adminPage.subPayment.currentIndex = sub.payment_mode === 'postpaid' ? 1 : 0
@@ -323,7 +351,8 @@ Item {
                         // Try prefill existing subscription; if returns false (no existing) then set new start/end
                         const had = prefillSubscriptionForUser(u.id);
                         if(!had){
-                            const tk=planToTicket(adminPage.subPlan.currentText);
+                            const tk=currentTicketFromRfid();
+                            setPlanLabel(tk)
                             if(adminPage.subStart){ const today=todayIso(); adminPage.subStart.text=today; updateEnd() }
                             prefillPrice(u.id, tk);
                         }
@@ -332,6 +361,7 @@ Item {
                         if(adminPage.subPlate) adminPage.subPlate.text='';
                         if(adminPage.subRfid) adminPage.subRfid.text='';
                         if(adminPage.subPrice) adminPage.subPrice.text='';
+                        if(adminPage.subPlan && ('text' in adminPage.subPlan)) adminPage.subPlan.text='';
                         if(adminPage.subStart) adminPage.subStart.text='';
                         if(adminPage.subEnd) adminPage.subEnd.text='';
                     }
@@ -340,25 +370,10 @@ Item {
             } 
         }
     }
-    Connections { 
-        target: adminPage?adminPage.subPlan:null; 
-        function onCurrentIndexChanged(){ 
-            // on plan change: for new users (no prior sub) set start=today and recompute end
-            if(adminPage && adminPage.subUserText && adminPage.subUserText.text){
-                var u=findUserByName(adminPage.subUserText.text);
-                if(u){
-                    const r=rRepo();
-                    // If no prior subscription: set start today
-                    if(r && r.getLatestSubscriptionForUser){
-                        var sub=r.getLatestSubscriptionForUser(u.id);
-                        if(!sub || !sub.id){ if(adminPage.subStart){ adminPage.subStart.text=todayIso() } }
-                    }
-                    prefillPrice(u.id, planToTicket(adminPage.subPlan.currentText))
-                }
-            }
-            updateEnd();
-        } 
-        function onCurrentTextChanged(){ 
+    // React when subPlan is a ComboBox
+    Connections {
+        target: (adminPage && adminPage.subPlan && ('currentIndex' in adminPage.subPlan)) ? adminPage.subPlan : null
+        function onCurrentIndexChanged(){
             if(adminPage && adminPage.subUserText && adminPage.subUserText.text){
                 var u=findUserByName(adminPage.subUserText.text);
                 if(u){
@@ -367,11 +382,59 @@ Item {
                         var sub=r.getLatestSubscriptionForUser(u.id);
                         if(!sub || !sub.id){ if(adminPage.subStart){ adminPage.subStart.text=todayIso() } }
                     }
-                    prefillPrice(u.id, planToTicket(adminPage.subPlan.currentText))
+                    const tk = currentTicketFromRfid() || planToTicket(readPlanText())
+                    prefillPrice(u.id, tk)
                 }
             }
             updateEnd();
-        } 
+        }
+        function onCurrentTextChanged(){
+            if(adminPage && adminPage.subUserText && adminPage.subUserText.text){
+                var u=findUserByName(adminPage.subUserText.text);
+                if(u){
+                    const r=rRepo();
+                    if(r && r.getLatestSubscriptionForUser){
+                        var sub=r.getLatestSubscriptionForUser(u.id);
+                        if(!sub || !sub.id){ if(adminPage.subStart){ adminPage.subStart.text=todayIso() } }
+                    }
+                    const tk = currentTicketFromRfid() || planToTicket(readPlanText())
+                    prefillPrice(u.id, tk)
+                }
+            }
+            updateEnd();
+        }
+    }
+    // React when subPlan is a TextField
+    Connections {
+        target: (adminPage && adminPage.subPlan && ('text' in adminPage.subPlan)) ? adminPage.subPlan : null
+        function onTextChanged(){
+            if(adminPage && adminPage.subUserText && adminPage.subUserText.text){
+                var u=findUserByName(adminPage.subUserText.text);
+                if(u){
+                    const r=rRepo();
+                    if(r && r.getLatestSubscriptionForUser){
+                        var sub=r.getLatestSubscriptionForUser(u.id);
+                        if(!sub || !sub.id){ if(adminPage.subStart){ adminPage.subStart.text=todayIso() } }
+                    }
+                    const tk = currentTicketFromRfid() || planToTicket(readPlanText())
+                    prefillPrice(u.id, tk)
+                }
+            }
+            updateEnd();
+        }
+    }
+    Connections {
+        target: adminPage?adminPage.subRfid:null;
+        function onTextChanged(){
+            // Sync plan label with RFID card when RFID changes
+            const tk = currentTicketFromRfid();
+            setPlanLabel(tk)
+            if(adminPage && adminPage.subUserText && adminPage.subUserText.text){
+                var u=findUserByName(adminPage.subUserText.text);
+                if(u){ prefillPrice(u.id, tk) }
+            }
+            updateEnd();
+        }
     }
     Connections { 
         target: adminPage?adminPage.subStart:null; 

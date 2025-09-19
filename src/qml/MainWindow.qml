@@ -91,6 +91,7 @@ Item {
     
     NotifyLogic { 
         id: notifyLogic 
+        toast: toast
     }
 
     // HID Log panel
@@ -159,6 +160,8 @@ Item {
                 item.adminPage = adminPage
                 item.notify = (msg) => root.showToast(msg)
                 item.allowedAccounts = root.allowedAccounts
+                adminPage.rfidLogic = item.rfidLogic
+
             }
         }
     }

@@ -2,19 +2,16 @@
     <qresource prefix="/qt/qml/smart_parking_system/src/qml">
         <file>MainWindow.qml</file>
         <file>MainWindowForm.ui.qml</file>
-
-        <file>components/LaneComponent.qml</file>
+        <file>components/LaneComponent.ui.qml</file>
         <file>components/ToastComponent.ui.qml</file>
         <file>components/NavDrawer.ui.qml</file>
         <file>components/HidLogPanel.ui.qml</file>
-
         <file>dialogs/AdminDialog.ui.qml</file>
         <file>dialogs/CameraSettingsDialog.ui.qml</file>
         <file>dialogs/BarrierSettingsDialog.ui.qml</file>
         <file>dialogs/LoginDialog.ui.qml</file>
         <file>dialogs/SearchDialog.ui.qml</file>
         <file>dialogs/SessionDetailDialog.ui.qml</file>
-
         <file>logic/CameraLogic.qml</file>
         <file>logic/BarrierLogic.qml</file>
         <file>logic/PricingLogic.qml</file>
@@ -25,11 +22,11 @@
         <file>logic/LoginLogic.qml</file>
         <file>logic/NotifyLogic.qml</file>
         <file>logic/UsersLogic.qml</file>
+        <file>logic/ToastLogic.qml</file>
         <file>logic/SubscriptionsLogic.qml</file>
         <file>logic/RevenueLogic.qml</file>
         <file>logic/RfidCardsLogic.qml</file>
         <file>logic/DashboardLogic.qml</file>
-
         <file>pages/AdminPage.ui.qml</file>
         <file>pages/SearchPage.ui.qml</file>
     </qresource>

@@ -34,7 +34,20 @@ bool DatabaseManager::initialize()
         return false;
     }
     qDebug() << "[DB] initialize() using file:" << DB_Connection.databaseName();
-    return ensureSchema();
+    const bool ok = ensureSchema();
+    if (ok)
+    {
+        // Defensive: ensure new indexes added in future versions are present (idempotent)
+        QSqlQuery qi(DB_Connection);
+        qi.exec("CREATE INDEX IF NOT EXISTS idx_users_fullname ON users(full_name)");
+        qi.exec("CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)");
+        qi.exec("CREATE INDEX IF NOT EXISTS idx_users_plate ON users(plate)");
+        qi.exec("CREATE INDEX IF NOT EXISTS idx_subs_status ON subscriptions(status)");
+        qi.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_subs_active_user_plate ON subscriptions(user_id, plate) WHERE status='active' AND plate IS NOT NULL");
+        qi.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_subs_active_user_rfid ON subscriptions(user_id, rfid) WHERE status='active' AND rfid IS NOT NULL");
+        qi.exec("CREATE INDEX IF NOT EXISTS idx_rfid_cards_user ON rfid_cards(user_id)");
+    }
+    return ok;
 }
 
 bool DatabaseManager::ensureSchema()
@@ -61,6 +74,10 @@ bool DatabaseManager::ensureSchema()
         DB_Connection.rollback();
         return false;
     }
+    // Helpful lookup indexes for users (name filtering & active plates)
+    q.exec("CREATE INDEX IF NOT EXISTS idx_users_fullname ON users(full_name)");
+    q.exec("CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)");
+    q.exec("CREATE INDEX IF NOT EXISTS idx_users_plate ON users(plate)");
 
     // 2) parking_sessions (enforce NOT NULL on pricing_id, and RESTRICT on FKs)
     if (!q.exec(R"(
@@ -191,6 +208,10 @@ bool DatabaseManager::ensureSchema()
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_dates ON subscriptions(start_date, end_date)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_plate_rfid ON subscriptions(plate, rfid)");
+    q.exec("CREATE INDEX IF NOT EXISTS idx_subs_status ON subscriptions(status)");
+    // Enforce at most one active overlapping subscription per user + (plate or rfid)
+    q.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_subs_active_user_plate ON subscriptions(user_id, plate) WHERE status='active' AND plate IS NOT NULL");
+    q.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_subs_active_user_rfid ON subscriptions(user_id, rfid) WHERE status='active' AND rfid IS NOT NULL");
 
     // 5) revenues (link pricing_id and stricter enums)
     if (!q.exec(R"(
@@ -244,6 +265,7 @@ bool DatabaseManager::ensureSchema()
         }
         qr.exec("CREATE INDEX IF NOT EXISTS idx_rfid_cards_status ON rfid_cards(status)");
         qr.exec("CREATE INDEX IF NOT EXISTS idx_rfid_cards_vt_tt ON rfid_cards(vehicle_type, ticket_type)");
+        qr.exec("CREATE INDEX IF NOT EXISTS idx_rfid_cards_user ON rfid_cards(user_id)");
 
         // Triggers to enforce rfid in users/subscriptions/parking_sessions must exist in rfid_cards if not NULL
         qr.exec(R"(
@@ -1234,6 +1256,19 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
     // Gán user nếu có, và kiểm tra subscription active
     int userId = -1;
     QString vehicleType = QStringLiteral("car");
+    QString cardVehicleType;
+    QString cardTicketType;
+    // Read RFID card info to support short-term cards without subscription/user
+    {
+        QSqlQuery qc(DB_Connection);
+        qc.prepare("SELECT vehicle_type, ticket_type FROM rfid_cards WHERE rfid=:rf LIMIT 1");
+        qc.bindValue(":rf", encRfid);
+        if (qc.exec() && qc.next())
+        {
+            cardVehicleType = qc.value(0).toString();
+            cardTicketType = qc.value(1).toString();
+        }
+    }
     if (auto u = findUserByRfidOrPlate(encRfid, encPlate))
     {
         userId = u->value("id").toInt();
@@ -1248,7 +1283,19 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
     if (!sub.isEmpty() && sub.contains("pricing_id"))
         pricingId = sub.value("pricing_id").toInt();
     if (pricingId <= 0)
-        pricingId = getPricingIdFor(vehicleType, QStringLiteral("hourly"));
+    {
+        // Prefer card vehicle/ticket if available; fall back to user vehicle + hourly
+        const QString vt = cardVehicleType.isEmpty() ? vehicleType : cardVehicleType;
+        QString tt = cardTicketType;
+        if (tt.isEmpty())
+            tt = QStringLiteral("hourly");
+        pricingId = getPricingIdFor(vt, tt);
+        if (pricingId <= 0)
+        {
+            // Fallback: try hourly if specific short-term ticket not configured
+            pricingId = getPricingIdFor(vt, QStringLiteral("hourly"));
+        }
+    }
     QSqlQuery q(DB_Connection);
     // Dùng placeholders vị trí để tránh mismatch trong một số build Qt/SQLite
     q.prepare("INSERT INTO parking_sessions (user_id, pricing_id, rfid, plate, checkin_time, checkin_image1, checkin_image2, status) VALUES(?,?,?,?,?,?,?,?)");

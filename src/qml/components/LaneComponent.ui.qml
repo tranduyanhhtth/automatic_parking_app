@@ -323,7 +323,7 @@ Rectangle {
                                 Layout.preferredWidth: 90
                             }
                             Text {
-                                text: app.entranceCardType || "Vãng lai"
+                                text: app.entranceCardType
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }

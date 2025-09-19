@@ -10,80 +10,10 @@
 #include <gst/app/app.h>
 #include <gst/video/video.h>
 
+QAtomicInt GStreamerPlayer::s_inited{0};
+
 GStreamerPlayer::GStreamerPlayer(QObject *parent) : QObject(parent)
 {
-    static QAtomicInt inited{0};
-    if (inited.fetchAndAddRelaxed(0) == 0)
-    {
-        // Prefer the system-installed plugin directory; fall back to a local bundled folder
-        if (qEnvironmentVariableIsEmpty("GST_PLUGIN_PATH"))
-        {
-            const QString systemPlugins = QStringLiteral("C:/Program Files/gstreamer/1.0/msvc_x86_64/lib/gstreamer-1.0");
-            const QString appDir = QCoreApplication::applicationDirPath();
-            const QString localPlugins = QDir::toNativeSeparators(appDir + "/gstreamer-1.0");
-
-            const bool hasSystem = QDir(systemPlugins).exists();
-            const bool hasLocal = QDir(localPlugins).exists();
-            if (hasSystem && hasLocal)
-            {
-                // On Windows, ';' separates multiple paths
-                const QString combined = QDir(systemPlugins).absolutePath() + ";" + localPlugins;
-                qputenv("GST_PLUGIN_PATH", combined.toUtf8());
-            }
-            else if (hasSystem)
-            {
-                qputenv("GST_PLUGIN_PATH", QDir(systemPlugins).absolutePath().toUtf8());
-            }
-            else if (hasLocal)
-            {
-                qputenv("GST_PLUGIN_PATH", localPlugins.toUtf8());
-            }
-        }
-
-        // Prefer RTSP over TCP to work reliably behind NAT/firewalls unless overridden
-        if (qEnvironmentVariableIsEmpty("GST_RTSP_TCP"))
-        {
-            qputenv("GST_RTSP_TCP", QByteArray("1"));
-        }
-        // Allow user override; otherwise enable moderate debug
-        if (qEnvironmentVariableIsEmpty("GST_DEBUG"))
-        {
-            qputenv("GST_DEBUG", QByteArray("2"));
-        }
-
-        // Ensure system GStreamer bin is on PATH for loader resolution when launched from IDE
-        const QString gstBin = QStringLiteral("C:/Program Files/gstreamer/1.0/msvc_x86_64/bin");
-        if (QDir(gstBin).exists())
-        {
-            const QByteArray currentPath = qgetenv("PATH");
-            const QString prefix = QDir::toNativeSeparators(gstBin);
-            if (!QString::fromUtf8(currentPath).contains(prefix, Qt::CaseInsensitive))
-            {
-                qputenv("PATH", (prefix + ";" + QString::fromUtf8(currentPath)).toUtf8());
-            }
-        }
-
-        gst_init(nullptr, nullptr);
-        inited.storeRelease(1);
-
-        qDebug() << "GStreamer initialized. GST_PLUGIN_PATH=" << qEnvironmentVariable("GST_PLUGIN_PATH")
-                 << " GST_RTSP_TCP=" << qEnvironmentVariable("GST_RTSP_TCP")
-                 << " GST_DEBUG=" << qEnvironmentVariable("GST_DEBUG");
-
-        // Quick diagnostics for common missing plugins
-        auto warnMissing = [](const char *elem, const char *pkg)
-        {
-            if (!hasElement(elem))
-            {
-                qWarning() << "[GStreamer] Missing element" << elem << "- install package:" << pkg;
-            }
-        };
-        warnMissing("rtspsrc", "gst-plugins-good");
-        warnMissing("playbin", "gstreamer");
-        warnMissing("uridecodebin", "gstreamer");
-        warnMissing("videoconvert", "gst-plugins-base");
-    }
-
     // Timers
     m_retryTimer.setSingleShot(true);
     connect(&m_retryTimer, &QTimer::timeout, this, [this]()
@@ -98,6 +28,61 @@ GStreamerPlayer::GStreamerPlayer(QObject *parent) : QObject(parent)
             // Ensure retry happens on our thread
             scheduleRetry(1500);
         } });
+}
+
+void GStreamerPlayer::ensureInitialized()
+{
+    if (s_inited.fetchAndAddRelaxed(0) != 0)
+        return;
+    configureEnvironment();
+    gst_init(nullptr, nullptr);
+    s_inited.storeRelease(1);
+    qDebug() << "GStreamer initialized (lazy). GST_PLUGIN_PATH=" << qEnvironmentVariable("GST_PLUGIN_PATH")
+             << " GST_RTSP_TCP=" << qEnvironmentVariable("GST_RTSP_TCP")
+             << " GST_DEBUG=" << qEnvironmentVariable("GST_DEBUG");
+    auto warnMissing = [](const char *elem, const char *pkg)
+    {
+        if (!hasElement(elem))
+            qWarning() << "[GStreamer] Missing element" << elem << "- install package:" << pkg;
+    };
+    warnMissing("rtspsrc", "gst-plugins-good");
+    warnMissing("playbin", "gstreamer");
+    warnMissing("uridecodebin", "gstreamer");
+    warnMissing("videoconvert", "gst-plugins-base");
+}
+
+void GStreamerPlayer::configureEnvironment()
+{
+    // Minimal plugin path: only include directories we actually ship/use to reduce scan + warnings
+    if (qEnvironmentVariableIsEmpty("GST_PLUGIN_PATH"))
+    {
+        const QString baseSys = QStringLiteral("C:/Program Files/gstreamer/1.0/msvc_x86_64/lib/gstreamer-1.0");
+        const QString appDir = QCoreApplication::applicationDirPath();
+        const QString localCore = QDir::toNativeSeparators(appDir + "/gstreamer-core"); // (optional curated subset)
+        QStringList paths;
+        if (QDir(localCore).exists())
+            paths << localCore; // prefer curated subset if present
+        else if (QDir(baseSys).exists())
+            paths << baseSys; // fallback to full system path
+        if (!paths.isEmpty())
+            qputenv("GST_PLUGIN_PATH", paths.join(';').toUtf8());
+    }
+    if (qEnvironmentVariableIsEmpty("GST_RTSP_TCP"))
+        qputenv("GST_RTSP_TCP", QByteArray("1"));
+    // Reduce noise: only warnings+errors for production (user can override)
+    if (qEnvironmentVariableIsEmpty("GST_DEBUG"))
+        qputenv("GST_DEBUG", QByteArray("1"));
+    // Suppress excessive registry scanning output
+    if (qEnvironmentVariableIsEmpty("GST_REGISTRY_FORK"))
+        qputenv("GST_REGISTRY_FORK", QByteArray("no"));
+    const QString gstBin = QStringLiteral("C:/Program Files/gstreamer/1.0/msvc_x86_64/bin");
+    if (QDir(gstBin).exists())
+    {
+        const QByteArray currentPath = qgetenv("PATH");
+        const QString prefix = QDir::toNativeSeparators(gstBin);
+        if (!QString::fromUtf8(currentPath).contains(prefix, Qt::CaseInsensitive))
+            qputenv("PATH", (prefix + ";" + QString::fromUtf8(currentPath)).toUtf8());
+    }
 }
 
 GStreamerPlayer::~GStreamerPlayer()
@@ -121,6 +106,7 @@ void GStreamerPlayer::cleanup()
 
 bool GStreamerPlayer::start(const QString &rtspUrl)
 {
+    ensureInitialized();
     stop();
     m_url = rtspUrl;
     if (rtspUrl.trimmed().isEmpty())

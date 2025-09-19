@@ -48,10 +48,11 @@ Item {
 	property alias subPrice: subPrice
 	property alias subFilter: subFilter
 	property alias subPlatePick: subPlatePick
-	// // Revenue summary aliases
-	// property alias revSummaryTotal: revSummaryTotal
-	// property alias revSummaryBreakdown: revSummaryBreakdown
+	// Revenue summary aliases (labels in Revenue section)
+	property alias revSummaryTotal: revSummaryTotal
+	property alias revSummaryBreakdown: revSummaryBreakdown
 	// Expose minimal aliases for logic wiring later
+	property var rfidLogic: null
 	property alias tabBar: tabbar
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
@@ -72,6 +73,7 @@ Item {
 	// Row selection via index (single-expression onClicked)
 	property int pendingSelectUserIndex: -1
 	property int pendingSelectSubIndex: -1
+	// property int pendingSelectRfidIndex: -1
 
 	// Logic instances
 	ToastComponent {
@@ -672,7 +674,7 @@ Item {
 											model: rfidLogic.listModel
 											clip: true
 											delegate: Rectangle {
-												color: (tfRfid && rfid === tfRfid.text) ? "#4ec9b0" : "transparent"
+												color: (adminPage.pendingSelectRfidIndex === index) ? "#334455" : ((tfRfid && rfid === tfRfid.text) ? "#4ec9b0" : "transparent")
 												border.color: "#555"
 												border.width: 1
 												width: parent.width
@@ -707,16 +709,23 @@ Item {
 														Layout.preferredWidth: 120
 													}
 													Text {
-														text: (assigned_at || '')
+														text: (assigned_at
+															   || '')
 														color: "white"
 														Layout.preferredWidth: 160
 													}
 													Text {
-														text: (description || '')
+														text: (description
+															   || '')
 														color: "#ddd"
 														Layout.fillWidth: true
 														wrapMode: Text.Wrap
 													}
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: adminPage.pendingSelectRfidIndex
+															   = index
 												}
 											}
 										}
@@ -942,10 +951,15 @@ Item {
 													anchors.fill: parent
 													spacing: 8
 													Text {
-														text: id
+														text: (index + 1)
 														color: "white"
-														Layout.preferredWidth: 60
+														Layout.preferredWidth: 50
 													}
+													// Text {
+													// 	text: id
+													// 	color: "#888"
+													// 	Layout.preferredWidth: 60
+													// }
 													Text {
 														text: full_name
 														color: "white"
@@ -1049,19 +1063,27 @@ Item {
 									}
 									ComboBox {
 										id: subPlatePick
-										visible: subsLogic && subsLogic.dupPlates && subsLogic.dupPlates.length > 1
+										visible: subsLogic
+												 && subsLogic.dupPlates
+												 && subsLogic.dupPlates.length > 1
 										Layout.preferredWidth: 160
 										Layout.preferredHeight: 24
 										model: subsLogic ? subsLogic.dupPlates : []
-										background: Rectangle { radius: 8 }
+										background: Rectangle {
+											radius: 8
+										}
 										onCurrentIndexChanged: adminPage.triggerSubUserTextChanged = !adminPage.triggerSubUserTextChanged
 									}
-									ComboBox {
+									TextField {
 										id: subPlan
-										model: ["Tháng", "Quý", "Năm"]
-										Layout.preferredWidth: 120
-										Layout.preferredHeight: 24
+										placeholderText: "Loại thẻ"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
+										Layout.preferredWidth: 140
 										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
 											radius: 8
 										}
 									}
@@ -1277,10 +1299,15 @@ Item {
 													anchors.fill: parent
 													spacing: 8
 													Text {
-														text: id
+														text: (index + 1)
 														color: "white"
-														Layout.preferredWidth: 60
+														Layout.preferredWidth: 50
 													}
+													// Text {
+													// 	text: id
+													// 	color: "#888"
+													// 	Layout.preferredWidth: 60
+													// }
 													Text {
 														text: full_name
 														color: "white"
@@ -1442,14 +1469,8 @@ Item {
 								RowLayout {
 									Layout.fillWidth: true
 									spacing: 12
-									Text {
-										text: "Tổng doanh thu: 0"
-										color: "white"
-									}
-									Text {
-										text: "Trong đó: vé lượt 0, vé tháng 0"
-										color: "white"
-									}
+									Text { id: revSummaryTotal; text: "Tổng doanh thu: 0"; color: "white" }
+									Text { id: revSummaryBreakdown; text: "Trong đó: vé lượt 0, vé tháng 0"; color: "white" }
 									Item {
 										Layout.fillWidth: true
 									}

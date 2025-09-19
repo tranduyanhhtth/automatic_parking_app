@@ -9,6 +9,8 @@
 #include <QTimer>
 #include <QBuffer>
 #include <QRegularExpression>
+#include <QVariant>
+#include <QMetaObject>
 
 ParkingController::ParkingController(ICameraSnapshotProvider *cam1,
                                      ICameraSnapshotProvider *cam2,
@@ -46,6 +48,26 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
 {
     if (!m_db)
         return;
+    // Require RFID to be registered in rfid_cards (short-term cards are allowed without user/subscription)
+    auto getCard = [this](const QString &code) -> QVariantMap
+    {
+        QObject *dbObj = dynamic_cast<QObject *>(m_db);
+        if (!dbObj)
+            return {};
+        QVariant ret;
+        bool ok = QMetaObject::invokeMethod(dbObj, "getRfidCard",
+                                            Q_RETURN_ARG(QVariant, ret),
+                                            Q_ARG(QString, code));
+        return ok ? ret.toMap() : QVariantMap{};
+    };
+    const QVariantMap card = getCard(normRfid);
+    if (card.isEmpty())
+    {
+        m_message = QStringLiteral("Thẻ chưa đăng ký trong hệ thống");
+        emit messageChanged();
+        emit showToast(m_message);
+        return;
+    }
     if (m_db->hasOpenSession(normRfid))
     {
         m_message = QStringLiteral("Thẻ đang sử dụng");
@@ -63,33 +85,12 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
         QByteArray img2 = cam->captureOutputSnapshot(85);
         QString detectedPlate;
         QByteArray ann1, ann2;
-        if (m_ocr)
-        {
-            const QVariantMap res = m_ocr->recognizePlates(img1, img2);
-            const QString backend = res.value("backend").toString();
-            const int fbc = res.value("frontBoxCount").toInt();
-            const int rbc = res.value("rearBoxCount").toInt();
-            emit showToast(QStringLiteral("OCR(%1) boxes F:%2 R:%3").arg(backend).arg(fbc).arg(rbc));
-            detectedPlate = res.value("front").toString();
-            if (detectedPlate.isEmpty())
-                detectedPlate = res.value("rear").toString();
-            if (!detectedPlate.isEmpty())
-                emit showToast(QStringLiteral("OCR plate: %1").arg(detectedPlate));
-            else
-                emit showToast(QStringLiteral("OCR plate: (none)"));
-            ann1 = res.value("frontAnnotated").toByteArray();
-            ann2 = res.value("rearAnnotated").toByteArray();
-            // Update entrance preview for UI
-            if (!ann1.isEmpty())
-                m_entranceImg1 = makeDataUrlFromBytes(ann1);
-            else
-                m_entranceImg1 = makeDataUrlFromBytes(img1);
-            if (!ann2.isEmpty())
-                m_entranceImg2 = makeDataUrlFromBytes(ann2);
-            else
-                m_entranceImg2 = makeDataUrlFromBytes(img2);
-            emit entrancePreviewChanged();
-        }
+        // OCR/YOLO temporarily disabled
+        // if (m_ocr) { ... }
+        // Always update entrance preview with raw images
+        m_entranceImg1 = makeDataUrlFromBytes(img1);
+        m_entranceImg2 = makeDataUrlFromBytes(img2);
+        emit entrancePreviewChanged();
 
         // Cập nhật lastRfid cho UI khi thực sự tiến hành check-in
         m_lastRfid = normRfid;
@@ -97,8 +98,8 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
 
         m_plate = detectedPlate;
         emit plateChanged();
-        const QByteArray store1 = ann1.isEmpty() ? img1 : ann1;
-        const QByteArray store2 = ann2.isEmpty() ? img2 : ann2;
+        const QByteArray store1 = img1;
+        const QByteArray store2 = img2;
         const CheckInResult ok = m_db->checkIn(normRfid, m_plate, store1, store2);
         if (ok == CheckInResult::Ok)
         {
@@ -132,7 +133,8 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
             m_entrancePlate = m_plate;
             m_entranceTimeIn = m_checkInTime;
             m_entranceCardId = normRfid;
-            m_entranceCardType = QStringLiteral("Vãng lai");
+            // Set card type from registration (hourly/daily_day/daily_night/overnight/etc.)
+            m_entranceCardType = card.value(QStringLiteral("ticket_type")).toString();
             emit entranceInfoChanged();
             m_moneyMessage = QStringLiteral("Cổng vào: %1 - %2").arg(m_entranceCardType, m_entranceCardId);
             emit moneyMessageChanged();
@@ -185,49 +187,59 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
     loadExitReview(normRfid);
     QByteArray live1 = cam->captureInputSnapshot(85);
     QByteArray live2 = cam->captureOutputSnapshot(85);
-    QByteArray ann1, ann2;
-    if (m_ocr)
-    {
-        QVariantMap full = m_db->fetchFullOpenSession(normRfid);
-        const QString storedPlate = full.value("plate").toString();
-        auto normalizePlate = [](QString p)
-        {
-            p = p.toUpper();
-            p.remove(QRegularExpression("[^A-Z0-9]"));
-            return p;
-        };
-        QString ocrPlate;
-        {
-            const QVariantMap res = m_ocr->recognizePlates(live1, live2);
-            const QString backend = res.value("backend").toString();
-            const int fbc = res.value("frontBoxCount").toInt();
-            const int rbc = res.value("rearBoxCount").toInt();
-            emit showToast(QStringLiteral("OCR(%1) boxes F:%2 R:%3").arg(backend).arg(fbc).arg(rbc));
-            ocrPlate = res.value("front").toString();
-            if (ocrPlate.isEmpty())
-                ocrPlate = res.value("rear").toString();
-            if (ocrPlate.isEmpty())
-                ocrPlate = QStringLiteral("unknown");
-            else
-                emit showToast(QStringLiteral("OCR plate: %1").arg(ocrPlate));
-            ann1 = res.value("frontAnnotated").toByteArray();
-            ann2 = res.value("rearAnnotated").toByteArray();
-        }
-        const QString a = normalizePlate(storedPlate);
-        const QString b = normalizePlate(ocrPlate);
-        if (!a.isEmpty() && !b.isEmpty() && a == b)
-            emit showToast(QStringLiteral("Biển số khớp: %1").arg(ocrPlate));
-        else
-            emit showToast(QStringLiteral("Biển số không khớp"));
-    }
+    // if (m_ocr)
+    // {
+    //     QVariantMap full = m_db->fetchFullOpenSession(normRfid);
+    //     const QString storedPlate = full.value("plate").toString();
+    //     auto normalizePlate = [](QString p)
+    //     {
+    //         p = p.toUpper();
+    //         p.remove(QRegularExpression("[^A-Z0-9]"));
+    //         return p;
+    //     };
+    //     QString ocrPlate;
+    //     {
+    //         const QVariantMap res = m_ocr->recognizePlates(live1, live2);
+    //         const QString backend = res.value("backend").toString();
+    //         const int fbc = res.value("frontBoxCount").toInt();
+    //         const int rbc = res.value("rearBoxCount").toInt();
+    //         emit showToast(QStringLiteral("OCR(%1) boxes F:%2 R:%3").arg(backend).arg(fbc).arg(rbc));
+    //         ocrPlate = res.value("front").toString();
+    //         if (ocrPlate.isEmpty())
+    //             ocrPlate = res.value("rear").toString();
+    //         if (ocrPlate.isEmpty())
+    //             ocrPlate = QStringLiteral("unknown");
+    //         emit showToast(QStringLiteral("OCR plate: %1").arg(ocrPlate));
+    //     }
+    //     const QString a = normalizePlate(storedPlate);
+    //     const QString b = normalizePlate(ocrPlate);
+    //     if (!a.isEmpty() && !b.isEmpty() && a == b)
+    //         emit showToast(QStringLiteral("Biển số khớp: %1").arg(ocrPlate));
+    //     else
+    //         emit showToast(QStringLiteral("Biển số không khớp"));
+    // }
     QVariantMap openBefore = m_db->fetchFullOpenSession(normRfid);
     const QString plateBefore = openBefore.value("plate").toString();
     const QString checkinBefore = openBefore.value("checkin_time").toString();
+    const int sessionId = openBefore.value("id").toInt();
+    // Resolve card for pricing hint
+    auto getCard = [this](const QString &code) -> QVariantMap
+    {
+        QObject *dbObj = dynamic_cast<QObject *>(m_db);
+        if (!dbObj)
+            return {};
+        QVariant ret;
+        bool ok = QMetaObject::invokeMethod(dbObj, "getRfidCard",
+                                            Q_RETURN_ARG(QVariant, ret),
+                                            Q_ARG(QString, code));
+        return ok ? ret.toMap() : QVariantMap{};
+    };
+    const QVariantMap card = getCard(normRfid);
     QString coTime;
     // Lưu ảnh checkout vào DB như cổng vào
     // Store annotated images if we have them
-    const QByteArray store1 = ann1.isEmpty() ? live1 : ann1;
-    const QByteArray store2 = ann2.isEmpty() ? live2 : ann2;
+    const QByteArray store1 = live1;
+    const QByteArray store2 = live2;
     const CheckOutResult r = m_db->checkOutRfidWithImages(normRfid, &coTime, store1, store2);
     if (r == CheckOutResult::OkMatched)
     {
@@ -248,19 +260,32 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         }
         m_message = QStringLiteral("Check-out thành công");
         emit messageChanged();
-        emit showToast(QStringLiteral("Kết thúc phiên"));
+        int fee = -1;
+        if (sessionId > 0)
+            fee = m_db->computeFeeForSession(sessionId, coTime, false);
+        if (fee < 0)
+        {
+            // Fallback simple estimation only if compute failed
+            QDateTime tin = QDateTime::fromString(checkinBefore, Qt::ISODate);
+            QDateTime tout = QDateTime::fromString(coTime, Qt::ISODate);
+            qint64 mins = qMax<qint64>(1, tin.secsTo(tout) / 60);
+            qint64 hours = (mins + 59) / 60;
+            fee = qMax<qint64>(5000, hours * 5000);
+        }
+        // If card is a short-term type, we still charge per-use via pricing rules (no subscription needed)
+        const QString tt = card.value(QStringLiteral("ticket_type")).toString();
+        if (!tt.isEmpty() && (tt == QLatin1String("hourly") || tt == QLatin1String("daily_day") || tt == QLatin1String("daily_night") || tt == QLatin1String("overnight")))
+        {
+            // Price already computed via session pricing; just adjust display label if needed
+        }
+        m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND").arg(fee);
+        emit moneyMessageChanged();
+        emit showToast(QStringLiteral("Kết thúc phiên: %1 VND").arg(fee));
         m_exitCardId = normRfid;
         m_exitPlate = plateBefore;
         m_exitTimeIn = checkinBefore;
         m_exitTimeOut = QDateTime::currentDateTime().toString(Qt::ISODate);
         emit exitInfoChanged();
-        QDateTime tin = QDateTime::fromString(m_exitTimeIn, Qt::ISODate);
-        QDateTime tout = QDateTime::fromString(m_exitTimeOut, Qt::ISODate);
-        qint64 mins = qMax<qint64>(1, tin.secsTo(tout) / 60);
-        qint64 hours = (mins + 59) / 60;
-        qint64 fee = qMax<qint64>(5000, hours * 5000);
-        m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND (ước tính)").arg(fee);
-        emit moneyMessageChanged();
         if (auto hid1 = qobject_cast<QObject *>(m_readerEntrance))
             QMetaObject::invokeMethod(hid1, "resetDebounce", Qt::QueuedConnection);
         if (auto hid2 = qobject_cast<QObject *>(m_readerExit))
@@ -355,6 +380,19 @@ bool ParkingController::approveAndOpenBarrier()
         m_checkOutTime = coTime;
         emit timesChanged();
         m_db->deleteClosedSessions(normalizeRfid(m_lastRfid));
+        // Show actual fee on main display
+        int fee = -1;
+        {
+            auto before = m_db->fetchFullOpenSession(normalizeRfid(m_lastRfid));
+            const int sid = before.value("id").toInt();
+            if (sid > 0)
+                fee = m_db->computeFeeForSession(sid, coTime, false);
+        }
+        if (fee >= 0)
+        {
+            m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND").arg(fee);
+            emit moneyMessageChanged();
+        }
         // Cổng ra luôn dùng barrier2
         if (m_barrier2)
         {

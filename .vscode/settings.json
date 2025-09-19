@@ -7,6 +7,9 @@
         "xlocmon": "cpp",
         "xlocnum": "cpp",
         "xloctime": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "xstring": "cpp",
+        "chrono": "cpp",
+        "variant": "cpp"
     }
 }

@@ -7,6 +7,7 @@ Item {
     property Item adminPage           // AdminPage.ui.qml instance
     property var notify               // function(message)
     property var allowedAccounts      // optional array of {username,password}
+    property alias rfidLogic: rfidLogic
 
     // Sub-logic modules
     LoginLogic {
@@ -32,6 +33,11 @@ Item {
     }
     DashboardLogic { 
         id: dashboardLogic
+        adminPage: adminLogic.adminPage
+        notify: adminLogic.notify
+    }
+    RfidCardsLogic {
+        id: rfidLogic
         adminPage: adminLogic.adminPage
         notify: adminLogic.notify
     }

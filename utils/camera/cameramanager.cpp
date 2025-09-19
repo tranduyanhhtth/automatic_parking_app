@@ -190,10 +190,6 @@ bool CameraManager::startInputStream(const QString &url)
             } else {
                 qWarning() << "[CAMERA] Input producer not available";
             } });
-        connect(m_gstIn, &GStreamerPlayer::errorOccured, this, [](const QString &msg)
-                { qWarning() << "[GStreamer In]" << msg; });
-        connect(m_gstIn, &GStreamerPlayer::stateChanged, this, [](const QString &s)
-                { qInfo() << "[GStreamer In] state" << s; });
     }
 
     const QString cleaned = sanitizeRtspUrl(url);
@@ -213,10 +209,6 @@ bool CameraManager::startOutputStream(const QString &url)
             } else {
                 qWarning() << "[CAMERA] Output producer not available";
             } });
-        connect(m_gstOut, &GStreamerPlayer::errorOccured, this, [](const QString &msg)
-                { qWarning() << "[GStreamer Out]" << msg; });
-        connect(m_gstOut, &GStreamerPlayer::stateChanged, this, [](const QString &s)
-                { qInfo() << "[GStreamer Out] state" << s; });
     }
 
     const QString cleaned = sanitizeRtspUrl(url);

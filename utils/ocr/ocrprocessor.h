@@ -33,6 +33,9 @@ private:
     IParkingRepository *m_repo{nullptr};
     TesseractOcr *m_tess{nullptr};
     QString tesseractRecognize(const QByteArray &jpegBytes) const;
+    void ensureDetector();
+    void ensureTesseract();
+    bool m_tessTriedInit{false};
 };
 
 #endif // OCRPROCESSOR_H

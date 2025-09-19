@@ -24,6 +24,9 @@ signals:
     void stateChanged(const QString &state);
 
 private:
+    // Lazy one-time initialization for GStreamer (env + gst_init)
+    static void ensureInitialized();
+    static void configureEnvironment();
     bool startAttempt(int attempt);
     bool buildPipelineForAttempt(int attempt);
     void armNoFrameTimer(int ms);
@@ -46,4 +49,5 @@ private:
     QTimer m_retryTimer;   // tự động thử lại khi có lỗi
     QTimer m_noFrameTimer; // phát hiện không có khung hình sau khi PLAYING
     bool m_firstFrameSeen{false};
+    static QAtomicInt s_inited;
 };

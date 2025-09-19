@@ -107,6 +107,28 @@ Item {
     Connections {
         target: adminPage
         function onTriggerCloseChanged() { /* no-op */ }
+        function onPendingSelectRfidIndexChanged() {
+            if (!adminPage) return
+            const idx = adminPage.pendingSelectRfidIndex
+            if (idx === undefined || idx === null) return
+            if (!listModel || typeof listModel.count === 'undefined') return
+            if (idx < 0 || idx >= listModel.count) return
+            const row = listModel.get(idx)
+            if (!row) return
+            // Prefill top form directly from the selected row
+            if (tfRfid) tfRfid.text = row.rfid || ''
+            if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 0 : 1)
+            const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
+            const tIdx = ticketMap.indexOf(row.ticket_type || '')
+            if (cbTicket && tIdx >= 0) cbTicket.currentIndex = tIdx
+            const statusMap = ['available','assigned','lost','damaged']
+            const sIdx = statusMap.indexOf(row.status || '')
+            if (cbStatus && sIdx >= 0) cbStatus.currentIndex = sIdx
+            if (tfDesc) tfDesc.text = row.description || ''
+            scannedRfid = row.rfid || ''
+            // Avoid duplicate toast on selection-driven prefill
+            lastNotifiedExistingRfid = scannedRfid
+        }
     }
 
     Connections { 

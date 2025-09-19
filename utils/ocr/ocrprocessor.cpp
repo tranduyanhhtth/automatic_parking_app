@@ -193,42 +193,42 @@ OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
     : QObject(parent)
 {
     m_repo = repo;
+    // Heavy resources deferred; only logging lightweight notice now
+    qInfo() << "OCRProcessor constructed (lazy init)";
+}
+
+void OCRProcessor::ensureDetector()
+{
+    if (m_detector)
+        return;
     const QString modelPath = QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("license_plate_detector.onnx"));
     m_detector = new YoloOnnxDetectorImpl(modelPath, this);
     m_detectorReady = m_detector && m_detector->isReady();
-    qInfo() << "OCR: model path resolved to" << modelPath
-            << ", detector ready =" << m_detectorReady;
+    qInfo() << "OCR: detector loaded path=" << modelPath << " ready=" << m_detectorReady;
+}
 
-    // Initialize Tesseract since ENABLE_TESSERACT is ON in CMake
-    // Đảm bảo các DLLs có thể được phát hiện
+void OCRProcessor::ensureTesseract()
+{
+    if (m_tess || m_tessTriedInit)
+        return;
+    m_tessTriedInit = true;
+    // Ensure required DLL path precedence
     const QString appDir = QCoreApplication::applicationDirPath();
     const QString vendorBin = QStringLiteral("d:/smart_parking_system/lib/tesseract/bin");
     const QString vendorBinDebug = QStringLiteral("d:/smart_parking_system/lib/tesseract/debug/bin");
     const QString pathNow = qEnvironmentVariable("PATH");
     QStringList prepend;
-    if (!appDir.isEmpty())
-        prepend << appDir;
-    if (QDir(vendorBinDebug).exists())
-        prepend << vendorBinDebug;
-    if (QDir(vendorBin).exists())
-        prepend << vendorBin;
-    if (!prepend.isEmpty())
-    {
-        const QString newPath = prepend.join(';') + QLatin1Char(';') + pathNow;
-        qputenv("PATH", newPath.toUtf8());
-    }
-
-    // Initialize Tesseract with vendor defaults; settings can still override
+    if (!appDir.isEmpty()) prepend << appDir;
+    if (QDir(vendorBinDebug).exists()) prepend << vendorBinDebug;
+    if (QDir(vendorBin).exists()) prepend << vendorBin;
+    if (!prepend.isEmpty()) qputenv("PATH", (prepend.join(';') + QLatin1Char(';') + pathNow).toUtf8());
     QSettings s("Multimodel-AIThings", "smart_parking_system");
     const QString tessParent = s.value("tesseract/tessdataParent", QStringLiteral("d:/smart_parking_system/lib/tesseract")).toString();
     const QString tessLang = s.value("tesseract/lang", QStringLiteral("eng")).toString();
-    if (!tessParent.isEmpty())
-        qputenv("TESSDATA_PREFIX", QFile::encodeName(tessParent));
-
+    if (!tessParent.isEmpty()) qputenv("TESSDATA_PREFIX", QFile::encodeName(tessParent));
     m_tess = new TesseractOcr(this);
     bool ok = m_tess->init(tessParent, tessLang);
-    if (!ok && tessLang != QStringLiteral("eng"))
-        ok = m_tess->init(tessParent, QStringLiteral("eng"));
+    if (!ok && tessLang != QStringLiteral("eng")) ok = m_tess->init(tessParent, QStringLiteral("eng"));
     if (!ok)
     {
         qWarning() << "OCR backend [tesseract]: NOT READY (init failed)";
@@ -236,16 +236,14 @@ OCRProcessor::OCRProcessor(IParkingRepository *repo, QObject *parent)
         m_tess = nullptr;
     }
     else
-    {
-        qInfo() << "Tesseract initialized.";
-    }
-
-    qInfo() << "OCR backend [tesseract] ready =" << (m_tess && m_tess->isReady());
+        qInfo() << "Tesseract initialized (lazy).";
 }
 
 QVariantMap OCRProcessor::recognizePlates(const QByteArray &frontImage,
                                           const QByteArray &rearImage)
 {
+    ensureDetector();
+    ensureTesseract();
     QVariantMap result;
     result.insert("front", QString());
     result.insert("rear", QString());
