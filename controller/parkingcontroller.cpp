@@ -54,11 +54,11 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
         QObject *dbObj = dynamic_cast<QObject *>(m_db);
         if (!dbObj)
             return {};
-        QVariant ret;
+        QVariantMap ret;
         bool ok = QMetaObject::invokeMethod(dbObj, "getRfidCard",
-                                            Q_RETURN_ARG(QVariant, ret),
+                                            Q_RETURN_ARG(QVariantMap, ret),
                                             Q_ARG(QString, code));
-        return ok ? ret.toMap() : QVariantMap{};
+        return ok ? ret : QVariantMap{};
     };
     const QVariantMap card = getCard(normRfid);
     if (card.isEmpty())
@@ -228,13 +228,28 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         QObject *dbObj = dynamic_cast<QObject *>(m_db);
         if (!dbObj)
             return {};
-        QVariant ret;
+        QVariantMap ret;
         bool ok = QMetaObject::invokeMethod(dbObj, "getRfidCard",
-                                            Q_RETURN_ARG(QVariant, ret),
+                                            Q_RETURN_ARG(QVariantMap, ret),
                                             Q_ARG(QString, code));
-        return ok ? ret.toMap() : QVariantMap{};
+        return ok ? ret : QVariantMap{};
     };
     const QVariantMap card = getCard(normRfid);
+    // Helper: check active subscription for this card/plate at current time
+    auto hasSubNow = [this](const QString &code, const QString &pl) -> bool
+    {
+        QObject *dbObj = dynamic_cast<QObject *>(m_db);
+        if (!dbObj)
+            return false;
+        bool ans = false;
+        bool ok = QMetaObject::invokeMethod(dbObj, "hasActiveSubscription",
+                                            Q_RETURN_ARG(bool, ans),
+                                            Q_ARG(QString, code),
+                                            Q_ARG(QString, pl),
+                                            Q_ARG(QString, QString()));
+        Q_UNUSED(ok);
+        return ans;
+    };
     QString coTime;
     // Lưu ảnh checkout vào DB như cổng vào
     // Store annotated images if we have them
@@ -260,8 +275,9 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         }
         m_message = QStringLiteral("Check-out thành công");
         emit messageChanged();
-        int fee = -1;
-        if (sessionId > 0)
+        const bool isSub = hasSubNow(normRfid, plateBefore);
+        int fee = 0;
+        if (!isSub && sessionId > 0)
             fee = m_db->computeFeeForSession(sessionId, coTime, false);
         if (fee < 0)
         {
@@ -278,7 +294,10 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         {
             // Price already computed via session pricing; just adjust display label if needed
         }
-        m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND").arg(fee);
+        if (isSub)
+            m_moneyMessage = QStringLiteral("Cổng ra: Vé đăng ký - không thu phí");
+        else
+            m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND").arg(fee);
         emit moneyMessageChanged();
         emit showToast(QStringLiteral("Kết thúc phiên: %1 VND").arg(fee));
         m_exitCardId = normRfid;

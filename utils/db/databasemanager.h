@@ -121,6 +121,11 @@ public:
     Q_INVOKABLE int getPricingId(const QString &vehicleType,
                                  const QString &ticketType) override;
 
+    // Seed demo data for dashboard/revenue when system is new
+    Q_INVOKABLE bool seedDemoData(int days = 30,
+                                  int sessionsPerDay = 50,
+                                  int subscriptionsPerDay = 5);
+
     // Lưu một dòng pricing chuẩn hóa (update nếu đã tồn tại theo vehicle_type + ticket_type)
     Q_INVOKABLE bool upsertPricingRow(const QString &vehicleType,
                                       const QString &ticketType,
@@ -164,6 +169,11 @@ public:
     Q_INVOKABLE bool markSubscriptionLostCard(int subId);
     Q_INVOKABLE int expireDueSubscriptions(const QString &todayIso);
 
+    // Subscription checks (exposed for controller UI logic)
+    Q_INVOKABLE bool hasActiveSubscription(const QString &rfid,
+                                           const QString &plate = QString(),
+                                           const QString &nowIso = QString());
+
 private:
     QSqlDatabase DB_Connection;
 
@@ -179,6 +189,9 @@ private:
     int ensureGuestUser();
     QString normalizeVehicle(const QString &vt) const; // motorbike->bike
     QString normalizePlan(const QString &plan) const;  // tháng->monthly
+    // Map legacy/synonym ticket types to supported ones (e.g., daily -> daily_day/night by time, per_use -> hourly)
+    QString normalizeTicketType(const QString &ticket) const;
+    QString pickDailyTicketForNow(const QString &vehicleType) const;
     // Nội bộ: tính phí theo row pricing đã chọn
     int computeFeeFromPricing(int baseFee,
                               int durationMinutes,
@@ -192,8 +205,12 @@ private:
                        const QDateTime &checkin,
                        const QDateTime &checkout,
                        bool lostCard);
-
-    // Users management extensions (for Admin UI)
+    // Overload using specific ticket type (hourly/daily_day/daily_night/overnight)
+    int computeFeeJson(const QString &vehicleType,
+                       const QString &ticketType,
+                       const QDateTime &checkin,
+                       const QDateTime &checkout,
+                       bool lostCard);
 
     // // Mã hóa đơn giản cho trường nhạy cảm (RFID, biển số)
     // QString encodeText(const QString &plain) const;

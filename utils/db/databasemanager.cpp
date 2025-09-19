@@ -7,6 +7,7 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QVector>
+#include <QRandomGenerator>
 #include <algorithm>
 
 DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
@@ -642,6 +643,43 @@ QString DatabaseManager::normalizePlan(const QString &plan) const
     return p;
 }
 
+QString DatabaseManager::normalizeTicketType(const QString &ticket) const
+{
+    const QString t = ticket.trimmed().toLower();
+    if (t.isEmpty())
+        return QString();
+    if (t == "per_use" || t == "peruse" || t == "per-use")
+        return QStringLiteral("hourly");
+    if (t == "hourly" || t == "gio" || t == "giờ")
+        return QStringLiteral("hourly");
+    if (t == "daily" || t == "ngay" || t == "ngày")
+        return QStringLiteral("daily");
+    if (t == "daily_day" || t == "day" || t == "ngay_ngay")
+        return QStringLiteral("daily_day");
+    if (t == "daily_night" || t == "night" || t == "ngay_dem")
+        return QStringLiteral("daily_night");
+    if (t == "overnight" || t == "qua_dem")
+        return QStringLiteral("overnight");
+    if (t == "monthly" || t == "thang" || t == "tháng")
+        return QStringLiteral("monthly");
+    if (t == "quarterly" || t == "quy" || t == "quý")
+        return QStringLiteral("quarterly");
+    if (t == "yearly" || t == "nam" || t == "năm")
+        return QStringLiteral("yearly");
+    return t;
+}
+
+QString DatabaseManager::pickDailyTicketForNow(const QString &vehicleType) const
+{
+    Q_UNUSED(vehicleType);
+    // Use 06:00-18:00 as day window by default
+    const QTime now = QTime::currentTime();
+    const QTime dayStart(6, 0), dayEnd(18, 0);
+    if (now >= dayStart && now < dayEnd)
+        return QStringLiteral("daily_day");
+    return QStringLiteral("daily_night");
+}
+
 int DatabaseManager::getPricingIdFor(const QString &vehicleType, const QString &ticketType)
 {
     QSqlQuery q(DB_Connection);
@@ -798,13 +836,168 @@ QVariantMap DatabaseManager::getDashboardStats(const QString &todayIso)
     return out;
 }
 
+bool DatabaseManager::seedDemoData(int days, int sessionsPerDay, int subscriptionsPerDay)
+{
+    // Avoid reseeding if data already exists
+    {
+        QSqlQuery qc(DB_Connection);
+        if (qc.exec("SELECT COUNT(1) FROM revenues"))
+        {
+            if (qc.next())
+            {
+                const int revCount = qc.value(0).toInt();
+                if (revCount > 0)
+                    return true; // already populated with revenue
+            }
+        }
+    }
+    if (days <= 0)
+        days = 30;
+    if (sessionsPerDay <= 0)
+        sessionsPerDay = 40;
+    if (subscriptionsPerDay < 0)
+        subscriptionsPerDay = 5;
+    // Basic vehicles and tickets
+    const QStringList vehicles = {"car", "bike"};
+    const QStringList tickets = {"hourly", "daily_day", "daily_night", "overnight"};
+
+    // Ensure minimal pricing rows exist
+    for (const auto &vt : vehicles)
+    {
+        for (const auto &tt : tickets)
+        {
+            if (getPricingIdFor(vt, tt) <= 0)
+            {
+                // Create a simple JSON with two slots day/night
+                QJsonObject base;
+                base.insert("base_minutes", 60);
+                base.insert("base_price", vt == "car" ? 5000 : 3000);
+                base.insert("increment_minutes", 60);
+                base.insert("increment_price", vt == "car" ? 5000 : 3000);
+                base.insert("grace_minutes", 10);
+                base.insert("cap_per_day", vt == "car" ? 60000 : 40000);
+
+                QJsonArray slotArray;
+                QJsonObject dayPricing;
+                dayPricing.insert("increment_minutes", 60);
+                dayPricing.insert("increment_price", vt == "car" ? 5000 : 3000);
+                dayPricing.insert("cap", vt == "car" ? 40000 : 25000);
+                QJsonObject daySlot;
+                daySlot.insert("start", "06:00");
+                daySlot.insert("end", "22:00");
+                daySlot.insert("pricing", dayPricing);
+                slotArray.append(daySlot);
+                QJsonObject nightPricing;
+                nightPricing.insert("increment_minutes", 60);
+                nightPricing.insert("increment_price", vt == "car" ? 7000 : 4000);
+                nightPricing.insert("cap", vt == "car" ? 45000 : 30000);
+                QJsonObject nightSlot;
+                nightSlot.insert("start", "22:00");
+                nightSlot.insert("end", "06:00");
+                nightSlot.insert("pricing", nightPricing);
+                slotArray.append(nightSlot);
+
+                QJsonObject rules;
+                rules.insert("overnight_fee", vt == "car" ? 10000 : 5000);
+                rules.insert("lost_card_penalty", 100000);
+                QJsonObject root;
+                root.insert("base", base);
+                root.insert("incremental", "flat");
+                root.insert("time_slots", slotArray);
+                root.insert("rules", rules);
+                savePricingJson(vt, tt, QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact)), QString());
+            }
+        }
+    }
+
+    // Seed RFID cards for per-use (unassigned)
+    for (int i = 0; i < 200; ++i)
+    {
+        const QString rfid = QStringLiteral("D%1").arg(100000 + i);
+        const QString vt = vehicles.at(i % vehicles.size());
+        const QString tt = tickets.at(i % tickets.size());
+        upsertRfidCard(rfid, vt, tt, QStringLiteral("available"), QStringLiteral("demo"));
+    }
+
+    // Generate sessions and revenues back in time
+    const QDate today = QDate::currentDate();
+    for (int d = 0; d < days; ++d)
+    {
+        const QDate day = today.addDays(-d);
+        // Sessions
+        for (int i = 0; i < sessionsPerDay; ++i)
+        {
+            const QString vt = vehicles.at((d + i) % vehicles.size());
+            const QString tt = tickets.at((d * 7 + i) % tickets.size());
+            const QString rfid = QStringLiteral("D%1").arg(100000 + ((d * sessionsPerDay + i) % 200));
+            // Check-in around day with random time
+            QTime tIn = QTime(6, 0).addSecs(QRandomGenerator::global()->bounded(16 * 3600)); // between 06:00 and 22:00
+            QDateTime tin(day, tIn);
+            QDateTime tout = tin.addSecs(QRandomGenerator::global()->bounded(6 * 3600) + 30 * 60); // 30m – 6.5h
+            // Create session row directly
+            const int pid = getPricingIdFor(vt, tt);
+            QSqlQuery ins(DB_Connection);
+            ins.prepare(R"(INSERT INTO parking_sessions (user_id, pricing_id, rfid, plate, checkin_time, checkout_time, duration_minutes, fee, status)
+                          VALUES (:uid,:pid,:rf,:pl,:cin,:cout,:dur,:fee,'checked_out'))");
+            ins.bindValue(":uid", ensureGuestUser());
+            ins.bindValue(":pid", pid);
+            ins.bindValue(":rf", rfid);
+            ins.bindValue(":pl", QVariant());
+            ins.bindValue(":cin", tin.toString(Qt::ISODate));
+            ins.bindValue(":cout", tout.toString(Qt::ISODate));
+            const int fee = computeFeeJson(vt, tt, tin, tout, false);
+            ins.bindValue(":dur", static_cast<int>(tin.secsTo(tout) / 60));
+            ins.bindValue(":fee", fee);
+            if (!ins.exec())
+            {
+                qWarning() << "seedDemoData insert session:" << ins.lastError().text();
+            }
+            else if (fee > 0)
+            {
+                // Insert a revenue row timestamped at checkout to align charts by day
+                QSqlQuery rs(DB_Connection);
+                rs.prepare(R"(INSERT INTO revenues (session_id, subscription_id, user_id, amount, payment_type, revenue_type, created_at, note)
+                              VALUES (:sid, NULL, :uid, :amt, 'cash', 'parking_session', :ts, 'demo'))");
+                rs.bindValue(":sid", ins.lastInsertId());
+                rs.bindValue(":uid", ensureGuestUser());
+                rs.bindValue(":amt", fee);
+                rs.bindValue(":ts", tout.toString(Qt::ISODate));
+                if (!rs.exec())
+                    qWarning() << "seedDemoData insert session revenue:" << rs.lastError().text();
+            }
+        }
+
+        // Subscription payments of the day
+        for (int k = 0; k < subscriptionsPerDay; ++k)
+        {
+            const int amount = (QRandomGenerator::global()->bounded(6) + 5) * 100000; // 500k – 1M
+            QSqlQuery r(DB_Connection);
+            r.prepare(R"(INSERT INTO revenues (session_id, subscription_id, user_id, amount, payment_type, revenue_type, created_at, note)
+                         VALUES (NULL, NULL, NULL, :amt, 'cash', 'subscription', :ts, 'demo'))");
+            r.bindValue(":amt", amount);
+            r.bindValue(":ts", QDateTime(day, QTime(9, 0).addSecs(QRandomGenerator::global()->bounded(10 * 3600))).toString(Qt::ISODate));
+            if (!r.exec())
+                qWarning() << "seedDemoData insert revenue:" << r.lastError().text();
+        }
+    }
+    return true;
+}
+
+bool DatabaseManager::hasActiveSubscription(const QString &rfid,
+                                            const QString &plate,
+                                            const QString &nowIso)
+{
+    auto m = findActiveSubscription(rfid, plate, nowIso);
+    return !m.isEmpty();
+}
+
 QList<QVariantMap> DatabaseManager::listRevenueSummary(const QString &fromIso,
                                                        const QString &toIso,
                                                        const QString &typeFilter)
 {
     QList<QVariantMap> out;
     QString sql = R"(SELECT DATE(created_at) AS d,
-        SUM(CASE WHEN revenue_type='session' THEN 1 ELSE 0 END) AS session_count,
+        SUM(CASE WHEN revenue_type='parking_session' THEN 1 ELSE 0 END) AS session_count,
         SUM(CASE WHEN revenue_type='subscription' THEN 1 ELSE 0 END) AS subscription_count,
         SUM(amount) AS total_amount
         FROM revenues
@@ -826,7 +1019,7 @@ QList<QVariantMap> DatabaseManager::listRevenueSummary(const QString &fromIso,
         while (q.next())
         {
             QVariantMap m;
-            m.insert("date", q.value(0));
+            m.insert("d", q.value(0));
             m.insert("session_count", q.value(1));
             m.insert("subscription_count", q.value(2));
             m.insert("total_amount", q.value(3));
@@ -1284,11 +1477,14 @@ CheckInResult DatabaseManager::checkIn(const QString &rfid,
         pricingId = sub.value("pricing_id").toInt();
     if (pricingId <= 0)
     {
-        // Prefer card vehicle/ticket if available; fall back to user vehicle + hourly
+        // Prefer card vehicle/ticket if available; fall back to user vehicle
         const QString vt = cardVehicleType.isEmpty() ? vehicleType : cardVehicleType;
-        QString tt = cardTicketType;
+        QString tt = normalizeTicketType(cardTicketType);
         if (tt.isEmpty())
             tt = QStringLiteral("hourly");
+        // If generic daily, pick day/night by current time window
+        if (tt == QLatin1String("daily"))
+            tt = pickDailyTicketForNow(vt);
         pricingId = getPricingIdFor(vt, tt);
         if (pricingId <= 0)
         {
@@ -1797,6 +1993,184 @@ int DatabaseManager::computeFeeJson(const QString &vehicleType,
     return totalFee;
 }
 
+int DatabaseManager::computeFeeJson(const QString &vehicleType,
+                                    const QString &ticketType,
+                                    const QDateTime &checkin,
+                                    const QDateTime &checkout,
+                                    bool lostCard)
+{
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT description, base_fee, grace_period, incremental_fee, max_daily_fee FROM pricing WHERE vehicle_type = :vt AND ticket_type = :tt ORDER BY id DESC LIMIT 1");
+    q.bindValue(":vt", vehicleType);
+    q.bindValue(":tt", ticketType);
+    QString jsonText;
+    int fallbackBase = 5000, fallbackGrace = 0, fallbackInc = 5000, fallbackCap = 0;
+    if (q.exec() && q.next())
+    {
+        jsonText = q.value(0).toString();
+        fallbackBase = q.value(1).toInt();
+        fallbackGrace = q.value(2).toInt();
+        fallbackInc = q.value(3).toInt();
+        fallbackCap = q.value(4).toInt();
+    }
+
+    if (lostCard)
+    {
+        if (!jsonText.isEmpty())
+        {
+            const auto obj = QJsonDocument::fromJson(jsonText.toUtf8()).object();
+            const auto rules = obj.value("rules").toObject();
+            return rules.value("lost_card_penalty").toInt(100000);
+        }
+        return 100000;
+    }
+
+    if (jsonText.isEmpty())
+    {
+        // fallback to normalized columns via computeFee
+        qint64 mins = qMax<qint64>(0, checkin.secsTo(checkout) / 60);
+        return computeFee(vehicleType, mins);
+    }
+
+    // Parse and compute using the JSON text for this ticket type
+    const QJsonObject root = QJsonDocument::fromJson(jsonText.toUtf8()).object();
+    const QJsonObject base = root.value("base").toObject();
+    const int grace = base.value("grace_minutes").toInt(0);
+    int baseMinutes = base.value("base_minutes").toInt(60);
+    const int basePrice = base.value("base_price").toInt(fallbackBase);
+    const int incMinutesDefault = base.value("increment_minutes").toInt(60);
+    const int incPriceDefault = base.value("increment_price").toInt(fallbackInc);
+    const int capPerDayDefault = base.value("cap_per_day").toInt(fallbackCap);
+    const QString incrementalMode = root.value("incremental").toString("flat");
+    const QJsonArray timeSlots = root.value("time_slots").toArray();
+    const QJsonObject rules = root.value("rules").toObject();
+    const int overnightFee = rules.value("overnight_fee").toInt(0);
+
+    struct Slot
+    {
+        QTime start;
+        QTime end;
+        int incMin;
+        int incPrice;
+        int cap;
+    };
+    auto daySlotsFor = [&](const QDate &day)
+    {
+        Q_UNUSED(day);
+        QVector<Slot> daySlots;
+        if (!timeSlots.isEmpty())
+        {
+            for (const auto &v : timeSlots)
+            {
+                const QJsonObject s = v.toObject();
+                const QTime st = QTime::fromString(s.value("start").toString(), "HH:mm");
+                QTime en = QTime::fromString(s.value("end").toString(), "HH:mm");
+                if (!en.isValid())
+                    en = QTime(23, 59, 59);
+                const QJsonObject pr = s.value("pricing").toObject();
+                daySlots.push_back({st, en,
+                                    pr.value("increment_minutes").toInt(incMinutesDefault),
+                                    pr.value("increment_price").toInt(incPriceDefault),
+                                    pr.value("cap").toInt(capPerDayDefault)});
+            }
+        }
+        else
+        {
+            daySlots.push_back({QTime(0, 0), QTime(23, 59, 59), incMinutesDefault, incPriceDefault, capPerDayDefault});
+        }
+        std::sort(daySlots.begin(), daySlots.end(), [](const Slot &a, const Slot &b)
+                  { return a.start < b.start; });
+        return daySlots;
+    };
+
+    int totalFee = 0;
+    QDateTime curStart = checkin;
+    while (curStart < checkout)
+    {
+        const QDate day = curStart.date();
+        const QDateTime dayEnd(day.addDays(1), QTime(0, 0));
+        const QDateTime curEnd = std::min(checkout, dayEnd);
+        int remainingGrace = grace;
+        int dayFee = 0;
+        int remainingBase = baseMinutes;
+
+        const auto slotsToday = daySlotsFor(day);
+        QDateTime s = curStart;
+        while (s < curEnd)
+        {
+            const QTime nowT = s.time();
+            auto cur = slotsToday.last();
+            for (const auto &sl : slotsToday)
+            {
+                if (nowT >= sl.start && nowT < sl.end)
+                {
+                    cur = sl;
+                    break;
+                }
+            }
+            QDateTime slotEnd(day, cur.end);
+            if (slotEnd <= s)
+                slotEnd = QDateTime(day.addDays(1), QTime(0, 0));
+            if (slotEnd > curEnd)
+                slotEnd = curEnd;
+            int mins = static_cast<int>(qMax<qint64>(0, s.secsTo(slotEnd) / 60));
+            if (mins <= 0)
+            {
+                s = slotEnd;
+                continue;
+            }
+
+            int billable = mins;
+            if (remainingGrace > 0)
+            {
+                const int used = std::min(remainingGrace, billable);
+                billable -= used;
+                remainingGrace -= used;
+            }
+
+            int feePart = 0;
+            if (billable > 0)
+            {
+                if (remainingBase > 0)
+                {
+                    const int usedBase = std::min(remainingBase, billable);
+                    if (remainingBase == baseMinutes)
+                        feePart += basePrice; // add once when base starts being used
+                    remainingBase -= usedBase;
+                    billable -= usedBase;
+                }
+                if (billable > 0)
+                {
+                    const int steps = (billable + cur.incMin - 1) / cur.incMin; // ceil
+                    if (incrementalMode == "increasing")
+                    {
+                        int inc = 0;
+                        for (int i = 0; i < steps; ++i)
+                            inc += cur.incPrice * (i + 1);
+                        feePart += inc;
+                    }
+                    else
+                    {
+                        feePart += steps * cur.incPrice;
+                    }
+                }
+                if (cur.cap > 0 && feePart > cur.cap)
+                    feePart = cur.cap;
+            }
+            dayFee += feePart;
+            s = slotEnd;
+        }
+        if (capPerDayDefault > 0 && dayFee > capPerDayDefault)
+            dayFee = capPerDayDefault;
+        totalFee += dayFee;
+        curStart = curEnd;
+    }
+
+    if (checkin.date() != checkout.date() && overnightFee > 0)
+        totalFee += overnightFee;
+    return totalFee;
+}
+
 int DatabaseManager::computeFeeForSession(int sessionId,
                                           const QString &nowIso,
                                           bool lostCard)
@@ -1808,7 +2182,8 @@ int DatabaseManager::computeFeeForSession(int sessionId,
                COALESCE(s.checkout_time, :now) AS co,
                s.pricing_id,
                u.vehicle_type,
-               p.base_fee, p.duration_minutes, p.incremental_fee, p.grace_period, p.max_daily_fee
+               p.base_fee, p.duration_minutes, p.incremental_fee, p.grace_period, p.max_daily_fee,
+               p.ticket_type, p.description
         FROM parking_sessions s
         LEFT JOIN users u ON u.id = s.user_id
         LEFT JOIN pricing p ON p.id = s.pricing_id
@@ -1819,40 +2194,103 @@ int DatabaseManager::computeFeeForSession(int sessionId,
     if (!q.exec() || !q.next())
         return -1;
     const QString vt = q.value("vehicle_type").toString().isEmpty() ? QStringLiteral("car") : q.value("vehicle_type").toString();
+    const QString ttJoined = q.value("ticket_type").toString();
     const QDateTime tin = QDateTime::fromString(q.value("checkin_time").toString(), Qt::ISODate);
     const QDateTime tout = QDateTime::fromString(q.value("co").toString(), Qt::ISODate);
     if (lostCard)
         return 100000; // simple rule for now
 
-    // If we have pricing joined, compute from normalized fields
-    if (!q.value("base_fee").isNull())
+    int fee = -1;
+    int baseMin = 0; // minimum base to apply when duration > grace and computed fee == 0
+    int graceAll = 0;
+
+    // Prefer JSON description when valid
+    bool usedJson = false;
+    if (!q.value("description").isNull())
+    {
+        const QString jsonText = q.value("description").toString();
+        QJsonParseError perr;
+        const auto doc = QJsonDocument::fromJson(jsonText.toUtf8(), &perr);
+        if (perr.error == QJsonParseError::NoError && doc.isObject())
+        {
+            const auto obj = doc.object();
+            const auto base = obj.value("base").toObject();
+            baseMin = base.value("base_price").toInt(0);
+            graceAll = base.value("grace_minutes").toInt(0);
+            const QString tt = ttJoined;
+            fee = computeFeeJson(vt, tt, tin, tout, lostCard);
+            usedJson = true;
+        }
+    }
+
+    // Fallback to normalized columns
+    if (fee < 0 && !q.value("base_fee").isNull())
     {
         const int baseFee = q.value("base_fee").toInt();
         const int durMin = q.value("duration_minutes").isNull() ? 60 : q.value("duration_minutes").toInt();
         const int incFee = q.value("incremental_fee").isNull() ? 0 : q.value("incremental_fee").toInt();
         const int grace = q.value("grace_period").isNull() ? 0 : q.value("grace_period").toInt();
         const int cap = q.value("max_daily_fee").isNull() ? 0 : q.value("max_daily_fee").toInt();
-        return computeFeeFromPricing(baseFee, durMin, incFee, grace, cap, tin, tout);
+        fee = computeFeeFromPricing(baseFee, durMin, incFee, grace, cap, tin, tout);
+        if (baseMin <= 0)
+            baseMin = baseFee;
+        if (graceAll <= 0)
+            graceAll = grace;
     }
-    // Fallback to hourly pricing by vehicle
-    const int pid = getPricingIdFor(vt, QStringLiteral("hourly"));
-    if (pid > 0)
+
+    // If still not computed, try ticket-aware JSON based on ticket type for this vehicle
+    if (fee < 0)
     {
-        QSqlQuery qp(DB_Connection);
-        qp.prepare("SELECT base_fee, duration_minutes, incremental_fee, grace_period, max_daily_fee FROM pricing WHERE id=:id");
-        qp.bindValue(":id", pid);
-        if (qp.exec() && qp.next())
+        QString ticketType;
+        QSqlQuery qt(DB_Connection);
+        qt.prepare("SELECT ticket_type, base_fee FROM pricing WHERE id = :pid LIMIT 1");
+        qt.bindValue(":pid", q.value("pricing_id"));
+        if (qt.exec() && qt.next())
         {
-            const int baseFee = qp.value(0).toInt();
-            const int durMin = qp.value(1).isNull() ? 60 : qp.value(1).toInt();
-            const int incFee = qp.value(2).isNull() ? 0 : qp.value(2).toInt();
-            const int grace = qp.value(3).isNull() ? 0 : qp.value(3).toInt();
-            const int cap = qp.value(4).isNull() ? 0 : qp.value(4).toInt();
-            return computeFeeFromPricing(baseFee, durMin, incFee, grace, cap, tin, tout);
+            ticketType = qt.value(0).toString();
+            if (baseMin <= 0)
+                baseMin = qt.value(1).toInt();
+        }
+        if (!ticketType.isEmpty())
+            fee = computeFeeJson(vt, ticketType, tin, tout, lostCard);
+    }
+
+    // Try generic hourly pricing as last structured fallback
+    if (fee < 0)
+    {
+        const int pid = getPricingIdFor(vt, QStringLiteral("hourly"));
+        if (pid > 0)
+        {
+            QSqlQuery qp(DB_Connection);
+            qp.prepare("SELECT base_fee, duration_minutes, incremental_fee, grace_period, max_daily_fee FROM pricing WHERE id=:id");
+            qp.bindValue(":id", pid);
+            if (qp.exec() && qp.next())
+            {
+                const int baseFee = qp.value(0).toInt();
+                const int durMin = qp.value(1).isNull() ? 60 : qp.value(1).toInt();
+                const int incFee = qp.value(2).isNull() ? 0 : qp.value(2).toInt();
+                const int grace = qp.value(3).isNull() ? 0 : qp.value(3).toInt();
+                const int cap = qp.value(4).isNull() ? 0 : qp.value(4).toInt();
+                fee = computeFeeFromPricing(baseFee, durMin, incFee, grace, cap, tin, tout);
+                if (baseMin <= 0)
+                    baseMin = baseFee;
+                if (graceAll <= 0)
+                    graceAll = grace;
+            }
         }
     }
-    // Last resort: legacy JSON
-    return computeFeeJson(vt, tin, tout, lostCard);
+
+    // Final fallback to generic JSON ("per_use") if present
+    if (fee < 0)
+        fee = computeFeeJson(vt, tin, tout, lostCard);
+
+    // Apply minimum base when duration beyond grace but fee came out 0 due to grace rules
+    const qint64 durationMin = qMax<qint64>(0, tin.secsTo(tout) / 60);
+    const bool isPerUse = ttJoined.isEmpty() || ttJoined == QLatin1String("hourly") || ttJoined == QLatin1String("daily_day") || ttJoined == QLatin1String("daily_night") || ttJoined == QLatin1String("overnight");
+    if (durationMin > qMax(0, graceAll) && isPerUse && fee == 0 && baseMin > 0)
+        fee = baseMin;
+
+    return fee;
 }
 
 bool DatabaseManager::savePricingJson(const QString &vehicleType,

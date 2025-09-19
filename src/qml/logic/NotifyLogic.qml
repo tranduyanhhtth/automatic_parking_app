@@ -40,7 +40,7 @@ Item {
         if(active.length>=perSeverityMax){ active.sort((a,b)=>a.ts-b.ts); msgs.remove(active[0].i) }
         while(msgs.count>=maxMessages) msgs.remove(msgs.count - 1)
         const id=_nextId++
-        msgs.insert({ id:id, text:message, sev:severity, ts:Date.now(), count:1 })
+        msgs.insert(0,{ id:id, text:message, sev:severity, ts:Date.now(), count:1 })
 
         // Timer fade
         Qt.createQmlObject('import QtQuick 2.15; Timer { interval: '+duration+'; running: true; repeat: false; onTriggered: { var id='+id+'; for(var k=0;k<msgs.count;k++){ if(msgs.get(k).id===id){ msgs.setProperty(k,"sev","fade"); break; } } } }', notifyLogic)

@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtCharts
 import "../logic"
 import "../components"
 
@@ -51,6 +52,10 @@ Item {
 	// Revenue summary aliases (labels in Revenue section)
 	property alias revSummaryTotal: revSummaryTotal
 	property alias revSummaryBreakdown: revSummaryBreakdown
+	// Revenue filter field aliases for logic access
+	property alias revFrom: revFrom
+	property alias revTo: revTo
+	property alias revType: revType
 	// Expose minimal aliases for logic wiring later
 	property var rfidLogic: null
 	property alias tabBar: tabbar
@@ -73,7 +78,21 @@ Item {
 	// Row selection via index (single-expression onClicked)
 	property int pendingSelectUserIndex: -1
 	property int pendingSelectSubIndex: -1
-	// property int pendingSelectRfidIndex: -1
+	property int pendingSelectRfidIndex: -1
+
+	// Revenue date-picker integration (SearchPage-style for Revenue tab)
+	property bool revFromPickerVisible: false
+	property bool revToPickerVisible: false
+	property bool triggerRevFromSelect: false
+	property bool triggerRevToSelect: false
+	property bool triggerRevenueFilter: false
+	// Expose inner ComboBoxes to logic via aliases
+	property alias revFromYear: revFromDatePopup.fromYear
+	property alias revFromMonth: revFromDatePopup.fromMonth
+	property alias revFromDay: revFromDatePopup.fromDay
+	property alias revToYear: revToDatePopup.toYear
+	property alias revToMonth: revToDatePopup.toMonth
+	property alias revToDay: revToDatePopup.toDay
 
 	// Logic instances
 	ToastComponent {
@@ -170,6 +189,14 @@ Item {
 							text: "Doanh thu"
 						}
 					}
+					Connections {
+						// When switching to Revenue tab (index 5), ask logic to refresh via trigger
+						target: tabbar
+						function onCurrentIndexChanged() {
+							if (tabbar.currentIndex === 5)
+								adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
+						}
+					}
 					StackLayout {
 						Layout.fillWidth: true
 						Layout.fillHeight: true
@@ -180,6 +207,22 @@ Item {
 							Layout.fillWidth: true
 							Layout.fillHeight: true
 							border.color: "darkgray"
+							// Defer chart refresh calls to a legal context for .ui.qml
+							Connections {
+								target: dashboardLogic
+								function onReady() {
+									if (dashboardLogic && dashboardLogic.refreshDailyChart)
+										dashboardLogic.refreshDailyChart(dSeries, dAxisX, dAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
+									if (dashboardLogic && dashboardLogic.refreshBreakdownPie)
+										dashboardLogic.refreshBreakdownPie(pie, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
+								}
+								function onRefreshCharts() {
+									if (dashboardLogic && dashboardLogic.refreshDailyChart)
+										dashboardLogic.refreshDailyChart(dSeries, dAxisX, dAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
+									if (dashboardLogic && dashboardLogic.refreshBreakdownPie)
+										dashboardLogic.refreshBreakdownPie(pie, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
+								}
+							}
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
@@ -277,7 +320,7 @@ Item {
 										}
 									}
 								}
-								// Charts placeholders
+								// Charts
 								RowLayout {
 									Layout.fillWidth: true
 									Layout.fillHeight: true
@@ -288,10 +331,19 @@ Item {
 										radius: 8
 										color: "#222"
 										border.color: "#333"
-										Text {
-											anchors.centerIn: parent
-											text: "Line chart: doanh thu theo ngày (placeholder)"
-											color: "#777"
+										ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 6
+											Text { text: "Doanh thu theo ngày"; color: "white"; font.bold: true }
+											ChartView {
+												id: chartRevenueDaily
+												Layout.fillWidth: true
+												Layout.fillHeight: true
+												antialiasing: true
+												theme: ChartView.ChartThemeDark
+												legend.visible: false
+												ValueAxis { id: dAxisY; min: 0 }
+												DateTimeAxis { id: dAxisX; format: "dd/MM"; tickCount: 8 }
+												LineSeries { id: dSeries; axisY: dAxisY; axisX: dAxisX; color: "#4ec9b0" }
+											}
 										}
 									}
 									Rectangle {
@@ -300,10 +352,17 @@ Item {
 										radius: 8
 										color: "#222"
 										border.color: "#333"
-										Text {
-											anchors.centerIn: parent
-											text: "Pie chart: vé tháng vs vé lượt (placeholder)"
-											color: "#777"
+										ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 6
+											Text { text: "Cơ cấu doanh thu"; color: "white"; font.bold: true }
+											ChartView {
+												id: chartBreakdown
+												Layout.fillWidth: true
+												Layout.fillHeight: true
+												antialiasing: true
+												theme: ChartView.ChartThemeDark
+												legend.visible: true
+												PieSeries { id: pie; holeSize: 0.35 }
+											}
 										}
 									}
 								}
@@ -677,7 +736,7 @@ Item {
 												color: (adminPage.pendingSelectRfidIndex === index) ? "#334455" : ((tfRfid && rfid === tfRfid.text) ? "#4ec9b0" : "transparent")
 												border.color: "#555"
 												border.width: 1
-												width: parent.width
+												width: ListView.view ? ListView.view.width : 0
 												height: 30
 												RowLayout {
 													anchors.fill: parent
@@ -945,7 +1004,7 @@ Item {
 														=== id) ? "#334455" : "transparent"
 												border.color: "#444"
 												border.width: 1
-												width: parent.width
+												width: ListView.view ? ListView.view.width : 0
 												height: 28
 												RowLayout {
 													anchors.fill: parent
@@ -1293,7 +1352,7 @@ Item {
 														=== id) ? "#344" : "transparent"
 												border.color: "#555"
 												border.width: 1
-												width: parent.width
+												width: ListView.view ? ListView.view.width : 0
 												height: 30
 												RowLayout {
 													anchors.fill: parent
@@ -1384,6 +1443,9 @@ Item {
 											border.color: "#555"
 											radius: 8
 										}
+										validator: RegularExpressionValidator { regularExpression: /^\d{4}-\d{2}-\d{2}$/ }
+										readOnly: true
+										MouseArea { anchors.fill: parent; onClicked: adminPage.revFromPickerVisible = true }
 									}
 									TextField {
 										id: revTo
@@ -1396,6 +1458,9 @@ Item {
 											border.color: "#555"
 											radius: 8
 										}
+										validator: RegularExpressionValidator { regularExpression: /^\d{4}-\d{2}-\d{2}$/ }
+										readOnly: true
+										MouseArea { anchors.fill: parent; onClicked: adminPage.revToPickerVisible = true }
 									}
 									ComboBox {
 										id: revType
@@ -1409,6 +1474,19 @@ Item {
 									Item {
 										Layout.fillWidth: true
 									}
+									// Quick range presets
+									Rectangle { width: 70; height: 28; radius: 8; color: "#555"
+										Text { anchors.centerIn: parent; text: "7 ngày"; color: "white" }
+										MouseArea { anchors.fill: parent; onClicked: revenueLogic && (revenueLogic.triggerPreset7 = !revenueLogic.triggerPreset7) }
+									}
+									Rectangle { width: 70; height: 28; radius: 8; color: "#555"
+										Text { anchors.centerIn: parent; text: "30 ngày"; color: "white" }
+										MouseArea { anchors.fill: parent; onClicked: revenueLogic && (revenueLogic.triggerPreset30 = !revenueLogic.triggerPreset30) }
+									}
+									Rectangle { width: 70; height: 28; radius: 8; color: "#555"
+										Text { anchors.centerIn: parent; text: "90 ngày"; color: "white" }
+										MouseArea { anchors.fill: parent; onClicked: revenueLogic && (revenueLogic.triggerPreset90 = !revenueLogic.triggerPreset90) }
+									}
 									Rectangle {
 										width: 110
 										height: 28
@@ -1419,6 +1497,23 @@ Item {
 											text: "Lọc"
 											color: "white"
 										}
+										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter }
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text { anchors.centerIn: parent; text: "Reload"; color: "white" }
+										MouseArea { anchors.fill: parent; onClicked: adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter }
+									}
+									Rectangle {
+										width: 120
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text { anchors.centerIn: parent; text: "Tạo dữ liệu"; color: "white" }
+										MouseArea { anchors.fill: parent; onClicked: revenueLogic && (revenueLogic.triggerSeedDemo = !revenueLogic.triggerSeedDemo) }
 									}
 								}
 								// Bảng kết quả
@@ -1460,8 +1555,25 @@ Item {
 											}
 										}
 										ListView {
+											id: revenueList
 											Layout.fillWidth: true
 											Layout.fillHeight: true
+											model: revenueLogic ? revenueLogic.listModel : null
+											clip: true
+											delegate: Rectangle {
+												color: "transparent"
+												border.color: "#333"
+												border.width: 1
+												width: ListView.view ? ListView.view.width : 0
+												height: 28
+												RowLayout { anchors.fill: parent; spacing: 8
+													Text { text: d; color: "white"; Layout.preferredWidth: 140 }
+													Text { text: session_count; color: "white"; Layout.preferredWidth: 140 }
+													Text { text: subscription_count; color: "white"; Layout.preferredWidth: 140 }
+													Text { text: total_amount; color: "white"; Layout.preferredWidth: 180 }
+													Item { Layout.fillWidth: true }
+												}
+											}
 										}
 									}
 								}
@@ -1550,6 +1662,142 @@ Item {
 		// Hidden JSON text area for save payload
 		TextArea {
 			id: pricingJson
+		}
+	}
+
+	// Simple Date Picker Popup for Revenue From date
+	Popup {
+		id: revFromDatePopup
+		modal: true
+		focus: true
+		visible: adminPage.revFromPickerVisible
+		x: (parent ? parent.width : 800) / 2 - width / 2
+		y: (parent ? parent.height : 600) / 2 - height / 2
+
+		property alias fromYear: revFromYearCombo
+		property alias fromMonth: revFromMonthCombo
+		property alias fromDay: revFromDayCombo
+
+		contentItem: ColumnLayout {
+			spacing: 10
+			RowLayout {
+				spacing: 8
+				Text { text: "Năm"; color: "black" }
+				ComboBox {
+					id: revFromYearCombo
+					model: 101
+					popup.height: 240
+					delegate: ItemDelegate { text: (2000 + index) }
+					Layout.preferredWidth: 100
+					currentIndex: 25
+				}
+				Text { text: "Tháng"; color: "black" }
+				ComboBox {
+					id: revFromMonthCombo
+					model: 12
+					popup.height: 240
+					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					Layout.preferredWidth: 90
+					currentIndex: 1
+				}
+				Text { text: "Ngày"; color: "black" }
+				ComboBox {
+					id: revFromDayCombo
+					model: 31
+					popup.height: 240
+					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					Layout.preferredWidth: 90
+					currentIndex: 1
+				}
+			}
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: 10
+				Rectangle {
+					Layout.fillWidth: true
+					height: 32
+					radius: 6
+					color: "#444"
+					Text { anchors.centerIn: parent; text: "Hủy"; color: "white" }
+					MouseArea { anchors.fill: parent; onClicked: adminPage.revFromPickerVisible = false }
+				}
+				Rectangle {
+					Layout.fillWidth: true
+					height: 32
+					radius: 6
+					color: "#2b7"
+					Text { anchors.centerIn: parent; text: "Chọn"; color: "white" }
+					MouseArea { anchors.fill: parent; onClicked: adminPage.triggerRevFromSelect = !adminPage.triggerRevFromSelect }
+				}
+			}
+		}
+	}
+
+	// Simple Date Picker Popup for Revenue To date
+	Popup {
+		id: revToDatePopup
+		modal: true
+		focus: true
+		visible: adminPage.revToPickerVisible
+		x: (parent ? parent.width : 800) / 2 - width / 2
+		y: (parent ? parent.height : 600) / 2 - height / 2
+
+		property alias toYear: revToYearCombo
+		property alias toMonth: revToMonthCombo
+		property alias toDay: revToDayCombo
+
+		contentItem: ColumnLayout {
+			spacing: 10
+			RowLayout {
+				spacing: 8
+				Text { text: "Năm"; color: "black" }
+				ComboBox {
+					id: revToYearCombo
+					model: 101
+					popup.height: 240
+					delegate: ItemDelegate { text: (2000 + index) }
+					Layout.preferredWidth: 100
+					currentIndex: 25
+				}
+				Text { text: "Tháng"; color: "black" }
+				ComboBox {
+					id: revToMonthCombo
+					model: 12
+					popup.height: 240
+					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					Layout.preferredWidth: 90
+					currentIndex: 1
+				}
+				Text { text: "Ngày"; color: "black" }
+				ComboBox {
+					id: revToDayCombo
+					model: 31
+					popup.height: 240
+					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					Layout.preferredWidth: 90
+					currentIndex: 1
+				}
+			}
+			RowLayout {
+				Layout.fillWidth: true
+				spacing: 10
+				Rectangle {
+					Layout.fillWidth: true
+					height: 32
+					radius: 6
+					color: "#444"
+					Text { anchors.centerIn: parent; text: "Hủy"; color: "white" }
+					MouseArea { anchors.fill: parent; onClicked: adminPage.revToPickerVisible = false }
+				}
+				Rectangle {
+					Layout.fillWidth: true
+					height: 32
+					radius: 6
+					color: "#2b7"
+					Text { anchors.centerIn: parent; text: "Chọn"; color: "white" }
+					MouseArea { anchors.fill: parent; onClicked: adminPage.triggerRevToSelect = !adminPage.triggerRevToSelect }
+				}
+			}
 		}
 	}
 

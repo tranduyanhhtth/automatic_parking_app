@@ -1,4 +1,4 @@
-#include <QGuiApplication>
+#include <QApplication>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickWindow>
@@ -23,7 +23,7 @@
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication app(argc, argv);
+    QApplication app(argc, argv);
 
     // Use a non-native style so background/customization on Controls works without warnings
     // Options: "Basic", "Fusion", "Material". Fusion gives a neutral cross-platform look.
@@ -42,6 +42,9 @@ int main(int argc, char *argv[])
 
     auto db = new DatabaseManager(&app);
     db->initialize();
+    // Populate demo data on first run (no-op if data already exists)
+    // Exactly 10 days x 10 sessions = 100 session revenues; 2 subscription revenues/day
+    db->seedDemoData(10, 10, 2);
 
     auto barrier1 = new UsbRelayBarrier(&app);
     barrier1->setBaudRate(settings->barrier1Baud());
@@ -214,17 +217,6 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("barrier1", barrier1);
     engine.rootContext()->setContextProperty("barrier2", barrier2);
     engine.rootContext()->setContextProperty("settings", settings);
-
-    // // Đăng ký đối tượng backend dạng QML singleton (tuỳ chọn, vẫn giữ context properties)
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "App", &controller);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Settings", settings);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Repo", db);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane1", cameraLane1);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CameraLane2", cameraLane2);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier1", barrier1);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "Barrier2", barrier2);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderEntrance", cardReaderEntrance);
-    // qmlRegisterSingletonInstance("smart_parking_system", 1, 0, "CardReaderExit", cardReaderExit);
 
     // Phần này là để xử lý khi QML khởi tạo, bao gồm cả Window và Item
     QQuickWindow *createdWindow = nullptr;
