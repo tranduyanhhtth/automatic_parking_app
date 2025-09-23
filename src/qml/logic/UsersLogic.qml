@@ -68,10 +68,10 @@ Item {
         var uid = r.upsertUser(name, phone, rfid, plate, vt)
         console.log('[UsersLogic] upsertUser result id=', uid)
         if (uid > 0) {
-            // Gán RFID card nếu tồn tại trong bảng rfid_cards và chưa có user
+            // Gán/Chuyển RFID card cho user hiện tại (xóa ràng buộc cũ nếu có)
             if(rfid && r.getRfidCard && r.assignRfidCard){
                 var card = r.getRfidCard(rfid)
-                if(card && card.rfid && !card.user_id){ r.assignRfidCard(rfid, uid) }
+                if(card && card.rfid){ r.assignRfidCard(rfid, uid) }
             }
             if (notify) notify(isUpdate ? 'Đã lưu user' : 'Đã thêm user')
             refresh()
@@ -87,11 +87,15 @@ Item {
         if (selectedUserId <= 0) { if (notify) notify('Chưa chọn user'); return }
         const r = rRepo()
         if (!r || !r.softDeleteUser) { if (notify) notify('Thiếu repo.softDeleteUser'); return }
-        console.log('[UsersLogic] softDelete userId=', selectedUserId)
+        console.log('[UsersLogic] delete userId=', selectedUserId)
         var ok = r.softDeleteUser(selectedUserId)
-        console.log('[UsersLogic] softDelete result', ok)
-        if (notify) notify(ok ? 'Đã ngưng sử dụng user' : 'Không thể ngưng sử dụng')
-        if (ok) { refresh(); selectedUserId = -1; if(adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged }
+        console.log('[UsersLogic] delete result', ok)
+        if (notify) notify(ok ? 'Đã xóa user và đăng ký liên quan' : 'Không thể xóa user')
+        if (ok) {
+            refresh();
+            selectedUserId = -1;
+            if(adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
+        }
     }
 
     Connections {
@@ -99,8 +103,8 @@ Item {
         function onTriggerAddUserChanged() { if (adminPage.triggerAddUser) { addOrUpdate(false); adminPage.triggerAddUser = false } }
         function onTriggerUpdateUserChanged() { if (adminPage.triggerUpdateUser) { addOrUpdate(true); adminPage.triggerUpdateUser = false } }
         function onTriggerDeleteUserChanged() { if (adminPage.triggerDeleteUser) { softDelete(); adminPage.triggerDeleteUser = false } }
-        function onTriggerUsersChangedChanged(){ if(adminPage.triggerUsersChanged){ refresh() } }
-        function onLoginVisibleChanged(){ if(!adminPage.loginVisible && adminPage.tabBar && adminPage.tabBar.currentIndex===1){ refresh() } }
+        function onTriggerUsersChangedChanged(){ refresh() }
+        function onLoginVisibleChanged(){ if(!adminPage.loginVisible && adminPage.tabBar && adminPage.tabBar.currentIndex===3){ refresh() } }
         function onPendingSelectUserIndexChanged(){
             var idx = adminPage.pendingSelectUserIndex
             if(idx>=0 && idx < usersModel.count){
@@ -112,7 +116,7 @@ Item {
 
     Connections {
         target: adminPage ? adminPage.tabBar : null
-        function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===1) refresh() }
+        function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===3) refresh() }
     }
 
     Component.onCompleted: refresh()

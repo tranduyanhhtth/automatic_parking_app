@@ -98,6 +98,7 @@ Item {
         console.log('[SubsLogic] refreshSubs -> rows:', rows.length)
         for(let i=0;i<rows.length;i++){
             const r = rows[i];
+            if (typeof r.user_id !== 'number') r.user_id = r.user_id ? parseInt(r.user_id) || 0 : 0;
             if(r.status==='expired') expiredCount++
             // apply filter
             if(filterMode==='expired' && r.status!=='expired') continue
@@ -168,7 +169,7 @@ Item {
         }
     }
     function createOrExtend(isExtend){
-        const err=validate(); if(err){ msg(err); return }
+    const err=validate(); if(err){ msg(err); return }
         console.log('[SubsLogic] createOrExtend start', {extend:isExtend})
         const ticket = currentTicketFromRfid() || planToTicket(readPlanText());
         if(ticket!=='monthly' && ticket!=='quarterly' && ticket!=='yearly'){ msg('Loại thẻ RFID không phải vé tháng/quý/năm'); return }
@@ -213,12 +214,41 @@ Item {
             msg('Đăng ký trùng lặp: người dùng/biển số hoặc RFID đã có đăng ký hoạt động trong khoảng này');
             return;
         } else if(sid>0){ 
-            if(price>0 && r && r.insertRevenue) 
-                r.insertRevenue(undefined,sid,userId,price,payment,'subscription',isExtend?'extend':'create'); 
-                msg((isExtend?'Gia hạn':'Tạo')+' đăng ký thành công'); 
-                _inExtendedState=false; 
-                refreshSubs() 
-        } else msg('Lỗi lưu đăng ký') 
+            if(price>0 && r && r.insertRevenue)
+                r.insertRevenue(null, sid, userId, price, payment, 'subscription', isExtend ? 'extend' : 'create');
+            msg((isExtend ? 'Gia hạn' : 'Tạo') + ' đăng ký thành công');
+            _inExtendedState = false;
+            // Optimistic UI: insert new row at top immediately
+            try {
+                const row = {
+                    id: sid,
+                    user_id: Number(userId),
+                    full_name: (function(){ for(let i=0;i<usersCache.length;i++) if(usersCache[i].id===userId) return usersCache[i].full_name; return '' })(),
+                    vehicle_type: (function(){ for(let i=0;i<usersCache.length;i++) if(usersCache[i].id===userId) return usersCache[i].vehicle_type; return '' })(),
+                    plate: plate,
+                    rfid: rfid,
+                    plan_type: ticket,
+                    start_date: startDate,
+                    end_date: endDate,
+                    payment_mode: payment,
+                    price: price,
+                    status: 'active'
+                };
+                subsModel.insert(0, row);
+            } catch(e) { console.log('[SubsLogic] optimistic insert failed', e) }
+            // Then refresh in background to reconcile with DB
+            Qt.callLater(refreshSubs);
+            if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged;
+            // Reset form fields to avoid duplicate submit
+            if(adminPage){
+                if(adminPage.subPlate) adminPage.subPlate.text = ''
+                if(adminPage.subRfid) adminPage.subRfid.text = ''
+                if('text' in adminPage.subPlan) adminPage.subPlan.text = ''
+                if(adminPage.subStart) adminPage.subStart.text = ''
+                if(adminPage.subEnd) adminPage.subEnd.text = ''
+                if(adminPage.subPrice) adminPage.subPrice.text = ''
+            }
+        } else { msg('Lỗi lưu đăng ký') }
     }
     
 
@@ -322,9 +352,7 @@ Item {
             } 
         } 
         function onTriggerUsersChangedChanged(){ 
-            if(adminPage.triggerUsersChanged){ 
-                refreshUsers() 
-            } 
+            fullRefresh() 
         } 
         function prefillSubscriptionForUser(userId) {
             const r=rRepo();
@@ -487,7 +515,12 @@ Item {
                 }
                 adminPage.triggerSubFilterChanged = false
             } }
+    function onTriggerUsersChangedChanged(){ fullRefresh() }
         function onTriggerExportExpiredChanged(){ if(adminPage && adminPage.triggerExportExpired){ exportCsvForCurrentFilter(); adminPage.triggerExportExpired=false } }
+    }
+    Connections {
+        target: adminPage ? adminPage.tabBar : null
+        function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===4) fullRefresh() }
     }
     Component.onCompleted: fullRefresh()
 }

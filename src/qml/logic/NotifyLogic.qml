@@ -42,7 +42,7 @@ Item {
         const id=_nextId++
         msgs.insert(0,{ id:id, text:message, sev:severity, ts:Date.now(), count:1 })
 
-        // Timer fade
-        Qt.createQmlObject('import QtQuick 2.15; Timer { interval: '+duration+'; running: true; repeat: false; onTriggered: { var id='+id+'; for(var k=0;k<msgs.count;k++){ if(msgs.get(k).id===id){ msgs.setProperty(k,"sev","fade"); break; } } } }', notifyLogic)
+        // Timer fade then remove after short delay
+        Qt.createQmlObject('import QtQuick 2.15; Timer { interval: '+duration+'; running: true; repeat: false; onTriggered: { var id='+id+'; var idx=-1; for(var k=0;k<msgs.count;k++){ if(msgs.get(k).id===id){ idx=k; msgs.setProperty(k, "sev", "fade"); break; } } Qt.createQmlObject("import QtQuick 2.15; Timer { interval: 260; running: true; repeat: false; onTriggered: { var id2='+id+'; for (var m=0;m<msgs.count;m++){ if(msgs.get(m).id===id2){ msgs.remove(m); break; } } } }", notifyLogic); } }', notifyLogic)
     }
 }

@@ -13,6 +13,8 @@ Item {
 	property bool triggerAddPricing: false
 	property bool triggerSavePricing: false
 	property bool triggerDeletePricing: false
+	// Saving state for Pricing (used to show spinner on Save button)
+	property bool pricingSaving: false
 	// Pricing field aliases for logic
 	property alias pricingBaseFee: pricingBaseFee
 	property alias pricingGraceMinutes: pricingGraceMinutes
@@ -215,12 +217,16 @@ Item {
 										dashboardLogic.refreshDailyChart(dSeries, dAxisX, dAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
 									if (dashboardLogic && dashboardLogic.refreshBreakdownPie)
 										dashboardLogic.refreshBreakdownPie(pie, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
+									if (dashboardLogic && dashboardLogic.refreshByTicketBar)
+										dashboardLogic.refreshByTicketBar(ticketBar, ticketAxisX, ticketAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
 								}
 								function onRefreshCharts() {
 									if (dashboardLogic && dashboardLogic.refreshDailyChart)
 										dashboardLogic.refreshDailyChart(dSeries, dAxisX, dAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
 									if (dashboardLogic && dashboardLogic.refreshBreakdownPie)
 										dashboardLogic.refreshBreakdownPie(pie, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
+									if (dashboardLogic && dashboardLogic.refreshByTicketBar)
+										dashboardLogic.refreshByTicketBar(ticketBar, ticketAxisX, ticketAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
 								}
 							}
 							ColumnLayout {
@@ -332,17 +338,18 @@ Item {
 										color: "#222"
 										border.color: "#333"
 										ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 6
-											Text { text: "Doanh thu theo ngày"; color: "white"; font.bold: true }
+											Text { text: "Doanh thu theo ngày (nghìn VNĐ)"; color: "white"; font.bold: true }
 											ChartView {
 												id: chartRevenueDaily
 												Layout.fillWidth: true
 												Layout.fillHeight: true
 												antialiasing: true
 												theme: ChartView.ChartThemeDark
+												visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 0) && !adminPage.loginVisible
 												legend.visible: false
-												ValueAxis { id: dAxisY; min: 0 }
+												ValueAxis { id: dAxisY; min: 0; labelFormat: "%.0f K" }
 												DateTimeAxis { id: dAxisX; format: "dd/MM"; tickCount: 8 }
-												LineSeries { id: dSeries; axisY: dAxisY; axisX: dAxisX; color: "#4ec9b0" }
+												LineSeries { id: dSeries; axisY: dAxisY; axisX: dAxisX; color: "#4ec9b0"; pointLabelsVisible: false; useOpenGL: false }
 											}
 										}
 									}
@@ -360,8 +367,31 @@ Item {
 												Layout.fillHeight: true
 												antialiasing: true
 												theme: ChartView.ChartThemeDark
+												visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 0) && !adminPage.loginVisible
 												legend.visible: true
 												PieSeries { id: pie; holeSize: 0.35 }
+											}
+											Rectangle {
+												Layout.fillWidth: true
+												Layout.fillHeight: true
+												radius: 8
+												color: "#222"
+												border.color: "#333"
+												ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 6
+													Text { text: "Doanh thu theo loại vé (nghìn VNĐ)"; color: "white"; font.bold: true }
+													ChartView {
+														id: chartByTicket
+														Layout.fillWidth: true
+														Layout.fillHeight: true
+														antialiasing: true
+														theme: ChartView.ChartThemeDark
+														visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 0) && !adminPage.loginVisible
+														legend.visible: false
+														BarSeries { id: ticketBar; axisX: ticketAxisX; axisY: ticketAxisY; barWidth: 0.6 }
+														BarCategoryAxis { id: ticketAxisX }
+														ValueAxis { id: ticketAxisY; min: 0; labelFormat: "%.0f K" }
+													}
+												}
 											}
 										}
 									}
@@ -418,15 +448,23 @@ Item {
 										width: 110
 										height: 28
 										radius: 8
-										color: pricingLogic.editMode ? "#2b7" : "#777"
-										Text {
+										color: (pricingLogic.editMode && !adminPage.pricingSaving) ? "#2b7" : "#777"
+										Row {
 											anchors.centerIn: parent
-											text: "Lưu"
-											color: "white"
+											spacing: 6
+											BusyIndicator {
+												running: adminPage.pricingSaving
+												visible: adminPage.pricingSaving
+												width: 16; height: 16
+											}
+											Text {
+												text: "Lưu"
+												color: "white"
+											}
 										}
 										MouseArea {
 											anchors.fill: parent
-											enabled: pricingLogic.editMode
+											enabled: pricingLogic.editMode && !adminPage.pricingSaving
 											onClicked: pricingLogic.requestSave
 													   = !pricingLogic.requestSave
 										}
@@ -471,6 +509,7 @@ Item {
 
 									// Rows
 									ListView {
+										visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 1) && !adminPage.loginVisible
 										anchors.left: parent.left
 										anchors.right: parent.right
 										anchors.bottom: parent.bottom
@@ -728,6 +767,7 @@ Item {
 											}
 										}
 										ListView {
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 2) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: rfidLogic.listModel
@@ -758,7 +798,7 @@ Item {
 														Layout.preferredWidth: 140
 													}
 													Text {
-														text: (user_id || '')
+														text: (user_id===undefined||user_id===null)?'':(''+user_id)
 														color: "white"
 														Layout.preferredWidth: 80
 													}
@@ -994,6 +1034,7 @@ Item {
 										}
 										ListView {
 											id: usersListView
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 3) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: usersLogic ? usersLogic.listModel : null
@@ -1210,8 +1251,7 @@ Item {
 										}
 										MouseArea {
 											anchors.fill: parent
-											onClicked: adminPage.triggerSubCreate
-													   = !adminPage.triggerSubCreate
+											onClicked: adminPage.triggerSubCreate = !adminPage.triggerSubCreate
 										}
 									}
 									Rectangle {
@@ -1342,6 +1382,7 @@ Item {
 										}
 										ListView {
 											id: subsListView
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: subsLogic ? subsLogic.listModel : null
@@ -1556,6 +1597,7 @@ Item {
 										}
 										ListView {
 											id: revenueList
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 5) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: revenueLogic ? revenueLogic.listModel : null

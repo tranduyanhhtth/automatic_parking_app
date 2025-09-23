@@ -9,7 +9,7 @@ if (NOT WIN32)
     message(FATAL_ERROR "Windows only.")
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort Network QuickControls2 Charts Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Quick Qml Sql Multimedia SerialPort Network QuickControls2 Charts Widgets Concurrent)
 
 qt_standard_project_setup(REQUIRES 6.8)
 
@@ -102,7 +102,7 @@ set_target_properties(appsmart_parking_system PROPERTIES
 )
 
 target_link_libraries(appsmart_parking_system
-    PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network Qt6::QuickControls2 Qt6::Charts Qt6::Widgets
+    PRIVATE Qt6::Sql Qt6::Qml Qt6::Quick Qt6::Multimedia Qt6::SerialPort Qt6::Network Qt6::QuickControls2 Qt6::Charts Qt6::Widgets Qt6::Concurrent
     PRIVATE onnxruntime
 )
 

@@ -13,6 +13,7 @@
 // #include "domain/model/parkingrecord.h"
 #include "domain/ports/iparkingrepository.h"
 #include <optional>
+class QThread;
 
 class DatabaseManager : public QObject, public IParkingRepository
 {
@@ -125,6 +126,9 @@ public:
     Q_INVOKABLE bool seedDemoData(int days = 30,
                                   int sessionsPerDay = 50,
                                   int subscriptionsPerDay = 5);
+    Q_INVOKABLE void seedDemoDataAsync(int days = 30,
+                                       int sessionsPerDay = 50,
+                                       int subscriptionsPerDay = 5);
 
     // Lưu một dòng pricing chuẩn hóa (update nếu đã tồn tại theo vehicle_type + ticket_type)
     Q_INVOKABLE bool upsertPricingRow(const QString &vehicleType,
@@ -138,6 +142,9 @@ public:
                                       const QString &description,
                                       const QString &startTime,
                                       const QString &endTime);
+
+    // Async batch upsert to avoid UI blocking when saving many rows
+    Q_INVOKABLE void upsertPricingRowsAsync(const QString &jsonText);
 
     // RFID cards management (exposed to QML) -- moved to public to ensure meta-object visibility
     Q_INVOKABLE bool upsertRfidCard(const QString &rfid,
@@ -161,6 +168,9 @@ public:
     Q_INVOKABLE QList<QVariantMap> listRevenueSummary(const QString &fromIso,
                                                       const QString &toIso,
                                                       const QString &typeFilter);
+    // Breakdown revenue by ticket_type across both session and subscription revenues
+    Q_INVOKABLE QList<QVariantMap> listRevenueByTicketType(const QString &fromIso,
+                                                           const QString &toIso);
 
     // Users management (Admin UI)
     Q_INVOKABLE QList<QVariantMap> listUsers(int limit = 500, int offset = 0);
@@ -174,8 +184,24 @@ public:
                                            const QString &plate = QString(),
                                            const QString &nowIso = QString());
 
+    // Async variants (run on background thread and emit results back)
+    Q_INVOKABLE void getDashboardStatsAsync(const QString &todayIso);
+    Q_INVOKABLE void listRevenueSummaryAsync(const QString &fromIso,
+                                             const QString &toIso,
+                                             const QString &typeFilter);
+    Q_INVOKABLE void listRevenueByTicketTypeAsync(const QString &fromIso,
+                                                  const QString &toIso);
+
+signals:
+    void dashboardStatsReady(const QString &todayIso, const QVariantMap &stats);
+    void revenueSummaryReady(const QString &fromIso, const QString &toIso, const QString &typeFilter, const QList<QVariantMap> &rows);
+    void revenueByTicketReady(const QString &fromIso, const QString &toIso, const QList<QVariantMap> &rows);
+    void pricingUpsertDone(int savedCount);
+    void seedDemoDone(bool ok);
+
 private:
     QSqlDatabase DB_Connection;
+    QString dbFilePath_;
 
     bool ensureSchema();
     bool ensureDefaultPricing();
@@ -185,8 +211,6 @@ private:
     std::optional<QVariantMap> findUserByRfidOrPlate(const QString &rfid, const QString &plate);
     // Nội bộ: tra pricing id theo loại xe + loại vé
     int getPricingIdFor(const QString &vehicleType, const QString &ticketType);
-    // Đảm bảo có user mặc định để thỏa ràng buộc NOT NULL của user_id
-    int ensureGuestUser();
     QString normalizeVehicle(const QString &vt) const; // motorbike->bike
     QString normalizePlan(const QString &plan) const;  // tháng->monthly
     // Map legacy/synonym ticket types to supported ones (e.g., daily -> daily_day/night by time, per_use -> hourly)

@@ -34,7 +34,11 @@ Item {
         if (!r || !r.listRfidCards) { console.log('[RfidCardsLogic] refresh: repo/listRfidCards missing'); return }
         const rows = r.listRfidCards('', '', '', 1000, 0) || []
         console.log('[RfidCardsLogic] refresh -> total rows:', rows.length)
-        for (let i = 0; i < rows.length; ++i) listModel.append(rows[i])
+        for (let i = 0; i < rows.length; ++i) {
+            const it = rows[i]
+            if (typeof it.user_id !== 'number') it.user_id = it.user_id ? parseInt(it.user_id) || 0 : 0
+            listModel.append(it)
+        }
     }
 
     function save() {
@@ -57,7 +61,11 @@ Item {
         const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '')
         console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
         if (notify) notify(ok ? (existed ? 'Đã cập nhật thẻ' : 'Đã tạo thẻ mới') : 'Không thể lưu thẻ')
-        if (ok) { refresh(); prefill(rfid) }
+        if (ok) {
+            refresh(); prefill(rfid)
+            // Signal the Users/Subscriptions tabs to refresh
+            if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
+        }
     }
 
     function del() {
@@ -69,7 +77,11 @@ Item {
         const ok = r.deleteRfidCard(rfid)
         console.log('[RfidCardsLogic] delete result', ok)
         if (notify) notify(ok ? 'Đã xóa thẻ' : 'Không thể xóa thẻ')
-        if (ok) { tfRfid.text=''; tfDesc.text=''; scannedRfid=''; refresh() }
+        if (ok) { 
+            tfRfid.text=''; tfDesc.text=''; scannedRfid=''; 
+            refresh(); 
+            if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
+        }
     }
 
     function changeStatus(newStatus){
@@ -81,7 +93,10 @@ Item {
         const ok = r.setRfidCardStatus(rfid, newStatus)
         console.log('[RfidCardsLogic] status change result', ok)
         if(notify) notify(ok ? ('Đã chuyển trạng thái '+newStatus) : 'Không thể đổi trạng thái')
-        if(ok){ refresh(); prefill(rfid) }
+        if(ok){
+            refresh(); prefill(rfid)
+            if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
+        }
     }
 
     function prefill(rfid) {
@@ -107,6 +122,10 @@ Item {
     Connections {
         target: adminPage
         function onTriggerCloseChanged() { /* no-op */ }
+        function onTriggerUsersChangedChanged(){
+            refresh();
+            if (tfRfid && tfRfid.text) prefill(tfRfid.text)
+        }
         function onPendingSelectRfidIndexChanged() {
             if (!adminPage) return
             const idx = adminPage.pendingSelectRfidIndex
@@ -129,6 +148,11 @@ Item {
             // Avoid duplicate toast on selection-driven prefill
             lastNotifiedExistingRfid = scannedRfid
         }
+    }
+
+    Connections {
+        target: adminPage ? adminPage.tabBar : null
+        function onCurrentIndexChanged(){ if (adminPage && adminPage.tabBar.currentIndex === 2) refresh() }
     }
 
     Connections { 

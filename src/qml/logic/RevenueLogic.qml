@@ -16,7 +16,25 @@ Item {
     property bool triggerSeedDemo: false
     function todayIso(){ const d=new Date(); function p(n){return n<10?'0'+n:n} return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()) }
     function defaultFrom(){ const d=new Date(); d.setDate(d.getDate()-30); function p(n){return n<10?'0'+n:n} return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()) }
-    function refresh(){ if(!adminPage) return; if(!adminPage.revFrom || !adminPage.revTo) return; if(typeof repo==='undefined'||!repo.listRevenueSummary) return; const f=adminPage.revFrom.text||defaultFrom(); const t=adminPage.revTo.text||todayIso(); const tp = (!adminPage.revType)?'all': (adminPage.revType.currentIndex===1?'parking_session': (adminPage.revType.currentIndex===2?'subscription':'all')); const rows = repo.listRevenueSummary(f,t,tp)||[]; revenueModel.clear(); totalRevenue=0; totalSession=0; totalSubscription=0; for(let i=0;i<rows.length;i++){ const r=rows[i]; totalRevenue += parseInt(r.total_amount||0); totalSession += parseInt(r.session_count||0); totalSubscription += parseInt(r.subscription_count||0); revenueModel.append(r) } if(adminPage){ if(adminPage.revSummaryTotal) adminPage.revSummaryTotal.text='Tổng doanh thu: '+totalRevenue; if(adminPage.revSummaryBreakdown) adminPage.revSummaryBreakdown.text='Trong đó: vé lượt '+totalSession+', vé tháng '+totalSubscription } }
+    property string _revReqKey: ""
+    function refresh(){
+        if(!adminPage) return; if(!adminPage.revFrom || !adminPage.revTo) return; if(typeof repo==='undefined') return;
+        const f=adminPage.revFrom.text||defaultFrom(); const t=adminPage.revTo.text||todayIso(); const tp = (!adminPage.revType)?'all': (adminPage.revType.currentIndex===1?'parking_session': (adminPage.revType.currentIndex===2?'subscription':'all'));
+        _revReqKey = f+"|"+t+"|"+tp;
+        if (repo.listRevenueSummaryAsync) { repo.listRevenueSummaryAsync(f,t,tp); return; }
+        if (!repo.listRevenueSummary) return;
+        const rows = repo.listRevenueSummary(f,t,tp)||[];
+        revenueModel.clear(); totalRevenue=0; totalSession=0; totalSubscription=0;
+        for(let i=0;i<rows.length;i++){ const r=rows[i]; totalRevenue += parseInt(r.total_amount||0); totalSession += parseInt(r.session_count||0); totalSubscription += parseInt(r.subscription_count||0); revenueModel.append(r) }
+        if(adminPage){ if(adminPage.revSummaryTotal) adminPage.revSummaryTotal.text='Tổng doanh thu: '+totalRevenue; if(adminPage.revSummaryBreakdown) adminPage.revSummaryBreakdown.text='Trong đó: vé lượt '+totalSession+', vé tháng '+totalSubscription }
+    }
+    // Debounce filter to avoid spamming DB when user clicks fast
+    property bool _debouncing: false
+    function _debouncedRefresh(){
+        if(_debouncing) return;
+        _debouncing = true;
+        Qt.createQmlObject('import QtQuick 2.15; Timer { interval: 200; running: true; repeat: false; onTriggered: { revenueLogic._debouncing=false; revenueLogic.refresh() } }', revenueLogic)
+    }
     function buildDate(yIndex, mIndex, dIndex) {
         var y = 2000 + (yIndex|0);
         var m = (mIndex|0) + 1; if (m < 10) m = "0"+m; else m = ""+m;
@@ -37,7 +55,7 @@ Item {
                 adminPage.revFromPickerVisible = false;
                 adminPage.triggerRevFromSelect = false;
             }
-            refresh();
+            _debouncedRefresh();
         }
         function onTriggerRevToSelectChanged() {
             if (!adminPage || !adminPage.triggerRevToSelect) return;
@@ -51,10 +69,22 @@ Item {
                 adminPage.revToPickerVisible = false;
                 adminPage.triggerRevToSelect = false;
             }
-            refresh();
+            _debouncedRefresh();
         }
         function onTriggerRevenueFilterChanged() {
-            refresh();
+            _debouncedRefresh();
+        }
+    }
+    // Handle async result
+    Connections {
+        target: repo
+        function onRevenueSummaryReady(fromIso, toIso, typeFilter, rows){
+            const key = (fromIso||'')+"|"+(toIso||'')+"|"+(typeFilter||'');
+            if (key !== _revReqKey) return;
+            if (!rows) rows = []
+            revenueModel.clear(); totalRevenue=0; totalSession=0; totalSubscription=0;
+            for(let i=0;i<rows.length;i++){ const r=rows[i]; totalRevenue += parseInt(r.total_amount||0); totalSession += parseInt(r.session_count||0); totalSubscription += parseInt(r.subscription_count||0); revenueModel.append(r) }
+            if(adminPage){ if(adminPage.revSummaryTotal) adminPage.revSummaryTotal.text='Tổng doanh thu: '+totalRevenue; if(adminPage.revSummaryBreakdown) adminPage.revSummaryBreakdown.text='Trong đó: vé lượt '+totalSession+', vé tháng '+totalSubscription }
         }
     }
     Connections {
@@ -94,10 +124,16 @@ Item {
         }
         function onTriggerSeedDemoChanged() {
             if (!revenueLogic.triggerSeedDemo) return;
-            try { if (typeof repo!== 'undefined' && typeof repo.seedDemoData === 'function') repo.seedDemoData(10,10,2); } catch (e) {}
+            try {
+                if (typeof repo!== 'undefined' && typeof repo.seedDemoDataAsync === 'function') {
+                    repo.seedDemoDataAsync(30, 40, 6);
+                    if (notify) notify("Đang tạo dữ liệu demo...");
+                } else if (typeof repo.seedDemoData === 'function') {
+                    repo.seedDemoData(30, 40, 6);
+                    if (notify) notify("Đã tạo dữ liệu demo");
+                }
+            } catch (e) {}
             revenueLogic.triggerSeedDemo = false;
-            if (notify) notify("Đã tạo dữ liệu demo");
-            refresh();
         }
     }
     Component.onCompleted: {
@@ -105,14 +141,24 @@ Item {
             if (adminPage.revFrom && !adminPage.revFrom.text) adminPage.revFrom.text = defaultFrom();
             if (adminPage.revTo && !adminPage.revTo.text) adminPage.revTo.text = todayIso();
         }
-        // If database is empty, try seeding a small sample set
-        if (typeof repo!== 'undefined' && repo.listRevenueSummary) {
-            var rows = repo.listRevenueSummary(defaultFrom(), todayIso(), 'all') || [];
-            if ((rows.length|0) === 0 && typeof repo.seedDemoData === 'function') {
-                // 10 days x 10 sessions = 100, 0 subs to keep lean here
-                try { repo.seedDemoData(10, 10, 2); } catch (e) {}
-            }
-        }
-        refresh();
+        // Defer empty-db seeding slightly to avoid blocking UI thread at startup
+        Qt.callLater(function(){
+            try {
+                if (typeof repo!== 'undefined' && repo.listRevenueSummary) {
+                    var rows = repo.listRevenueSummary(defaultFrom(), todayIso(), 'all') || [];
+                    if ((rows.length|0) === 0) {
+                        if (typeof repo.seedDemoDataAsync === 'function') repo.seedDemoDataAsync(30, 40, 6);
+                        else if (typeof repo.seedDemoData === 'function') repo.seedDemoData(30, 40, 6);
+                    }
+                }
+            } catch(e) {}
+            refresh();
+        });
+    }
+
+    // Refresh upon async seeding done
+    Connections {
+        target: repo
+        function onSeedDemoDone(ok){ if (notify) notify(ok?"Đã tạo dữ liệu demo":"Tạo dữ liệu demo lỗi"); revenueLogic.refresh(); }
     }
 }
