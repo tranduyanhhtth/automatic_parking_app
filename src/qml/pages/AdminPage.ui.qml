@@ -746,9 +746,9 @@ Item {
 												Layout.preferredWidth: 140
 											}
 											Text {
-												text: "User"
+												text: "Số điện thoại"
 												color: "white"
-												Layout.preferredWidth: 80
+												Layout.preferredWidth: 120
 											}
 											Text {
 												text: "Trạng thái"
@@ -798,9 +798,9 @@ Item {
 														Layout.preferredWidth: 140
 													}
 													Text {
-														text: (user_id===undefined||user_id===null)?'':(''+user_id)
+														text: (user_phone===undefined||user_phone===null)?'':(''+user_phone)
 														color: "white"
-														Layout.preferredWidth: 80
+														Layout.preferredWidth: 120
 													}
 													Text {
 														text: status

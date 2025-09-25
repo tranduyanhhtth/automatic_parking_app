@@ -20,6 +20,8 @@ Item {
     // Expose inputs/outputs via aliases
     property alias tfQuery: tfQuery
     property alias cbStatus: cbStatus
+    property alias fromDatePopup: fromDatePopup
+    property alias toDatePopup: toDatePopup
     property alias dpFrom: dpFrom
     property alias dpTo: dpTo
     property alias fromHour: fromHour
@@ -496,6 +498,7 @@ Item {
                 Text { text: "Tháng"; color: "black" }
                 ComboBox {
                     id: fromMonthCombo
+                    displayText: currentIndex > -1 ? ((currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)) : ""
                     model: 12 // 0-11
                     popup.height: 240
                     delegate: ItemDelegate {
@@ -507,6 +510,7 @@ Item {
                 Text { text: "Ngày"; color: "black" }
                 ComboBox {
                     id: fromDayCombo
+                    displayText: currentIndex > -1 ? ((currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)) : ""
                     model: 31 // 0-30
                     popup.height: 240
                     delegate: ItemDelegate {
@@ -568,6 +572,7 @@ Item {
                 Text { text: "Tháng"; color: "black" }
                 ComboBox {
                     id: toMonthCombo
+                    displayText: currentIndex > -1 ? ((currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)) : ""
                     model: 12 // 0-11
                     popup.height: 240
                     delegate: ItemDelegate {
@@ -579,6 +584,7 @@ Item {
                 Text { text: "Ngày"; color: "black" }
                 ComboBox {
                     id: toDayCombo
+                    displayText: currentIndex > -1 ? ((currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)) : ""
                     model: 31 // 0-30
                     popup.height: 240
                     delegate: ItemDelegate {

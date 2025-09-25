@@ -36,7 +36,6 @@ Item {
         console.log('[RfidCardsLogic] refresh -> total rows:', rows.length)
         for (let i = 0; i < rows.length; ++i) {
             const it = rows[i]
-            if (typeof it.user_id !== 'number') it.user_id = it.user_id ? parseInt(it.user_id) || 0 : 0
             listModel.append(it)
         }
     }

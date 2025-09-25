@@ -44,8 +44,8 @@ Item {
             if (searchPage.fromPickerVisible) {
                 var now = new Date();
                 searchPage.fromYear.currentIndex = now.getFullYear() - 2000; // 2025 - 2000 = 25
-                searchPage.fromMonth.currentIndex = now.getMonth() + 1; // 0-11 (August = 7)
-                searchPage.fromDay.currentIndex = now.getDate(); // 0-30 (26 - 1 = 25)
+                searchPage.fromMonth.currentIndex = now.getMonth(); // 0-11 (August = 7)
+                searchPage.fromDay.currentIndex = now.getDate() - 1; // 0-30 (26 - 1 = 25)
             }
         }
 
@@ -53,8 +53,8 @@ Item {
             if (searchPage.toPickerVisible) {
                 var now = new Date();
                 searchPage.toYear.currentIndex = now.getFullYear() - 2000; // 2025 - 2000 = 25
-                searchPage.toMonth.currentIndex = now.getMonth() + 1; // 0-11 (August = 7)
-                searchPage.toDay.currentIndex = now.getDate(); // 0-30 (26 - 1 = 25)
+                searchPage.toMonth.currentIndex = now.getMonth(); // 0-11 (August = 7)
+                searchPage.toDay.currentIndex = now.getDate() - 1; // 0-30 (26 - 1 = 25)
             }
         }
     }
@@ -102,6 +102,25 @@ Item {
             // searchPage.dpFrom.text = formatDate(year, month, day);
             // searchPage.dpTo.text = formatDate(year, month, day);
             updateCurrentDate();
+        }
+    }
+
+    // Handle popup visibility changes to sync control flags
+    Connections {
+        target: searchPage.fromDatePopup
+        function onVisibleChanged() {
+            if (target && !target.visible) {
+                searchPage.fromPickerVisible = false;
+            }
+        }
+    }
+
+    Connections {
+        target: searchPage.toDatePopup
+        function onVisibleChanged() {
+            if (target && !target.visible) {
+                searchPage.toPickerVisible = false;
+            }
         }
     }
 
@@ -203,8 +222,6 @@ Item {
                 searchPage.lblSummary.text = "0 kết quả";
             if (searchPage.lblRevenue)
                 searchPage.lblRevenue.text = "Tổng doanh thu trong kết quả: 0 VNĐ";
-            // reset về false để lần sau toggle lại sẽ kích hoạt
-            searchPage.triggerClose = false;
         }
     }
 
