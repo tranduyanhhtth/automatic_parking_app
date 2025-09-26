@@ -72,6 +72,14 @@ Item {
         if (!rfid) { if (notify) notify('Chưa có RFID'); return }
         const r = rRepo()
         if (!r || !r.deleteRfidCard) { if (notify) notify('Thiếu hàm xóa'); return }
+        // Guard: prevent deleting assigned card at UI level as well
+        if (r.getRfidCard) {
+            const c = r.getRfidCard(rfid)
+            if (c && (c.status === 'assigned' || (c.user_phone && (''+c.user_phone).length))) {
+                if (notify) notify('Thẻ đang được gán cho người dùng, không thể xóa')
+                return
+            }
+        }
         console.log('[RfidCardsLogic] deleteRfidCard', rfid)
         const ok = r.deleteRfidCard(rfid)
         console.log('[RfidCardsLogic] delete result', ok)

@@ -8,6 +8,7 @@ Item {
     property var notify               // function(message)
     property var allowedAccounts      // optional array of {username,password}
     property alias rfidLogic: rfidLogic
+    property alias subsLogic: subsLogic
 
     // Sub-logic modules
     LoginLogic {

@@ -10,6 +10,7 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QList>
+#include <QVariant>
 // #include "domain/model/parkingrecord.h"
 #include "domain/ports/iparkingrepository.h"
 #include <optional>
@@ -192,12 +193,24 @@ public:
     Q_INVOKABLE void listRevenueByTicketTypeAsync(const QString &fromIso,
                                                   const QString &toIso);
 
+    // File export helpers (exposed to QML)
+    Q_INVOKABLE bool saveTextToFile(const QString &filePath, const QString &text);
+    // Export revenue summary to a PDF file. If filePath is empty, a default file will be placed on Desktop
+    Q_INVOKABLE bool exportRevenueToPdf(const QVariantList &rows,
+                                        const QString &fromDate,
+                                        const QString &toDate,
+                                        int totalRevenue,
+                                        int totalSession,
+                                        int totalSubscription,
+                                        const QString &filePath = QString());
+
 signals:
     void dashboardStatsReady(const QString &todayIso, const QVariantMap &stats);
     void revenueSummaryReady(const QString &fromIso, const QString &toIso, const QString &typeFilter, const QList<QVariantMap> &rows);
     void revenueByTicketReady(const QString &fromIso, const QString &toIso, const QList<QVariantMap> &rows);
     void pricingUpsertDone(int savedCount);
     void seedDemoDone(bool ok);
+    void pdfExported(const QString &filePath, bool ok);
 
 private:
     QSqlDatabase DB_Connection;

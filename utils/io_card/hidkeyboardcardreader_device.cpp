@@ -2,6 +2,7 @@
 #include "windows_rawinput_router.h"
 #include <QChar>
 #include <QDateTime>
+#include <QTimer>
 
 HidKeyboardCardReaderDevice::HidKeyboardCardReaderDevice(WindowsRawInputRouter *router, QObject *parent)
     : ICardReader(parent), m_router(router)
@@ -10,6 +11,22 @@ HidKeyboardCardReaderDevice::HidKeyboardCardReaderDevice(WindowsRawInputRouter *
     {
         QObject::connect(m_router, &WindowsRawInputRouter::rawKey, this, &HidKeyboardCardReaderDevice::onRawKey);
     }
+    // Idle finalize timer
+    m_idleTimer = new QTimer(this);
+    m_idleTimer->setSingleShot(true);
+    QObject::connect(m_idleTimer, &QTimer::timeout, this, [this]()
+                     {
+        if (!m_finalizeOnIdle)
+            return;
+        if (!m_buffer.isEmpty() && m_buffer.size() >= m_minLength)
+        {
+            emit debugLog(QStringLiteral("[HID IdleFinalize] %1").arg(m_buffer));
+            finalize();
+        }
+        else
+        {
+            m_buffer.clear();
+        } });
 }
 
 // Rely on AUTOMOC; no manual moc include
@@ -59,6 +76,27 @@ void HidKeyboardCardReaderDevice::resetBuffer()
     m_buffer.clear();
 }
 
+void HidKeyboardCardReaderDevice::attemptAutoRebind()
+{
+    if (!m_autoBindWhenEmpty)
+        return;
+    // If current devicePath is not a HID path or is empty, keep empty to allow auto-bind on next key
+    if (m_devicePath.isEmpty())
+        return;
+    if (!m_devicePath.startsWith(QStringLiteral("\\\\?\\HID#"), Qt::CaseInsensitive))
+    {
+        // Not a HID path, clear it
+        m_devicePath.clear();
+        emit devicePathChanged();
+        return;
+    }
+    // Heuristic: if path was claimed but we want to rebind (e.g., device unplugged), release claim
+    if (claimedPaths().contains(m_devicePath))
+        claimedPaths().remove(m_devicePath);
+    m_devicePath.clear();
+    emit devicePathChanged();
+}
+
 void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bool down)
 {
     if (!m_enabled)
@@ -104,10 +142,25 @@ void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bo
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     if (m_lastTs > 0 && (now - m_lastTs) > m_interKeyMsMax)
     {
-        // too slow, likely human typing – reset buffer
-        m_buffer.clear();
+        // too slow, likely human typing – normally reset; but if buffer already has enough digits, finalize previous read
+        if (!m_buffer.isEmpty())
+        {
+            if (m_buffer.size() >= m_minLength)
+            {
+                emit debugLog(QStringLiteral("[HID] Long gap -> finalize '%1'").arg(m_buffer));
+                finalize(); // will clear buffer
+            }
+            else
+            {
+                emit debugLog(QStringLiteral("[HID] Reset buffer (slow keys) '%1'").arg(m_buffer));
+                m_buffer.clear();
+            }
+        }
     }
     m_lastTs = now;
+    // Arm idle finalize timer to catch readers that don't send Enter
+    if (m_idleTimer)
+        m_idleTimer->start(m_interKeyMsMax + m_idleExtraMs);
 
     if (vkey == VK_RETURN)
     {
@@ -126,6 +179,8 @@ void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bo
     if (vkey == VK_BACK)
     {
         // Treat backspace as a hard reset of the buffer
+        if (!m_buffer.isEmpty())
+            emit debugLog(QStringLiteral("[HID] Backspace -> reset buffer from '%1'").arg(m_buffer));
         m_buffer.clear();
         return;
     }
@@ -142,6 +197,8 @@ void HidKeyboardCardReaderDevice::onRawKey(const QString &path, quint32 vkey, bo
 void HidKeyboardCardReaderDevice::finalize()
 {
     const QString s = m_buffer.trimmed();
+    if (m_idleTimer)
+        m_idleTimer->stop();
     if (s.size() >= m_minLength)
     {
         emit debugLog(QStringLiteral("[HID Raw] %1").arg(s));

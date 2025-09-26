@@ -26,6 +26,36 @@ Item {
         const stats=repo.getDashboardStats(t)||{}; inToday=parseInt(stats.in_today||0); outToday=parseInt(stats.out_today||0); revenueToday=parseInt(stats.revenue_today||0); expiredSubs=parseInt(stats.expired_subscriptions||0); if(adminPage){ if(adminPage.cardInToday) adminPage.cardInToday.text=''+inToday; if(adminPage.cardOutToday) adminPage.cardOutToday.text=''+outToday; if(adminPage.cardRevenueToday) adminPage.cardRevenueToday.text=revenueToday+' VNĐ'; if(adminPage.cardExpiredSubs) adminPage.cardExpiredSubs.text=''+expiredSubs }
     }
 
+    function daysAgoIso(days) {
+        const d = new Date();
+        d.setDate(d.getDate() - days);
+        function p(n){return n<10?'0'+n:n}
+        return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate());
+    }
+
+    function updateDailyChartRange(rangeIndex) {
+        let fromDate;
+        switch (rangeIndex) {
+            case 0: // 7 days
+                fromDate = daysAgoIso(7);
+                break;
+            case 1: // 30 days
+                fromDate = daysAgoIso(30);
+                break;
+            case 2: // 90 days
+                fromDate = daysAgoIso(90);
+                break;
+            default: // Fallback
+                fromDate = daysAgoIso(30);
+                break;
+        }
+
+        // Check if the chart objects are available and call the existing refresh function
+        if (_dailySeries && _dailyAxisX && _dailyAxisY) {
+            refreshDailyChart(_dailySeries, _dailyAxisX, _dailyAxisY, fromDate, todayIso());
+        }
+    }
+
     // Charts helpers
     property string _dailyReqKey: ""
     property var _dailySeries
@@ -59,8 +89,8 @@ Item {
         if (rows.length>0){
             const d0 = new Date(rows[rows.length-1].d+"T00:00:00");
             const d1 = new Date(rows[0].d+"T00:00:00");
-            axisX.min = d0;
-            axisX.max = d1;
+            axisX.min = new Date(f + "T00:00:00");
+            axisX.max = new Date(f + "T00:00:00");
         }
     }
     property string _pieReqKey: ""
@@ -124,7 +154,7 @@ Item {
         function onDashboardStatsReady(day, stats){
             if (day !== _statsReqKey) return;
             const s=stats||{}; inToday=parseInt(s.in_today||0); outToday=parseInt(s.out_today||0); revenueToday=parseInt(s.revenue_today||0); expiredSubs=parseInt(s.expired_subscriptions||0);
-            if(adminPage){ if(adminPage.cardInToday) adminPage.cardInToday.text=''+inToday; if(adminPage.cardOutToday) adminPage.cardOutToday.text=''+outToday; if(adminPage.cardRevenueToday) adminPage.cardRevenueToday.text=revenueToday+' VNĐ'; if(adminPage.cardExpiredSubs) adminPage.cardExpiredSubs.text=''+expiredSubs }
+            if(adminPage){ if(adminPage.cardInToday) adminPage.cardInToday.text=''+inToday; if(adminPage.cardOutToday) adminPage.cardOutToday.text=''+outToday; if(adminPage.cardRevenueToday) adminPage.cardRevenueToday.text=revenueToday+' VNĐ'; if(adminPage.cardExpiredSubs) adminPage.cardExpiredSubs.text=''+expiredSubs }            
         }
         function onRevenueSummaryReady(fromIso, toIso, typeFilter, rows){
             const key = fromIso+"|"+toIso+"|"+typeFilter;
@@ -139,7 +169,7 @@ Item {
                         series.append(d.getTime(), vk); if (vk>maxY) maxY=vk;
                     }
                     axisY.min=0; axisY.max = maxY>0 ? Math.round(maxY*1.2) : 1;
-                    if (rows.length>0){ const d0=new Date(rows[rows.length-1].d+"T00:00:00"); const d1=new Date(rows[0].d+"T00:00:00"); axisX.min=d0; axisX.max=d1 }
+                    if (rows.length>0){ const d0=new Date(rows[rows.length-1].d+"T00:00:00"); const d1=new Date(rows[0].d+"T00:00:00"); axisX.min= new Date(fromIso + "T00:00:00"); axisX.max= new Date(toIso + "T00:00:00"); }
                 }
             }
             // pie

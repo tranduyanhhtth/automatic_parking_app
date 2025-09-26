@@ -84,10 +84,13 @@ int main(int argc, char *argv[])
             settings->setExitReaderPath(cardReaderExit->devicePath());
         } });
 
-    // Tuỳ chọn: siết thời gian quét để giảm lỗi đọc nhầm
-    // Slightly relaxed threshold; HID scanners can have ~5-20ms between keys, sometimes brief 40-60ms gaps
-    cardReaderEntrance->setInterKeyMsMax(80);
-    cardReaderExit->setInterKeyMsMax(80);
+    // Timing for key aggregation from HID keyboard readers
+    // Typical readers send keys 5–20ms apart; occasionally brief 50–70ms. Allow up to ~120ms.
+    cardReaderEntrance->setInterKeyMsMax(120);
+    cardReaderExit->setInterKeyMsMax(120);
+    // Enforce a reasonable minimum length to avoid truncated IDs
+    cardReaderEntrance->setMinLength(6);
+    cardReaderExit->setMinLength(6);
 
     // Ghi log khi camera bị đứng (stalled) lên HID
     QObject::connect(cameraLane1, &CameraManager::inputStreamStalled, cardReaderEntrance, [cardReaderEntrance]()
@@ -170,6 +173,11 @@ int main(int argc, char *argv[])
                                .arg(!xBound ? QStringLiteral(" — listening to ANY keyboard-like HID (setup mode)") : QString());
         QMetaObject::invokeMethod(cardReaderEntrance, "debugLog", Qt::QueuedConnection, Q_ARG(QString, me));
         QMetaObject::invokeMethod(cardReaderExit, "debugLog", Qt::QueuedConnection, Q_ARG(QString, mx));
+        // If a configured device isn't present, clear binding to allow auto-bind on next scan
+        if (eBound && !ePresent)
+            QMetaObject::invokeMethod(cardReaderEntrance, "attemptAutoRebind", Qt::QueuedConnection);
+        if (xBound && !xPresent)
+            QMetaObject::invokeMethod(cardReaderExit, "attemptAutoRebind", Qt::QueuedConnection);
     }
 
     ParkingController controller(cameraLane1, cameraLane2, db, barrier1, barrier2, ocr, cardReaderEntrance, cardReaderExit);

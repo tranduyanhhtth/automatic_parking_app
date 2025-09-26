@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import QtCharts
+import QtQuick.Dialogs
 import "../logic"
 import "../components"
 
@@ -60,6 +61,7 @@ Item {
 	property alias revType: revType
 	// Expose minimal aliases for logic wiring later
 	property var rfidLogic: null
+	property var subsLogic: null
 	property alias tabBar: tabbar
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
@@ -74,6 +76,7 @@ Item {
 	property bool triggerExportExpired: false
 	property bool triggerSubUserTextChanged: false
 	property bool triggerSubCancelExtend: false
+	property bool triggerSubsChanged: false
 	// buffer for generated expired CSV
 	property string expiredCsvBuffer: ""
 	property bool triggerUsersChanged: false
@@ -88,6 +91,9 @@ Item {
 	property bool triggerRevFromSelect: false
 	property bool triggerRevToSelect: false
 	property bool triggerRevenueFilter: false
+	// Triggers for exporting files 
+	property bool triggerExportCsv: false
+	property bool triggerExportPdf: false
 	// Expose inner ComboBoxes to logic via aliases
 	property alias revFromYear: revFromDatePopup.fromYear
 	property alias revFromMonth: revFromDatePopup.fromMonth
@@ -95,6 +101,9 @@ Item {
 	property alias revToYear: revToDatePopup.toYear
 	property alias revToMonth: revToDatePopup.toMonth
 	property alias revToDay: revToDatePopup.toDay
+	// Expose save dialogs for logic modules
+	property alias fileSaveDialog: revenueSaveDialog
+	property alias subsFileSaveDialog: subsSaveDialog
 
 	// Logic instances
 	ToastComponent {
@@ -109,11 +118,11 @@ Item {
 		adminPage: adminPage
 		notify: notifyLogic.push
 	}
-	SubscriptionsLogic {
-		id: subsLogic
-		adminPage: adminPage
-		notify: notifyLogic.push
-	}
+	// SubscriptionsLogic {
+	//	 id: subsLogic
+	//	 adminPage: adminPage
+	//	 notify: notifyLogic.push
+	// }
 	DashboardLogic {
 		id: dashboardLogic
 		adminPage: adminPage
@@ -123,6 +132,31 @@ Item {
 		id: revenueLogic
 		adminPage: adminPage
 		notify: notifyLogic.push
+	}
+	// File save dialogs for exports
+	FileDialog {
+		id: revenueSaveDialog
+		title: "Chọn nơi lưu CSV Doanh thu"
+		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
+		selectedFile: "bao_cao_doanh_thu.csv"
+	}
+	FileDialog {
+		id: subsSaveDialog
+		title: "Chọn nơi lưu CSV Đăng ký"
+		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
+		selectedFile: "dang_ky_het_han.csv"
+		// When accepted, write the buffer via repo
+		onAccepted: {
+			try {
+				if (typeof repo !== 'undefined' && repo.saveTextToFile) {
+					const path = subsSaveDialog.selectedFile || (subsSaveDialog.selectedFiles && subsSaveDialog.selectedFiles.length>0 ? subsSaveDialog.selectedFiles[0] : "");
+					const ok = repo.saveTextToFile(path, adminPage.expiredCsvBuffer || "");
+					notifyLogic.push(ok?"Đã lưu file CSV đăng ký":"Lỗi khi lưu file");
+				} else {
+					notifyLogic.push("Thiếu API lưu file");
+				}
+			} catch(e) { console.log(e) }
+		}
 	}
 	// Content root to be blurred when login overlay is visible
 	Item {
@@ -199,6 +233,15 @@ Item {
 								adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
 						}
 					}
+					Connections {
+						target: dailyRevenueRangePicker // The ID of your new ComboBox
+						function onCurrentIndexChanged() {
+							if (dashboardLogic && dashboardLogic.updateDailyChartRange) {
+								// Call the logic function when the index changes
+								dashboardLogic.updateDailyChartRange(dailyRevenueRangePicker.currentIndex)
+							}
+						}
+					}
 					StackLayout {
 						Layout.fillWidth: true
 						Layout.fillHeight: true
@@ -220,6 +263,7 @@ Item {
 									if (dashboardLogic && dashboardLogic.refreshByTicketBar)
 										dashboardLogic.refreshByTicketBar(ticketBar, ticketAxisX, ticketAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
 								}
+                        
 								function onRefreshCharts() {
 									if (dashboardLogic && dashboardLogic.refreshDailyChart)
 										dashboardLogic.refreshDailyChart(dSeries, dAxisX, dAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
@@ -252,7 +296,7 @@ Item {
 											}
 											Text {
 												id: cardInToday
-												text: "0"
+												text: dashboardLogic.inToday
 												color: "white"
 												font.pixelSize: 22
 												font.bold: true
@@ -274,7 +318,7 @@ Item {
 											}
 											Text {
 												id: cardOutToday
-												text: "0"
+												text: dashboardLogic.outToday
 												color: "white"
 												font.pixelSize: 22
 												font.bold: true
@@ -296,7 +340,7 @@ Item {
 											}
 											Text {
 												id: cardRevenueToday
-												text: "0 VNĐ"
+												text: dashboardLogic.revenueToday + " VNĐ"
 												color: "#4ec9b0"
 												font.pixelSize: 22
 												font.bold: true
@@ -318,7 +362,7 @@ Item {
 											}
 											Text {
 												id: cardExpiredSubs
-												text: "0"
+												text: dashboardLogic.expiredSubs
 												color: "#e53935"
 												font.pixelSize: 22
 												font.bold: true
@@ -338,7 +382,23 @@ Item {
 										color: "#222"
 										border.color: "#333"
 										ColumnLayout { anchors.fill: parent; anchors.margins: 8; spacing: 6
-											Text { text: "Doanh thu theo ngày (nghìn VNĐ)"; color: "white"; font.bold: true }
+											RowLayout {
+												Layout.fillWidth: true
+
+												Text {
+													text: "Doanh thu theo ngày (nghìn VNĐ)"
+													color: "white"
+													font.bold: true
+													Layout.fillWidth: true
+												}
+
+												ComboBox {
+													id: dailyRevenueRangePicker
+													Layout.preferredWidth: 120
+													model: ["7 ngày", "30 ngày", "90 ngày"]
+													currentIndex: 1 
+												}
+											}
 											ChartView {
 												id: chartRevenueDaily
 												Layout.fillWidth: true
@@ -635,7 +695,7 @@ Item {
 										id: cbStatus
 										Layout.preferredWidth: 180
 										Layout.preferredHeight: 24
-										model: ["available", "assigned", "lost", "damaged"]
+										model: ["available", "assigned"]
 										background: Rectangle {
 											radius: 8
 										}
@@ -1174,6 +1234,25 @@ Item {
 										}
 										onCurrentIndexChanged: adminPage.triggerSubUserTextChanged = !adminPage.triggerSubUserTextChanged
 									}
+									Connections {
+										target: subPlatePick
+										function onVisibleChanged(){
+											if (subPlatePick.visible && (subPlatePick.currentIndex === -1 || subPlatePick.currentIndex === undefined)) {
+												try {
+													if (subPlatePick.popup && !subPlatePick.popup.visible) subPlatePick.popup.open()
+													else if (subPlatePick.showPopup) subPlatePick.showPopup()
+													subPlatePick.forceActiveFocus()
+												} catch(e) {}
+											}
+										}
+									}
+									Text {
+										visible: subPlatePick.visible && subPlatePick.currentIndex < 0
+										text: "← Chọn biển số"
+										color: "#ffeb3b"
+										font.pixelSize: 12
+										verticalAlignment: Text.AlignVCenter
+									}
 									TextField {
 										id: subPlan
 										placeholderText: "Loại thẻ"
@@ -1638,6 +1717,10 @@ Item {
 											text: "Xuất CSV"
 											color: "white"
 										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerExportCsv = !adminPage.triggerExportCsv
+										}
 									}
 									Rectangle {
 										width: 110
@@ -1648,6 +1731,10 @@ Item {
 											anchors.centerIn: parent
 											text: "Xuất PDF"
 											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerExportPdf = !adminPage.triggerExportPdf
 										}
 									}
 								}
@@ -1713,6 +1800,7 @@ Item {
 		modal: true
 		focus: true
 		visible: adminPage.revFromPickerVisible
+		onClosed: adminPage.revFromPickerVisible = false
 		x: (parent ? parent.width : 800) / 2 - width / 2
 		y: (parent ? parent.height : 600) / 2 - height / 2
 
@@ -1739,6 +1827,7 @@ Item {
 					model: 12
 					popup.height: 240
 					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
 					Layout.preferredWidth: 90
 					currentIndex: 1
 				}
@@ -1748,6 +1837,7 @@ Item {
 					model: 31
 					popup.height: 240
 					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
 					Layout.preferredWidth: 90
 					currentIndex: 1
 				}
@@ -1781,6 +1871,7 @@ Item {
 		modal: true
 		focus: true
 		visible: adminPage.revToPickerVisible
+		onClosed: adminPage.revToPickerVisible = false
 		x: (parent ? parent.width : 800) / 2 - width / 2
 		y: (parent ? parent.height : 600) / 2 - height / 2
 
@@ -1807,6 +1898,7 @@ Item {
 					model: 12
 					popup.height: 240
 					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
 					Layout.preferredWidth: 90
 					currentIndex: 1
 				}
@@ -1816,6 +1908,7 @@ Item {
 					model: 31
 					popup.height: 240
 					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
+					displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
 					Layout.preferredWidth: 90
 					currentIndex: 1
 				}

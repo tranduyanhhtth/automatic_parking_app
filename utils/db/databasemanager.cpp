@@ -14,6 +14,17 @@
 #include <algorithm>
 #include <QDir>
 #include <QFileInfo>
+#include <QStandardPaths>
+#include <QTextStream>
+#include <QPainter>
+#include <QPageSize>
+#include <QFont>
+#include <QFontMetrics>
+#include <QUrl>
+#include <QStringConverter>
+#if QT_CONFIG(pdf)
+#include <QPdfWriter>
+#endif
 
 DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
 {
@@ -716,6 +727,28 @@ bool DatabaseManager::deleteRfidCard(const QString &rfid)
 {
     if (rfid.trimmed().isEmpty())
         return false;
+    {
+        QSqlQuery qc(DB_Connection);
+        qc.prepare("SELECT user_phone, status FROM rfid_cards WHERE rfid=:rfid LIMIT 1");
+        qc.bindValue(":rfid", rfid);
+        if (!qc.exec())
+        {
+            qWarning() << "deleteRfidCard/check:" << qc.lastError().text();
+            return false;
+        }
+        if (!qc.next())
+        {
+            return false;
+        }
+        const QString userPhone = qc.value(0).toString();
+        const QString status = qc.value(1).toString();
+        if (!userPhone.trimmed().isEmpty() || status == QStringLiteral("assigned"))
+        {
+            qWarning() << "deleteRfidCard: blocked, card is assigned to user" << userPhone << "status" << status;
+            return false;
+        }
+    }
+
     QSqlQuery q(DB_Connection);
     q.prepare("DELETE FROM rfid_cards WHERE rfid=:rfid");
     q.bindValue(":rfid", rfid);
@@ -1019,6 +1052,141 @@ QString DatabaseManager::sanitizeForFile(const QString &s) const
     QString r = s;
     r.replace(QRegularExpression("[^A-Za-z0-9_-]"), "_");
     return r;
+}
+
+bool DatabaseManager::saveTextToFile(const QString &filePath, const QString &text)
+{
+    QString outPath = filePath;
+    // Convert possible file URL from QML to local file path
+    if (outPath.startsWith("file:"))
+    {
+        QUrl u(outPath);
+        if (u.isLocalFile())
+            outPath = u.toLocalFile();
+    }
+    if (outPath.trimmed().isEmpty())
+    {
+        // Fallback: write to Desktop with timestamp
+        const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        const QString ts = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+        outPath = desktop + "/export_" + ts + ".txt";
+    }
+    QFileInfo fi(outPath);
+    QDir dir(fi.path());
+    if (!dir.exists())
+    {
+        if (!dir.mkpath("."))
+            return false;
+    }
+    QFile f(outPath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text))
+        return false;
+    QTextStream os(&f);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    os.setEncoding(QStringConverter::Utf8);
+#else
+    os.setCodec("UTF-8");
+#endif
+    os << text;
+    f.close();
+    return true;
+}
+
+bool DatabaseManager::exportRevenueToPdf(const QVariantList &rows,
+                                         const QString &fromDate,
+                                         const QString &toDate,
+                                         int totalRevenue,
+                                         int totalSession,
+                                         int totalSubscription,
+                                         const QString &filePath)
+{
+    QString outPath = filePath;
+    if (outPath.startsWith("file:"))
+    {
+        QUrl u(outPath);
+        if (u.isLocalFile())
+            outPath = u.toLocalFile();
+    }
+    if (outPath.trimmed().isEmpty())
+    {
+        const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        const QString ts = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+        outPath = desktop + "/bao_cao_doanh_thu_" + sanitizeForFile(fromDate) + "_" + sanitizeForFile(toDate) + "_" + ts + ".pdf";
+    }
+
+#if QT_CONFIG(pdf)
+    QPdfWriter writer(outPath);
+    writer.setPageSize(QPageSize(QPageSize::A4));
+    writer.setResolution(96);
+    QPainter painter(&writer);
+    if (!painter.isActive())
+    {
+        emit pdfExported(outPath, false);
+        return false;
+    }
+    const QMarginsF margin(36, 36, 36, 36); // 0.5 inch
+    QRectF pageRect = QRectF(QPointF(0, 0), QSizeF(writer.width(), writer.height()));
+    QRectF content = pageRect.marginsRemoved(margin);
+    QFont titleFont("Helvetica", 14, QFont::Bold);
+    QFont textFont("Helvetica", 9);
+    painter.setFont(titleFont);
+    painter.drawText(content.topLeft() + QPointF(0, 10), QStringLiteral("Báo cáo doanh thu"));
+    painter.setFont(textFont);
+    qreal y = content.top() + 30;
+    const QString sub = QStringLiteral("Khoảng thời gian: %1 đến %2").arg(fromDate, toDate);
+    painter.drawText(QPointF(content.left(), y), sub);
+    y += 18;
+    painter.drawText(QPointF(content.left(), y), QStringLiteral("Tổng lượt vé lượt: %1").arg(totalSession));
+    y += 14;
+    painter.drawText(QPointF(content.left(), y), QStringLiteral("Tổng vé tháng: %1").arg(totalSubscription));
+    y += 14;
+    painter.drawText(QPointF(content.left(), y), QStringLiteral("Tổng doanh thu: %1 VNĐ").arg(totalRevenue));
+    y += 24;
+    // Table header
+    QFont headerFont("Helvetica", 9, QFont::Bold);
+    painter.setFont(headerFont);
+    const qreal col1 = content.left();
+    const qreal col2 = col1 + 140;
+    const qreal col3 = col2 + 140;
+    const qreal col4 = col3 + 140;
+    painter.drawText(QPointF(col1, y), QStringLiteral("Ngày"));
+    painter.drawText(QPointF(col2, y), QStringLiteral("Lượt vé lượt"));
+    painter.drawText(QPointF(col3, y), QStringLiteral("Vé tháng"));
+    painter.drawText(QPointF(col4, y), QStringLiteral("Doanh thu"));
+    y += 14;
+    painter.setFont(textFont);
+    for (const QVariant &vr : rows)
+    {
+        const QVariantMap m = vr.toMap();
+        const QString d = m.value("d").toString();
+        const int sess = m.value("session_count").toInt();
+        const int subs = m.value("subscription_count").toInt();
+        const int amount = m.value("total_amount").toInt();
+        painter.drawText(QPointF(col1, y), d);
+        painter.drawText(QPointF(col2, y), QString::number(sess));
+        painter.drawText(QPointF(col3, y), QString::number(subs));
+        painter.drawText(QPointF(col4, y), QString::number(amount));
+        y += 14;
+        if (y > content.bottom() - 40)
+        {
+            writer.newPage();
+            y = content.top();
+        }
+    }
+    painter.end();
+    emit pdfExported(outPath, true);
+    return true;
+#else
+    Q_UNUSED(rows)
+    Q_UNUSED(fromDate)
+    Q_UNUSED(toDate)
+    Q_UNUSED(totalRevenue)
+    Q_UNUSED(totalSession)
+    Q_UNUSED(totalSubscription)
+    // Fallback: cannot write PDF without Qt PDF support
+    emit pdfExported(outPath, false);
+    return false;
+#endif
 }
 
 QList<QVariantMap> DatabaseManager::listUsers(int limit, int offset)

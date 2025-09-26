@@ -94,6 +94,14 @@ Item {
         toast: toast
     }
 
+    Connections {
+        target: app
+        function onShowToast(message) {
+            if (notifyLogic && notifyLogic.push)
+                notifyLogic.push(message)
+        }
+    }
+
     // HID Log panel
     HidLogPanel {
         id: hidLogPanel
@@ -161,7 +169,7 @@ Item {
                 item.notify = (msg) => root.showToast(msg)
                 item.allowedAccounts = root.allowedAccounts
                 adminPage.rfidLogic = item.rfidLogic
-
+                if(item.subsLogic) adminPage.subsLogic = item.subsLogic
             }
         }
     }

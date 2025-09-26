@@ -43,6 +43,9 @@ public:
 
     Q_INVOKABLE void resetBuffer();
     Q_INVOKABLE void resetDebounce() { resetBuffer(); }
+    // If the configured devicePath is not currently present and autoBindWhenEmpty is true,
+    // clear the binding so the next key press from any HID keyboard device will auto-bind.
+    Q_INVOKABLE void attemptAutoRebind();
 
 signals:
     void devicePathChanged();
@@ -66,6 +69,10 @@ private:
     QString m_allowedPrefix; // optional required prefix (e.g., ";" or start digits)
     qint64 m_lastTs{0};
     bool m_autoBindWhenEmpty{true};
+    // Idle finalize to handle readers that don't send Enter
+    class QTimer *m_idleTimer{nullptr};
+    int m_idleExtraMs{60}; // finalize after interKeyMsMax + extra
+    bool m_finalizeOnIdle{true};
 
     static QSet<QString> &claimedPaths()
     {

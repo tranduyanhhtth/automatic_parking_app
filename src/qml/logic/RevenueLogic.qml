@@ -14,32 +14,28 @@ Item {
     property bool triggerPreset30: false
     property bool triggerPreset90: false
     property bool triggerSeedDemo: false
+
+    property string generatedCsvData: ""
+
     function todayIso(){ const d=new Date(); function p(n){return n<10?'0'+n:n} return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()) }
     function defaultFrom(){ const d=new Date(); d.setDate(d.getDate()-30); function p(n){return n<10?'0'+n:n} return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()) }
     property string _revReqKey: ""
     function refresh(){
         if(!adminPage) return; if(!adminPage.revFrom || !adminPage.revTo) return; if(typeof repo==='undefined') return;
         const f=adminPage.revFrom.text||defaultFrom(); const t=adminPage.revTo.text||todayIso(); const tp = (!adminPage.revType)?'all': (adminPage.revType.currentIndex===1?'parking_session': (adminPage.revType.currentIndex===2?'subscription':'all'));
-        _revReqKey = f+"|"+t+"|"+tp;
-        if (repo.listRevenueSummaryAsync) { repo.listRevenueSummaryAsync(f,t,tp); return; }
+        _revReqKey = f+"|"+t+"|"+tp; if (repo.listRevenueSummaryAsync) { repo.listRevenueSummaryAsync(f,t,tp); return; }
         if (!repo.listRevenueSummary) return;
-        const rows = repo.listRevenueSummary(f,t,tp)||[];
-        revenueModel.clear(); totalRevenue=0; totalSession=0; totalSubscription=0;
+        const rows = repo.listRevenueSummary(f,t,tp)||[]; revenueModel.clear(); totalRevenue=0; totalSession=0; totalSubscription=0;
         for(let i=0;i<rows.length;i++){ const r=rows[i]; totalRevenue += parseInt(r.total_amount||0); totalSession += parseInt(r.session_count||0); totalSubscription += parseInt(r.subscription_count||0); revenueModel.append(r) }
         if(adminPage){ if(adminPage.revSummaryTotal) adminPage.revSummaryTotal.text='Tổng doanh thu: '+totalRevenue; if(adminPage.revSummaryBreakdown) adminPage.revSummaryBreakdown.text='Trong đó: vé lượt '+totalSession+', vé tháng '+totalSubscription }
     }
-    // Debounce filter to avoid spamming DB when user clicks fast
     property bool _debouncing: false
     function _debouncedRefresh(){
-        if(_debouncing) return;
-        _debouncing = true;
+        if(_debouncing) return; _debouncing = true;
         Qt.createQmlObject('import QtQuick 2.15; Timer { interval: 200; running: true; repeat: false; onTriggered: { revenueLogic._debouncing=false; revenueLogic.refresh() } }', revenueLogic)
     }
     function buildDate(yIndex, mIndex, dIndex) {
-        var y = 2000 + (yIndex|0);
-        var m = (mIndex|0) + 1; if (m < 10) m = "0"+m; else m = ""+m;
-        var d = (dIndex|0) + 1; if (d < 10) d = "0"+d; else d = ""+d;
-        return y + "-" + m + "-" + d;
+        var y = 2000 + (yIndex|0); var m = (mIndex|0) + 1; if (m < 10) m = "0"+m; else m = ""+m; var d = (dIndex|0) + 1; if (d < 10) d = "0"+d; else d = ""+d; return y + "-" + m + "-" + d;
     }
     Connections {
         target: adminPage
@@ -74,7 +70,98 @@ Item {
         function onTriggerRevenueFilterChanged() {
             _debouncedRefresh();
         }
+
+        function onTriggerExportCsvChanged() {
+            if (!adminPage || !adminPage.triggerExportCsv) return;
+            generateCsvData(); 
+            if (generatedCsvData === "") {
+                adminPage.triggerExportCsv = false; // Reset the trigger
+                return;
+            }
+            if (notify) notify("Đã tạo dữ liệu, vui lòng chọn nơi lưu file.");
+
+            if (adminPage.fileSaveDialog) {
+                try { adminPage.fileSaveDialog.selectedFile = "bao_cao_doanh_thu.csv"; } catch(e) {}
+                adminPage.fileSaveDialog.open(); 
+            }
+
+            adminPage.triggerExportCsv = false; 
+        }
+
+        function onTriggerExportPdfChanged() {
+            if (!adminPage || !adminPage.triggerExportPdf) return;
+            exportDataForPdf(); 
+
+            adminPage.triggerExportPdf = false;
+        }
     }
+
+    Connections {
+        target: (adminPage && adminPage.fileSaveDialog) ? adminPage.fileSaveDialog : null
+        function onAccepted() {
+            try {
+                var dlg = adminPage.fileSaveDialog;
+                var p = (dlg && dlg.selectedFile) ? dlg.selectedFile : ((dlg && dlg.selectedFiles && dlg.selectedFiles.length>0) ? dlg.selectedFiles[0] : (dlg ? dlg.file : ""));
+                revenueLogic.saveCsvToFile(p)
+            } catch(e) { revenueLogic.saveCsvToFile("") }
+        }
+    }
+
+    function generateCsvData() {
+        if (revenueModel.count === 0) {
+            if (notify) notify("Không có dữ liệu để xuất.");
+            generatedCsvData = "";
+            return;
+        }
+
+        let csv = "Ngày,Tổng lượt xe,Tổng vé tháng,Doanh thu (VNĐ)\n"; 
+
+        for (let i = 0; i < revenueModel.count; i++) {
+            const item = revenueModel.get(i);
+            csv += item.d + ",";
+            csv += item.session_count + ",";
+            csv += item.subscription_count + ",";
+            csv += item.total_amount + "\n";
+        }
+
+        csv += "\n";
+        csv += "Tổng cộng," + totalSession + "," + totalSubscription + "," + totalRevenue + "\n";
+
+        generatedCsvData = csv; 
+    }
+
+    function saveCsvToFile(filePath) {
+        if (!filePath) return;
+        if (typeof repo !== 'undefined' && repo.saveTextToFile) {
+            const ok = repo.saveTextToFile(filePath, generatedCsvData);
+            if (notify) notify(ok ? "Đã lưu file CSV thành công." : "Lỗi khi lưu file.");
+        } else {
+            if (notify) notify("Lỗi: Chức năng lưu file không tồn tại.");
+        }
+    }
+
+    function exportDataForPdf() {
+        if (revenueModel.count === 0) {
+            if (notify) notify("Không có dữ liệu để xuất.");
+            return;
+        }
+
+        let dataForPdf = [];
+        for (let i = 0; i < revenueModel.count; i++) {
+            dataForPdf.push(revenueModel.get(i));
+        }
+
+        if (typeof repo !== 'undefined' && repo.exportRevenueToPdf) {
+            const fromDate = adminPage.revFrom.text || defaultFrom();
+            const toDate = adminPage.revTo.text || todayIso();
+            repo.exportRevenueToPdf(dataForPdf, fromDate, toDate, totalRevenue, totalSession, totalSubscription);
+            if (notify) notify("Đang xử lý file PDF...");
+        } else {
+            if (notify) notify("Lỗi: Chức năng xuất PDF không tồn tại.");
+            console.log("repo.exportRevenueToPdf is not defined. You need to implement this in C++.");
+        }
+    }
+
     // Handle async result
     Connections {
         target: repo
@@ -82,10 +169,12 @@ Item {
             const key = (fromIso||'')+"|"+(toIso||'')+"|"+(typeFilter||'');
             if (key !== _revReqKey) return;
             if (!rows) rows = []
-            revenueModel.clear(); totalRevenue=0; totalSession=0; totalSubscription=0;
+            revenueModel.clear();
+            totalRevenue=0; totalSession=0; totalSubscription=0;
             for(let i=0;i<rows.length;i++){ const r=rows[i]; totalRevenue += parseInt(r.total_amount||0); totalSession += parseInt(r.session_count||0); totalSubscription += parseInt(r.subscription_count||0); revenueModel.append(r) }
             if(adminPage){ if(adminPage.revSummaryTotal) adminPage.revSummaryTotal.text='Tổng doanh thu: '+totalRevenue; if(adminPage.revSummaryBreakdown) adminPage.revSummaryBreakdown.text='Trong đó: vé lượt '+totalSession+', vé tháng '+totalSubscription }
         }
+        function onPdfExported(path, ok){ if (notify) notify(ok? ("Đã xuất PDF: "+path) : "Xuất PDF thất bại (thiếu Qt PDF?)"); }
     }
     Connections {
         target: revenueLogic
@@ -141,14 +230,15 @@ Item {
             if (adminPage.revFrom && !adminPage.revFrom.text) adminPage.revFrom.text = defaultFrom();
             if (adminPage.revTo && !adminPage.revTo.text) adminPage.revTo.text = todayIso();
         }
-        // Defer empty-db seeding slightly to avoid blocking UI thread at startup
         Qt.callLater(function(){
             try {
                 if (typeof repo!== 'undefined' && repo.listRevenueSummary) {
                     var rows = repo.listRevenueSummary(defaultFrom(), todayIso(), 'all') || [];
+
                     if ((rows.length|0) === 0) {
                         if (typeof repo.seedDemoDataAsync === 'function') repo.seedDemoDataAsync(30, 40, 6);
                         else if (typeof repo.seedDemoData === 'function') repo.seedDemoData(30, 40, 6);
+
                     }
                 }
             } catch(e) {}
@@ -159,6 +249,7 @@ Item {
     // Refresh upon async seeding done
     Connections {
         target: repo
-        function onSeedDemoDone(ok){ if (notify) notify(ok?"Đã tạo dữ liệu demo":"Tạo dữ liệu demo lỗi"); revenueLogic.refresh(); }
+        function onSeedDemoDone(ok){ if (notify) notify(ok?"Đã tạo dữ liệu demo":"Tạo dữ liệu demo lỗi");
+            revenueLogic.refresh(); }
     }
 }
