@@ -181,6 +181,24 @@ Item {
     }
     Connections {
         target: adminPage
+
+        function onTriggerLogoutAndCloseChanged() {
+            if (adminPage.triggerLogoutAndClose) {
+                // 1. Reset the authentication state
+                root.isAuthenticated = false;
+
+                // 2. Clear the input fields on the login form
+                if (adminPage.loginUserField) adminPage.loginUserField.text = ""
+                if (adminPage.loginPassField) adminPage.loginPassField.text = ""
+                if (adminPage.loginErrorLabel) adminPage.loginErrorLabel.text = ""
+
+                // 3. Switch back to the main page
+                contentStack.currentIndex = 0;
+
+                // 4. IMPORTANT: Reset the trigger for the next use
+                adminPage.triggerLogoutAndClose = false;
+            }
+        }
         function onTriggerCloseChanged() {
             if (adminPage.triggerClose) contentStack.currentIndex = 0
         }
