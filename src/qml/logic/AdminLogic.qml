@@ -9,6 +9,7 @@ Item {
     property var allowedAccounts      // optional array of {username,password}
     property alias rfidLogic: rfidLogic
     property alias subsLogic: subsLogic
+    property alias usersLogic: usersLogic
 
     // Sub-logic modules
     LoginLogic {

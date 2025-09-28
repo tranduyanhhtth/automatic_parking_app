@@ -63,22 +63,32 @@ Item {
 
         var vt = normalizeVehicleLabel(fVt.currentText)
         const r = rRepo()
+        // --- STRICT VALIDATION: Check the RFID card BEFORE creating the user ---
+            var card = r.getRfidCard(rfid)
+            if (!card || !card.rfid) {
+                if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' không tồn tại. Vui lòng tạo thẻ trước khi gán.")
+                return; // Stop the entire process
+            }
+            if (card.status !== 'available') {
+                if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' đã được gán hoặc không khả dụng.")
+                return; // Stop the entire process
+            }
+            // --- End of strict validation ---
         if (!r || !r.upsertUser) { if (notify) notify('Thiếu repo.upsertUser'); return }
         console.log('[UsersLogic] upsertUser request', {name:name, phone:phone, rfid:rfid, plate:plate, vt:vt})
         var uid = r.upsertUser(name, phone, rfid, plate, vt)
         console.log('[UsersLogic] upsertUser result id=', uid)
         if (uid > 0) {
             // Gán/Chuyển RFID card cho user hiện tại (xóa ràng buộc cũ nếu có)
-            if(rfid && r.getRfidCard && r.assignRfidCard){
-                var card = r.getRfidCard(rfid)
-                if(card && card.rfid){ r.assignRfidCard(rfid, uid) }
-            }
-            if (notify) notify(isUpdate ? 'Đã lưu user' : 'Đã thêm user')
-            refresh()
-            if(adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
-            // Dọn form sau khi thêm mới
-            if(!isUpdate){ fName.text=''; fPhone.text=''; fRfid.text=''; fPlate.text=''; fVt.currentIndex=0 }
-        } else {
+            r.assignRfidCard(rfid, uid)
+                   if (r.upsertRfidCard) {
+                       r.upsertRfidCard(card.rfid, card.vehicle_type, card.ticket_type, "assigned", card.description || '')
+                       console.log("[UsersLogic] RFID card " + card.rfid + " was assigned and its status updated to 'assigned'.")
+                   }
+                   if (notify) notify(isUpdate ? 'Đã cập nhật user và gán lại thẻ' : 'Đã thêm user và gán thẻ')
+                   refresh(); // Refresh the user list to show changes
+               }
+        else {
             if (notify) notify('Lỗi lưu user')
         }
     }

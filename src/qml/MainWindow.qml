@@ -169,6 +169,7 @@ Item {
                 item.notify = (msg) => root.showToast(msg)
                 item.allowedAccounts = root.allowedAccounts
                 adminPage.rfidLogic = item.rfidLogic
+                adminPage.usersLogic = item.usersLogic
                 if(item.subsLogic) adminPage.subsLogic = item.subsLogic
             }
         }

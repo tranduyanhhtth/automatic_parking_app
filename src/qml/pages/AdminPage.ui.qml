@@ -62,6 +62,7 @@ Item {
 	// Expose minimal aliases for logic wiring later
 	property var rfidLogic: null
 	property var subsLogic: null
+	property var usersLogic: null
 	property alias tabBar: tabbar
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
@@ -113,11 +114,11 @@ Item {
 		id: notifyLogic
 		toast: toastOverlay
 	}
-	UsersLogic {
-		id: usersLogic
-		adminPage: adminPage
-		notify: notifyLogic.push
-	}
+	// UsersLogic {
+	// 	id: usersLogic
+	// 	adminPage: adminPage
+	// 	notify: notifyLogic.push
+	// }
 	// SubscriptionsLogic {
 	//	 id: subsLogic
 	//	 adminPage: adminPage
@@ -693,9 +694,12 @@ Item {
 									}
 									ComboBox {
 										id: cbStatus
-										Layout.preferredWidth: 180
+										Layout.preferredWidth: 0
 										Layout.preferredHeight: 24
+										visible: false           // Hide from user
+										enabled: false           // Not interactive
 										model: ["available", "assigned"]
+										currentIndex: 0
 										background: Rectangle {
 											radius: 8
 										}
