@@ -12,6 +12,7 @@ Item {
     ListModel { id: usersModel }
     property alias listModel: usersModel
     property int selectedUserId: -1
+    property string selectedUserOriginalRfid: ""
 
     function normalizeVehicleLabel(txt) {
         var t = (''+txt).toLowerCase()
@@ -30,6 +31,7 @@ Item {
 
     function selectUser(id, full_name, phone, rfid, plate, vehicle_type) {
         selectedUserId = id
+        selectedUserOriginalRfid = rfid
         if (!adminPage) return
         if (adminPage.userName) adminPage.userName.text = full_name
         if (adminPage.userPhone) adminPage.userPhone.text = phone
@@ -64,30 +66,39 @@ Item {
         var vt = normalizeVehicleLabel(fVt.currentText)
         const r = rRepo()
         // --- STRICT VALIDATION: Check the RFID card BEFORE creating the user ---
+        if (!isUpdate || (isUpdate && rfid !== selectedUserOriginalRfid)) {
             var card = r.getRfidCard(rfid)
             if (!card || !card.rfid) {
                 if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' không tồn tại. Vui lòng tạo thẻ trước khi gán.")
-                return; // Stop the entire process
+                return;
             }
             if (card.status !== 'available') {
                 if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' đã được gán hoặc không khả dụng.")
-                return; // Stop the entire process
+                return;
             }
+        }
             // --- End of strict validation ---
         if (!r || !r.upsertUser) { if (notify) notify('Thiếu repo.upsertUser'); return }
         console.log('[UsersLogic] upsertUser request', {name:name, phone:phone, rfid:rfid, plate:plate, vt:vt})
         var uid = r.upsertUser(name, phone, rfid, plate, vt)
         console.log('[UsersLogic] upsertUser result id=', uid)
         if (uid > 0) {
-            // Gán/Chuyển RFID card cho user hiện tại (xóa ràng buộc cũ nếu có)
-            r.assignRfidCard(rfid, uid)
-                   if (r.upsertRfidCard) {
-                       r.upsertRfidCard(card.rfid, card.vehicle_type, card.ticket_type, "assigned", card.description || '')
-                       console.log("[UsersLogic] RFID card " + card.rfid + " was assigned and its status updated to 'assigned'.")
-                   }
-                   if (notify) notify(isUpdate ? 'Đã cập nhật user và gán lại thẻ' : 'Đã thêm user và gán thẻ')
-                   refresh(); // Refresh the user list to show changes
-               }
+            // Always assign/re-assign the RFID card to the user
+            r.assignRfidCard(rfid, uid);
+
+            // --- FIX: Only update card status if the RFID was actually changed ---
+            if ((!isUpdate || (isUpdate && rfid !== selectedUserOriginalRfid)) && r.upsertRfidCard) {
+                // Since this condition is true, we know the 'card' object was successfully fetched during validation
+                if (card && card.rfid) {
+                    r.upsertRfidCard(card.rfid, card.vehicle_type, card.ticket_type, "assigned", card.description || '');
+                    console.log("[UsersLogic] RFID card " + card.rfid + " was assigned and its status updated to 'assigned'.");
+                }
+            }
+
+            // This notification will now be reached in all successful update scenarios
+            if (notify) notify(isUpdate ? 'Đã cập nhật user và gán lại thẻ' : 'Đã thêm user và gán thẻ');
+            refresh(); // Refresh the user list to show changes
+        }
         else {
             if (notify) notify('Lỗi lưu user')
         }
