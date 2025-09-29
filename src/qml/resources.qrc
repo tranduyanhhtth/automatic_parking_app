@@ -29,5 +29,6 @@
         <file>logic/DashboardLogic.qml</file>
         <file>pages/AdminPage.ui.qml</file>
         <file>pages/SearchPage.ui.qml</file>
+        <file>logic/EmployeeLogic.qml</file>
     </qresource>
 </RCC>

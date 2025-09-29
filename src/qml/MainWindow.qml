@@ -170,6 +170,7 @@ Item {
                 item.allowedAccounts = root.allowedAccounts
                 adminPage.rfidLogic = item.rfidLogic
                 adminPage.usersLogic = item.usersLogic
+                adminPage.employeeLogic = item.employeeLogic
                 if(item.subsLogic) adminPage.subsLogic = item.subsLogic
             }
         }
