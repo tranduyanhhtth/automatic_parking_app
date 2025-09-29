@@ -514,7 +514,7 @@ Item {
     }
     Connections {
         target: adminPage ? adminPage.tabBar : null
-        function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===4) fullRefresh() }
+        function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===5) fullRefresh() }
     }
     Component.onCompleted: fullRefresh()
     Connections {
