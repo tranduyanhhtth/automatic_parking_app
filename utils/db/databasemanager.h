@@ -206,9 +206,13 @@ public:
 
     // Employee Management
     Q_INVOKABLE QList<QVariantMap> listEmployees();
-    Q_INVOKABLE bool addEmployee(const QString &fullName, const QString &phone, const QString &role);
-    Q_INVOKABLE bool updateEmployee(int id, const QString &fullName, const QString &phone, const QString &role);
+    Q_INVOKABLE int addEmployee(const QString &fullName, const QString &staffId, const QString &role, const QString &note);
+    Q_INVOKABLE bool updateEmployee(int id, const QString &fullName, const QString &staffId, const QString &role, const QString &note);
+
     Q_INVOKABLE bool deleteEmployee(int id);
+    Q_INVOKABLE bool checkInEmployee(int employeeId);
+    Q_INVOKABLE bool checkOutEmployee(int employeeId);
+
 
 
 signals:
