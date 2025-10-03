@@ -243,7 +243,7 @@ Item {
 						// When switching to Revenue tab (index 5), ask logic to refresh via trigger
 						target: tabbar
 						function onCurrentIndexChanged() {
-							if (tabbar.currentIndex === 5)
+							if (tabbar.currentIndex === 6)
 								adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
 						}
 					}
@@ -1909,7 +1909,7 @@ Item {
 										}
 										ListView {
 											id: revenueList
-											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 5) && !adminPage.loginVisible
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 6) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: revenueLogic ? revenueLogic.listModel : null
