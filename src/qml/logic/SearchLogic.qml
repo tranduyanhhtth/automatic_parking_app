@@ -5,6 +5,24 @@ import QtQuick.Layouts
 Item {
     property Item searchPage
 
+    function getDaysInMonth(year, month) { // month is 1-based (1=Jan, 2=Feb, etc.)
+           return new Date(year, month, 0).getDate();
+    }
+
+    function updateDayModel(yearCombo, monthCombo, dayCombo) {
+        if (!yearCombo || !monthCombo || !dayCombo) return;
+
+        var year = 2000 + yearCombo.currentIndex;
+        var month = monthCombo.currentIndex + 1; // Convert 0-11 index to 1-12 month
+        var days = getDaysInMonth(year, month);
+
+        dayCombo.model = days;
+
+        if (dayCombo.currentIndex >= days) {
+            dayCombo.currentIndex = days - 1; // Reset to the last valid day
+        }
+    }
+
     function formatDate(year, month, day) {
         let dt = new Date(year, month - 1, day);
         if (dt.getFullYear() !== year || dt.getMonth() !== month - 1 || dt.getDate() !== day) {
@@ -288,6 +306,52 @@ Item {
         }
     }
 
+    Connections {
+        target: searchPage.fromDatePopup
+        function onVisibleChanged() {
+            if (target.visible) {
+                updateDayModel(searchPage.fromYear, searchPage.fromMonth, searchPage.fromDay);
+            }
+        }
+    }
+
+    Connections {
+        target: searchPage.fromYear
+        function onCurrentIndexChanged() {
+            updateDayModel(searchPage.fromYear, searchPage.fromMonth, searchPage.fromDay);
+        }
+    }
+
+    Connections {
+        target: searchPage.fromMonth
+        function onCurrentIndexChanged() {
+            updateDayModel(searchPage.fromYear, searchPage.fromMonth, searchPage.fromDay);
+        }
+    }
+
+    // Handle "To" date picker logic
+    Connections {
+        target: searchPage.toDatePopup
+        function onVisibleChanged() {
+            if (target.visible) {
+                updateDayModel(searchPage.toYear, searchPage.toMonth, searchPage.toDay);
+            }
+        }
+    }
+
+    Connections {
+        target: searchPage.toYear
+        function onCurrentIndexChanged() {
+            updateDayModel(searchPage.toYear, searchPage.toMonth, searchPage.toDay);
+        }
+    }
+
+    Connections {
+        target: searchPage.toMonth
+        function onCurrentIndexChanged() {
+            updateDayModel(searchPage.toYear, searchPage.toMonth, searchPage.toDay);
+        }
+    }
     // In hóa đơn
     Connections {
         target: searchPage

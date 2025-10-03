@@ -9,6 +9,8 @@ Item {
     property var allowedAccounts      // optional array of {username,password}
     property alias rfidLogic: rfidLogic
     property alias subsLogic: subsLogic
+    property alias usersLogic: usersLogic
+    property alias employeeLogic: employeeLogic
 
     // Sub-logic modules
     LoginLogic {
@@ -21,6 +23,22 @@ Item {
         id: usersLogic
         adminPage: adminLogic.adminPage
         notify: adminLogic.notify
+    }
+    EmployeeLogic {
+        id: employeeLogic
+        adminPage: adminLogic.adminPage
+        notify: adminLogic.notify
+        Connections {
+            target: adminLogic.adminPage
+            function onPendingSelectEmployeeIndexChanged() {
+                if (adminLogic.adminPage && adminLogic.adminPage.pendingSelectEmployeeIndex >= 0) {
+                    const modelData = listModel.get(adminLogic.adminPage.pendingSelectEmployeeIndex);
+                    if (modelData) {
+                        selectEmployee(modelData);
+                    }
+                }
+            }
+        }
     }
     SubscriptionsLogic {
         id: subsLogic

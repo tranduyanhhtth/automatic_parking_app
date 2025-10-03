@@ -42,6 +42,10 @@ Item {
 	property alias userNote: userNote
 	// Subscriptions new user text field alias
 	property alias subUserText: subUserText
+	//employee fields
+	property alias tfEmployeeName: tfEmployeeName
+	property alias tfEmployeePhone: tfEmployeePhone
+	property alias cbEmployeeRole: cbEmployeeRole
 	// Subscriptions form control aliases for logic access
 	property alias subPlate: subPlate
 	property alias subRfid: subRfid
@@ -62,6 +66,8 @@ Item {
 	// Expose minimal aliases for logic wiring later
 	property var rfidLogic: null
 	property var subsLogic: null
+	property var usersLogic: null
+	property var employeeLogic: null
 	property alias tabBar: tabbar
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
@@ -84,7 +90,7 @@ Item {
 	property int pendingSelectUserIndex: -1
 	property int pendingSelectSubIndex: -1
 	property int pendingSelectRfidIndex: -1
-
+	property int pendingSelectEmployeeIndex: -1
 	// Revenue date-picker integration (SearchPage-style for Revenue tab)
 	property bool revFromPickerVisible: false
 	property bool revToPickerVisible: false
@@ -113,11 +119,11 @@ Item {
 		id: notifyLogic
 		toast: toastOverlay
 	}
-	UsersLogic {
-		id: usersLogic
-		adminPage: adminPage
-		notify: notifyLogic.push
-	}
+	// UsersLogic {
+	//	 id: usersLogic
+	// 	 adminPage: adminPage
+	//	 notify: notifyLogic.push
+	// }
 	// SubscriptionsLogic {
 	//	 id: subsLogic
 	//	 adminPage: adminPage
@@ -221,6 +227,9 @@ Item {
 						TabButton {
 							text: "Đăng kí"
 						}
+						TabButton{
+							text: "Quản lý nhân viên"
+						}
 						TabButton {
 							text: "Doanh thu"
 						}
@@ -229,7 +238,7 @@ Item {
 						// When switching to Revenue tab (index 5), ask logic to refresh via trigger
 						target: tabbar
 						function onCurrentIndexChanged() {
-							if (tabbar.currentIndex === 5)
+							if (tabbar.currentIndex === 6)
 								adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
 						}
 					}
@@ -692,13 +701,13 @@ Item {
 										}
 									}
 									ComboBox {
-										id: cbStatus
-										Layout.preferredWidth: 180
-										Layout.preferredHeight: 24
-										model: ["available", "assigned"]
-										background: Rectangle {
-											radius: 8
-										}
+									 	id: cbStatus
+									 	Layout.preferredWidth: 0
+										Layout.preferredHeight: 0
+										visible: false          
+										enabled: false  
+										model: ["available"]
+										currentIndex: 0
 									}
 									TextField {
 										id: tfDesc
@@ -1461,8 +1470,7 @@ Item {
 										}
 										ListView {
 											id: subsListView
-											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
-											Layout.fillWidth: true
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 5) && !adminPage.loginVisible
 											Layout.fillHeight: true
 											model: subsLogic ? subsLogic.listModel : null
 											clip: true
@@ -1531,6 +1539,212 @@ Item {
 													anchors.fill: parent
 													onClicked: adminPage.pendingSelectSubIndex
 															   = index
+												}
+											}
+										}
+									}
+								}
+							}
+						}
+						// Quản lý nhân viên
+						Rectangle {
+							color: "lightgray"
+							Layout.fillWidth: true
+							Layout.fillHeight: true
+							border.color: "darkgray"
+
+							ColumnLayout {
+								anchors.fill: parent
+								anchors.margins: 10
+								spacing: 10
+
+								// Form for adding/editing employees
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									TextField {
+										id: tfEmployeeName
+										placeholderText: "Họ và tên"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 220
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									TextField {
+										id: tfEmployeePhone
+										placeholderText: "Số điện thoại"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.preferredWidth: 180
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
+									ComboBox {
+										id: cbEmployeeRole
+										model: ["Nhân viên", "Quản lý"]
+										Layout.preferredWidth: 160
+										Layout.preferredHeight: 24
+										background: Rectangle {
+											radius: 8
+										}
+									}
+									Item { Layout.fillWidth: true }
+								}
+
+								// Action buttons
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Thêm"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked:
+												employeeLogic.triggerAdd = !employeeLogic.triggerAdd
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#2b7"
+										Text {
+											anchors.centerIn: parent
+											text: "Cập nhật"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked:
+													employeeLogic.triggerUpdate = !employeeLogic.triggerUpdate
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#a33"
+										Text {
+											anchors.centerIn: parent
+											text: "Xóa"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked:
+												employeeLogic.triggerDelete = !employeeLogic.triggerDelete
+										}
+									}
+									Item {
+										Layout.fillWidth: true
+									}
+								}
+
+								// List of employees
+								Rectangle {
+									Layout.fillWidth: true
+									Layout.fillHeight: true
+									color: "#222"
+									border.color: "#333"
+									radius: 8
+									ColumnLayout {
+										anchors.fill: parent
+										anchors.margins: 8
+										spacing: 6
+										// Header Row
+										RowLayout {
+											Layout.fillWidth: true
+											spacing: 8
+											Text {
+												text: "ID"
+												color: "white"
+												Layout.preferredWidth: 60
+											}
+											Text {
+												text: "Họ và tên"
+												color: "white"
+												Layout.preferredWidth: 220
+											}
+											Text {
+												text: "Số điện thoại"
+												color: "white"
+												Layout.preferredWidth: 180
+											}
+											Text {
+												text: "Vai trò"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Item {
+												Layout.fillWidth: true
+											}
+										}
+
+										// Employee ListView
+										ListView {
+											id: employeeListView
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
+											Layout.fillWidth: true
+											Layout.fillHeight: true
+											clip: true
+											model: employeeLogic ? employeeLogic.listModel : null
+											delegate: Rectangle {
+												width: parent ? parent.width : 0
+												height: 30
+												color: (adminPage.pendingSelectEmployeeIndex === index) ? "#334455" : "transparent"
+												border.color: "#444"
+												border.width: 1
+
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: model.id
+														color: "white"
+														Layout.preferredWidth: 60
+														verticalAlignment: Text.AlignVCenter
+													}
+													Text {
+														text: model.full_name
+														color: "white"
+														Layout.preferredWidth: 220
+														elide: Text.ElideRight
+														verticalAlignment: Text.AlignVCenter
+													}
+													Text {
+														text: model.phone
+														color: "white"
+														Layout.preferredWidth: 180
+														verticalAlignment: Text.AlignVCenter
+													}
+													Text {
+														text: model.role
+														color: "white"
+														Layout.preferredWidth: 120
+														verticalAlignment: Text.AlignVCenter
+													}
+													Item {
+														Layout.fillWidth: true
+													}
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: adminPage.pendingSelectEmployeeIndex = index
 												}
 											}
 										}
@@ -1676,7 +1890,7 @@ Item {
 										}
 										ListView {
 											id: revenueList
-											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 5) && !adminPage.loginVisible
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 6) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: revenueLogic ? revenueLogic.listModel : null

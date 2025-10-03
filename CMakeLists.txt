@@ -52,7 +52,7 @@ qt_add_qml_module(appsmart_parking_system
         src/qml/logic/SearchLogic.qml
         src/qml/logic/SubscriptionsLogic.qml
         src/qml/logic/UsersLogic.qml
-
+        src/qml/logic/EmployeeLogic.qml
     SOURCES
         utils/camera/cameramanager.h utils/camera/cameramanager.cpp
         utils/gstreamer/gstreamerplayer.h utils/gstreamer/gstreamerplayer.cpp

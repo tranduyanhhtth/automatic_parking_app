@@ -355,6 +355,22 @@ bool DatabaseManager::ensureSchema()
             END;
         )");
     }
+    // 6. Employee
+    if (!q.exec(R"(
+        CREATE TABLE IF NOT EXISTS employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            phone TEXT UNIQUE,
+            role TEXT,
+            created_at TEXT
+        )
+    )"))
+    {
+        qWarning() << "DDL employees:" << q.lastError().text();
+        DB_Connection.rollback();
+        return false;
+    }
+
     // Seed default pricing if table is empty
     ensureDefaultPricing();
 
@@ -364,6 +380,74 @@ bool DatabaseManager::ensureSchema()
     // If an older DB has NULL pricing_id in parking_sessions, migrate/backfill it now
     migrateParkingSessionsPricingNotNull();
     return true;
+}
+
+QList<QVariantMap> DatabaseManager::listEmployees()
+{
+    QList<QVariantMap> out;
+    QSqlQuery q(DB_Connection);
+    q.prepare("SELECT id, full_name, phone, role FROM employees ORDER BY id DESC");
+    if (q.exec())
+    {
+        while (q.next())
+        {
+            QVariantMap m;
+            m.insert("id", q.value(0));
+            m.insert("full_name", q.value(1));
+            m.insert("phone", q.value(2));
+            m.insert("role", q.value(3));
+            out.append(m);
+        }
+    }
+    else
+    {
+        qWarning() << "listEmployees:" << q.lastError().text();
+    }
+    return out;
+}
+
+bool DatabaseManager::addEmployee(const QString &fullName, const QString &phone, const QString &role)
+{
+    QSqlQuery q(DB_Connection);
+    q.prepare("INSERT INTO employees (full_name, phone, role, created_at) VALUES (:name, :phone, :role, :created)");
+    q.bindValue(":name", fullName);
+    q.bindValue(":phone", phone);
+    q.bindValue(":role", role);
+    q.bindValue(":created", nowIso8601());
+    if (!q.exec())
+    {
+        qWarning() << "addEmployee:" << q.lastError().text();
+        return false;
+    }
+    return true;
+}
+
+bool DatabaseManager::updateEmployee(int id, const QString &fullName, const QString &phone, const QString &role)
+{
+    QSqlQuery q(DB_Connection);
+    q.prepare("UPDATE employees SET full_name = :name, phone = :phone, role = :role WHERE id = :id");
+    q.bindValue(":name", fullName);
+    q.bindValue(":phone", phone);
+    q.bindValue(":role", role);
+    q.bindValue(":id", id);
+    if (!q.exec())
+    {
+        qWarning() << "updateEmployee:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
+}
+bool DatabaseManager::deleteEmployee(int id)
+{
+    QSqlQuery q(DB_Connection);
+    q.prepare("DELETE FROM employees WHERE id = :id");
+    q.bindValue(":id", id);
+    if (!q.exec())
+    {
+        qWarning() << "deleteEmployee:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
 }
 
 bool DatabaseManager::ensureDefaultPricing()
