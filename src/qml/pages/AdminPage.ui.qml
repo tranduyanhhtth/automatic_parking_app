@@ -16,6 +16,8 @@ Item {
 	property bool triggerDeletePricing: false
 	// Saving state for Pricing (used to show spinner on Save button)
 	property bool pricingSaving: false
+	property bool triggerEmployeeCheckIn: false
+	property bool triggerEmployeeCheckOut: false
 	// Pricing field aliases for logic
 	property alias pricingBaseFee: pricingBaseFee
 	property alias pricingGraceMinutes: pricingGraceMinutes
@@ -44,7 +46,9 @@ Item {
 	property alias subUserText: subUserText
 	//employee fields
 	property alias tfEmployeeName: tfEmployeeName
-	property alias tfEmployeePhone: tfEmployeePhone
+	property alias tfEmployeeStaffId: tfEmployeeStaffId
+
+	property alias taEmployeeNote: taEmployeeNote
 	property alias cbEmployeeRole: cbEmployeeRole
 	// Subscriptions form control aliases for logic access
 	property alias subPlate: subPlate
@@ -1575,8 +1579,8 @@ Item {
 										}
 									}
 									TextField {
-										id: tfEmployeePhone
-										placeholderText: "Số điện thoại"
+										id: tfEmployeeStaffId
+										placeholderText: "Mã nhân viên"
 										placeholderTextColor: "white"
 										color: "white"
 										Layout.preferredWidth: 180
@@ -1589,13 +1593,31 @@ Item {
 									ComboBox {
 										id: cbEmployeeRole
 										model: ["Nhân viên", "Quản lý"]
-										Layout.preferredWidth: 160
+										Layout.preferredWidth: 150
 										Layout.preferredHeight: 24
 										background: Rectangle {
 											radius: 8
 										}
 									}
 									Item { Layout.fillWidth: true }
+								}
+
+								RowLayout {
+									spacing: 8
+									Layout.fillWidth: true
+									TextArea {
+										id: taEmployeeNote
+										placeholderText: "Ghi chú"
+										placeholderTextColor: "white"
+										color: "white"
+										Layout.fillWidth: true
+										Layout.preferredHeight: 40
+										background: Rectangle {
+											color: "#222"
+											border.color: "#555"
+											radius: 8
+										}
+									}
 								}
 
 								// Action buttons
@@ -1653,6 +1675,30 @@ Item {
 									Item {
 										Layout.fillWidth: true
 									}
+									Rectangle { // Check-in Button
+										width: 120
+										height: 28
+										radius: 8
+										color: employeeLogic.canCheckIn ? "#00897b" : "#555"
+										Text { anchors.centerIn: parent; text: "Chấm công"; color: "white" }
+										MouseArea {
+											anchors.fill: parent
+											enabled: employeeLogic.canCheckIn
+											onClicked: adminPage.triggerEmployeeCheckIn = !adminPage.triggerEmployeeCheckIn
+											}
+										}
+									Rectangle { // Check-out Button
+										width: 120
+										height: 28
+										radius: 8
+										color: employeeLogic.canCheckOut ? "#d84315" : "#555"
+										Text { anchors.centerIn: parent; text: "Kết thúc ca"; color: "white" }
+										MouseArea {
+											anchors.fill: parent
+											enabled: employeeLogic.canCheckOut
+											onClicked: adminPage.triggerEmployeeCheckOut = !adminPage.triggerEmployeeCheckOut
+										}
+									}
 								}
 
 								// List of employees
@@ -1670,26 +1716,13 @@ Item {
 										RowLayout {
 											Layout.fillWidth: true
 											spacing: 8
-											Text {
-												text: "ID"
-												color: "white"
-												Layout.preferredWidth: 60
-											}
-											Text {
-												text: "Họ và tên"
-												color: "white"
-												Layout.preferredWidth: 220
-											}
-											Text {
-												text: "Số điện thoại"
-												color: "white"
-												Layout.preferredWidth: 180
-											}
-											Text {
-												text: "Vai trò"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
+											Text { text: "ID"; color: "white"; Layout.preferredWidth: 50 }
+											Text { text: "Họ và tên"; color: "white"; Layout.preferredWidth: 180 }
+											Text { text: "Mã NV"; color: "white"; Layout.preferredWidth: 120 }
+											Text { text: "Vai trò"; color: "white"; Layout.preferredWidth: 120 }
+											Text { text: "Vào Ca"; color: "white"; Layout.preferredWidth: 120 }
+											Text { text: "Kết thúc ca"; color: "white"; Layout.preferredWidth: 120 }
+											Text { text: "Ghi chú"; color: "white"; Layout.fillWidth: true }
 											Item {
 												Layout.fillWidth: true
 											}
@@ -1713,31 +1746,13 @@ Item {
 												RowLayout {
 													anchors.fill: parent
 													spacing: 8
-													Text {
-														text: model.id
-														color: "white"
-														Layout.preferredWidth: 60
-														verticalAlignment: Text.AlignVCenter
-													}
-													Text {
-														text: model.full_name
-														color: "white"
-														Layout.preferredWidth: 220
-														elide: Text.ElideRight
-														verticalAlignment: Text.AlignVCenter
-													}
-													Text {
-														text: model.phone
-														color: "white"
-														Layout.preferredWidth: 180
-														verticalAlignment: Text.AlignVCenter
-													}
-													Text {
-														text: model.role
-														color: "white"
-														Layout.preferredWidth: 120
-														verticalAlignment: Text.AlignVCenter
-													}
+													Text { text: id; color: "white"; Layout.preferredWidth: 50 }
+													Text { text: full_name; color: "white"; Layout.preferredWidth: 180; elide: Text.ElideRight }
+													Text { text: staff_id; color: "white"; Layout.preferredWidth: 120 }
+													Text { text: role; color: "white"; Layout.preferredWidth: 120 }
+													Text { text: shift_start_at; color: "white"; Layout.preferredWidth: 120 }
+													Text { text: shift_end_at; color: "white"; Layout.preferredWidth: 120 }
+													Text { text: note; color: "#ccc"; Layout.fillWidth: true; elide: Text.ElideRight }
 													Item {
 														Layout.fillWidth: true
 													}

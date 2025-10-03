@@ -386,7 +386,7 @@ QList<QVariantMap> DatabaseManager::listEmployees()
 {
     QList<QVariantMap> out;
     QSqlQuery q(DB_Connection);
-    q.prepare("SELECT id, full_name, phone, role FROM employees ORDER BY id DESC");
+    q.prepare("SELECT id, full_name, staff_id, role, note, shift_start_at, shift_end_at FROM employees ORDER BY id DESC");
     if (q.exec())
     {
         while (q.next())
@@ -394,8 +394,11 @@ QList<QVariantMap> DatabaseManager::listEmployees()
             QVariantMap m;
             m.insert("id", q.value(0));
             m.insert("full_name", q.value(1));
-            m.insert("phone", q.value(2));
+            m.insert("staff_id", q.value(2));
             m.insert("role", q.value(3));
+            m.insert("note", q.value(4));
+            m.insert("shift_start_at", q.value(5));
+            m.insert("shift_end_at", q.value(6));
             out.append(m);
         }
     }
@@ -406,29 +409,43 @@ QList<QVariantMap> DatabaseManager::listEmployees()
     return out;
 }
 
-bool DatabaseManager::addEmployee(const QString &fullName, const QString &phone, const QString &role)
+int DatabaseManager::addEmployee(const QString &fullName, const QString &staffId, const QString &role, const QString &note)
 {
     QSqlQuery q(DB_Connection);
-    q.prepare("INSERT INTO employees (full_name, phone, role, created_at) VALUES (:name, :phone, :role, :created)");
+    q.prepare(R"(
+        INSERT INTO employees (full_name, staff_id, role, note, created_at)
+        VALUES (:name, :staff_id, :role, :note, :created)
+    )");
     q.bindValue(":name", fullName);
-    q.bindValue(":phone", phone);
+    q.bindValue(":staff_id", staffId);
     q.bindValue(":role", role);
+    q.bindValue(":note", note);
     q.bindValue(":created", nowIso8601());
     if (!q.exec())
     {
         qWarning() << "addEmployee:" << q.lastError().text();
-        return false;
+        // Check if the error is a UNIQUE constraint failure
+        if (q.lastError().text().contains("UNIQUE constraint failed"))
+        {
+            return -2; // Specific error code for duplicate staff_id
+        }
+        return -1; // General error
     }
-    return true;
+    return 1;
 }
 
-bool DatabaseManager::updateEmployee(int id, const QString &fullName, const QString &phone, const QString &role)
+bool DatabaseManager::updateEmployee(int id, const QString &fullName, const QString &staffId, const QString &role, const QString &note)
 {
     QSqlQuery q(DB_Connection);
-    q.prepare("UPDATE employees SET full_name = :name, phone = :phone, role = :role WHERE id = :id");
+    q.prepare(R"(
+        UPDATE employees
+        SET full_name = :name, staff_id = :staff_id, role = :role, note = :note
+        WHERE id = :id
+    )");
     q.bindValue(":name", fullName);
-    q.bindValue(":phone", phone);
+    q.bindValue(":staff_id", staffId);
     q.bindValue(":role", role);
+    q.bindValue(":note", note);
     q.bindValue(":id", id);
     if (!q.exec())
     {
@@ -445,6 +462,37 @@ bool DatabaseManager::deleteEmployee(int id)
     if (!q.exec())
     {
         qWarning() << "deleteEmployee:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
+}
+
+bool DatabaseManager::checkInEmployee(int employeeId)
+{
+    QSqlQuery q(DB_Connection);
+    // Sets the start time and clears any previous end time for a new shift
+    q.prepare("UPDATE employees SET shift_start_at = :now, shift_end_at = NULL WHERE id = :id");
+    q.bindValue(":now", nowIso8601());
+    q.bindValue(":id", employeeId);
+    if (!q.exec())
+    {
+        qWarning() << "checkInEmployee error:" << q.lastError().text();
+        return false;
+    }
+    return q.numRowsAffected() > 0;
+}
+
+// ADDED: Implementation for check-out
+bool DatabaseManager::checkOutEmployee(int employeeId)
+{
+    QSqlQuery q(DB_Connection);
+    // Sets the end time only if the employee has already started a shift
+    q.prepare("UPDATE employees SET shift_end_at = :now WHERE id = :id AND shift_start_at IS NOT NULL AND shift_end_at IS NULL");
+    q.bindValue(":now", nowIso8601());
+    q.bindValue(":id", employeeId);
+    if (!q.exec())
+    {
+        qWarning() << "checkOutEmployee error:" << q.lastError().text();
         return false;
     }
     return q.numRowsAffected() > 0;
