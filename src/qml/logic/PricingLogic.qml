@@ -203,4 +203,11 @@ Item {
             requestSave = false
         }
     }
+    
+    // Wrapper function for AdminPage.ui.qml to avoid JavaScript if statements
+    function onPriceFieldChanged(ticketType, value) {
+        if (editMode) {
+            setPriceFor(ticketType, value);
+        }
+    }
 }

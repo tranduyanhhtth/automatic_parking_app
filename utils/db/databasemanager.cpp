@@ -360,8 +360,12 @@ bool DatabaseManager::ensureSchema()
         CREATE TABLE IF NOT EXISTS employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             full_name TEXT NOT NULL,
-            phone TEXT UNIQUE,
+            staff_id TEXT UNIQUE NOT NULL,
+            phone TEXT,
             role TEXT,
+            note TEXT,
+            shift_start_at TEXT,
+            shift_end_at TEXT,
             created_at TEXT
         )
     )"))
@@ -369,6 +373,39 @@ bool DatabaseManager::ensureSchema()
         qWarning() << "DDL employees:" << q.lastError().text();
         DB_Connection.rollback();
         return false;
+    }
+
+    // Migrate employees table if needed (add new columns to existing table)
+    {
+        QSqlQuery checkCols(DB_Connection);
+        checkCols.exec("PRAGMA table_info(employees)");
+        QSet<QString> existingCols;
+        while (checkCols.next())
+        {
+            existingCols.insert(checkCols.value(1).toString());
+        }
+
+        // Add missing columns
+        if (!existingCols.contains("staff_id"))
+        {
+            qDebug() << "Migrating employees table: adding staff_id column";
+            q.exec("ALTER TABLE employees ADD COLUMN staff_id TEXT");
+        }
+        if (!existingCols.contains("note"))
+        {
+            qDebug() << "Migrating employees table: adding note column";
+            q.exec("ALTER TABLE employees ADD COLUMN note TEXT");
+        }
+        if (!existingCols.contains("shift_start_at"))
+        {
+            qDebug() << "Migrating employees table: adding shift_start_at column";
+            q.exec("ALTER TABLE employees ADD COLUMN shift_start_at TEXT");
+        }
+        if (!existingCols.contains("shift_end_at"))
+        {
+            qDebug() << "Migrating employees table: adding shift_end_at column";
+            q.exec("ALTER TABLE employees ADD COLUMN shift_end_at TEXT");
+        }
     }
 
     // Seed default pricing if table is empty

@@ -77,6 +77,17 @@ Item {
 	property bool triggerAddUser: false
 	property bool triggerUpdateUser: false
 	property bool triggerDeleteUser: false
+	// Triggers cho employee management
+	property bool triggerAddEmployee: false
+	property bool triggerUpdateEmployee: false
+	property bool triggerDeleteEmployee: false
+	// Employee check-in/out states (managed by EmployeeLogic)
+	property bool canEmployeeCheckIn: false
+	property bool canEmployeeCheckOut: false
+	// Employee list model (managed by EmployeeLogic)
+	property var employeeListModel: null
+	// Subscription list model (managed by SubscriptionsLogic)
+	property var subscriptionListModel: null
 	// Triggers cho subscriptions
 	property bool triggerSubCreate: false
 	property bool triggerSubExtend: false
@@ -87,6 +98,7 @@ Item {
 	property bool triggerSubUserTextChanged: false
 	property bool triggerSubCancelExtend: false
 	property bool triggerSubsChanged: false
+	property bool triggerSubsSaveDialogAccepted: false
 	// buffer for generated expired CSV
 	property string expiredCsvBuffer: ""
 	property bool triggerUsersChanged: false
@@ -155,18 +167,7 @@ Item {
 		title: "Chọn nơi lưu CSV Đăng ký"
 		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
 		selectedFile: "dang_ky_het_han.csv"
-		// When accepted, write the buffer via repo
-		onAccepted: {
-			try {
-				if (typeof repo !== 'undefined' && repo.saveTextToFile) {
-					const path = subsSaveDialog.selectedFile || (subsSaveDialog.selectedFiles && subsSaveDialog.selectedFiles.length>0 ? subsSaveDialog.selectedFiles[0] : "");
-					const ok = repo.saveTextToFile(path, adminPage.expiredCsvBuffer || "");
-					notifyLogic.push(ok?"Đã lưu file CSV đăng ký":"Lỗi khi lưu file");
-				} else {
-					notifyLogic.push("Thiếu API lưu file");
-				}
-			} catch(e) { console.log(e) }
-		}
+		onAccepted: adminPage.triggerSubsSaveDialogAccepted = !adminPage.triggerSubsSaveDialogAccepted
 	}
 	// Content root to be blurred when login overlay is visible
 	Item {
@@ -638,10 +639,7 @@ Item {
 												Connections {
 													target: tfPriceValue
 													function onTextChanged() {
-														if (pricingLogic.editMode)
-															pricingLogic.setPriceFor(
-																		ticket_type,
-																		tfPriceValue.text)
+														pricingLogic.onPriceFieldChanged(ticket_type, tfPriceValue.text)
 													}
 												}
 											}
@@ -1247,18 +1245,7 @@ Item {
 										}
 										onCurrentIndexChanged: adminPage.triggerSubUserTextChanged = !adminPage.triggerSubUserTextChanged
 									}
-									Connections {
-										target: subPlatePick
-										function onVisibleChanged(){
-											if (subPlatePick.visible && (subPlatePick.currentIndex === -1 || subPlatePick.currentIndex === undefined)) {
-												try {
-													if (subPlatePick.popup && !subPlatePick.popup.visible) subPlatePick.popup.open()
-													else if (subPlatePick.showPopup) subPlatePick.showPopup()
-													subPlatePick.forceActiveFocus()
-												} catch(e) {}
-											}
-										}
-									}
+
 									Text {
 										visible: subPlatePick.visible && subPlatePick.currentIndex < 0
 										text: "← Chọn biển số"
@@ -1474,9 +1461,9 @@ Item {
 										}
 										ListView {
 											id: subsListView
-											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 5) && !adminPage.loginVisible
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
 											Layout.fillHeight: true
-											model: subsLogic ? subsLogic.listModel : null
+											model: adminPage.subscriptionListModel
 											clip: true
 											delegate: Rectangle {
 												color: (subsLogic
@@ -1636,8 +1623,7 @@ Item {
 										}
 										MouseArea {
 											anchors.fill: parent
-											onClicked:
-												employeeLogic.triggerAdd = !employeeLogic.triggerAdd
+											onClicked: adminPage.triggerAddEmployee = !adminPage.triggerAddEmployee
 										}
 									}
 									Rectangle {
@@ -1652,8 +1638,7 @@ Item {
 										}
 										MouseArea {
 											anchors.fill: parent
-											onClicked:
-													employeeLogic.triggerUpdate = !employeeLogic.triggerUpdate
+											onClicked: adminPage.triggerUpdateEmployee = !adminPage.triggerUpdateEmployee
 										}
 									}
 									Rectangle {
@@ -1668,8 +1653,7 @@ Item {
 										}
 										MouseArea {
 											anchors.fill: parent
-											onClicked:
-												employeeLogic.triggerDelete = !employeeLogic.triggerDelete
+											onClicked: adminPage.triggerDeleteEmployee = !adminPage.triggerDeleteEmployee
 										}
 									}
 									Item {
@@ -1679,11 +1663,11 @@ Item {
 										width: 120
 										height: 28
 										radius: 8
-										color: employeeLogic.canCheckIn ? "#00897b" : "#555"
+										color: adminPage.canEmployeeCheckIn ? "#00897b" : "#555"
 										Text { anchors.centerIn: parent; text: "Chấm công"; color: "white" }
 										MouseArea {
 											anchors.fill: parent
-											enabled: employeeLogic.canCheckIn
+											enabled: adminPage.canEmployeeCheckIn
 											onClicked: adminPage.triggerEmployeeCheckIn = !adminPage.triggerEmployeeCheckIn
 											}
 										}
@@ -1691,11 +1675,11 @@ Item {
 										width: 120
 										height: 28
 										radius: 8
-										color: employeeLogic.canCheckOut ? "#d84315" : "#555"
+										color: adminPage.canEmployeeCheckOut ? "#d84315" : "#555"
 										Text { anchors.centerIn: parent; text: "Kết thúc ca"; color: "white" }
 										MouseArea {
 											anchors.fill: parent
-											enabled: employeeLogic.canCheckOut
+											enabled: adminPage.canEmployeeCheckOut
 											onClicked: adminPage.triggerEmployeeCheckOut = !adminPage.triggerEmployeeCheckOut
 										}
 									}
@@ -1731,11 +1715,11 @@ Item {
 										// Employee ListView
 										ListView {
 											id: employeeListView
-											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
+											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 5) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
 											clip: true
-											model: employeeLogic ? employeeLogic.listModel : null
+											model: adminPage.employeeListModel
 											delegate: Rectangle {
 												width: parent ? parent.width : 0
 												height: 30

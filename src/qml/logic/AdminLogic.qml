@@ -28,17 +28,6 @@ Item {
         id: employeeLogic
         adminPage: adminLogic.adminPage
         notify: adminLogic.notify
-        Connections {
-            target: adminLogic.adminPage
-            function onPendingSelectEmployeeIndexChanged() {
-                if (adminLogic.adminPage && adminLogic.adminPage.pendingSelectEmployeeIndex >= 0) {
-                    const modelData = listModel.get(adminLogic.adminPage.pendingSelectEmployeeIndex);
-                    if (modelData) {
-                        selectEmployee(modelData);
-                    }
-                }
-            }
-        }
     }
     SubscriptionsLogic {
         id: subsLogic

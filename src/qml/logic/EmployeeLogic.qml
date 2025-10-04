@@ -17,11 +17,36 @@ Item {
 
     ListModel { id: employeeModel }
 
+    function attachAdminPage(){
+        if(!adminPage) return;
+        adminPage.employeeListModel = listModel;
+        adminPage.canEmployeeCheckIn = canCheckIn;
+        adminPage.canEmployeeCheckOut = canCheckOut;
+    }
+
+    onAdminPageChanged: attachAdminPage()
+
     Connections {
-        target: employeeLogic
-        function onTriggerAddChanged() { addEmployee() }
-        function onTriggerUpdateChanged() { updateEmployee() }
-        function onTriggerDeleteChanged() { deleteEmployee() }
+        target: adminPage
+        function onTriggerAddEmployeeChanged() { 
+            if (adminPage.triggerAddEmployee) {
+                console.log('[EmployeeLogic] onTriggerAddEmployeeChanged triggered');
+                addEmployee();
+                adminPage.triggerAddEmployee = false;
+            }
+        }
+        function onTriggerUpdateEmployeeChanged() { 
+            if (adminPage.triggerUpdateEmployee) {
+                updateEmployee();
+                adminPage.triggerUpdateEmployee = false;
+            }
+        }
+        function onTriggerDeleteEmployeeChanged() { 
+            if (adminPage.triggerDeleteEmployee) {
+                deleteEmployee();
+                adminPage.triggerDeleteEmployee = false;
+            }
+        }
     }
     function selectEmployee(modelData) {
         if (!adminPage || !modelData) return;
@@ -36,6 +61,12 @@ Item {
 
         canCheckIn = !hasCheckedIn || hasCheckedOut; // Can check in if never checked in, or after checking out.
         canCheckOut = hasCheckedIn && !hasCheckedOut; // Can only check out if checked in but not yet checked out.
+        
+        // Update AdminPage properties
+        if (adminPage) {
+            adminPage.canEmployeeCheckIn = canCheckIn;
+            adminPage.canEmployeeCheckOut = canCheckOut;
+        }
 
         const roleIndex = adminPage.cbEmployeeRole.model.indexOf(modelData.role);
         if (roleIndex !== -1) {
@@ -44,10 +75,23 @@ Item {
     }
 
     function refresh() {
+        console.log('[EmployeeLogic] refresh() called');
         const currentId = selectedEmployeeId;
         employeeModel.clear();
-        if (typeof repo !== 'undefined' && repo.listEmployees) {
+        
+        if (typeof repo === 'undefined' || !repo) {
+            console.error('[EmployeeLogic] repo not available for refresh');
+            return;
+        }
+        
+        if (!repo.listEmployees) {
+            console.error('[EmployeeLogic] repo.listEmployees not available');
+            return;
+        }
+        
+        try {
             const employees = repo.listEmployees();
+            console.log('[EmployeeLogic] Retrieved employees:', employees.length);
             let newSelectionData = null;
             for (let i = 0; i < employees.length; i++) {
                 const emp = employees[i];
@@ -60,29 +104,45 @@ Item {
                 // re-select the employee to refresh button states
                 selectEmployee(newSelectionData);
             }
+        } catch (e) {
+            console.error('[EmployeeLogic] Error in refresh:', e);
         }
     }
 
     function addEmployee() {
+        console.log('[EmployeeLogic] addEmployee called');
         const name = adminPage.tfEmployeeName.text.trim();
         const staffId = adminPage.tfEmployeeStaffId.text.trim();
         const role = adminPage.cbEmployeeRole.currentText;
         const note = adminPage.taEmployeeNote.text.trim();
 
+        console.log('[EmployeeLogic] Form data:', {name, staffId, role, note});
+
         if (name.length === 0 || staffId.length === 0) {
-            if(notify) notify("Vui lòng nhập Tên và Mã NV", "warn");
+            if(notify) notify("Vui lòng nhập Tên và Mã NV");
             return;
         }
 
+        if (typeof repo === 'undefined' || !repo || !repo.addEmployee) {
+            console.error('[EmployeeLogic] repo or addEmployee not available');
+            if(notify) notify("Lỗi: Không thể truy cập cơ sở dữ liệu");
+            return;
+        }
+
+        console.log('[EmployeeLogic] Calling repo.addEmployee with params:', name, staffId, role, note);
         const addResult = repo.addEmployee(name, staffId, role, note);
+        console.log('[EmployeeLogic] addEmployee result:', addResult);
+        
         if (addResult === 1) {
-            if(notify) notify("Thêm nhân viên thành công", "success");
+            if(notify) notify("Thêm nhân viên thành công");
             clearForm();
-            refresh();
+            Qt.callLater(function() {
+                refresh();
+            });
         } else if (addResult === -2) {
-            if(notify) notify("Mã nhân viên đã tồn tại. Vui lòng nhập mã khác.", "error");
+            if(notify) notify("Mã nhân viên đã tồn tại. Vui lòng nhập mã khác.");
         } else {
-            if(notify) notify("Lỗi khi thêm nhân viên (mã lỗi: " + addResult + ")", "error");
+            if(notify) notify("Lỗi khi thêm nhân viên (mã lỗi: " + addResult + ")");
         }
     }
 
@@ -152,12 +212,18 @@ Item {
         selectedEmployeeId = -1;
         canCheckIn = false;
         canCheckOut = false;
+        
+        // Update AdminPage properties
+        if (adminPage) {
+            adminPage.canEmployeeCheckIn = false;
+            adminPage.canEmployeeCheckOut = false;
+        }
     }
 
     Connections {
         target: adminPage ? adminPage.tabBar : null
         function onCurrentIndexChanged() {
-            if (adminPage.tabBar.currentIndex === 4) {
+            if (adminPage.tabBar.currentIndex === 5) {
                 refresh();
             }
         }
@@ -191,6 +257,10 @@ Item {
        }
 
     Component.onCompleted: {
+        console.log('[EmployeeLogic] Component completed');
+        console.log('[EmployeeLogic] repo available:', typeof repo !== 'undefined');
+        console.log('[EmployeeLogic] repo methods:', repo ? Object.keys(repo) : 'N/A');
+        attachAdminPage();
         refresh();
     }
 }

@@ -25,6 +25,20 @@ Item {
     property string _origEnd: ""
     property bool _inExtendedState: false
 
+    function attachAdminPage(){
+        if(!adminPage) return;
+        if(!adminPage.subsLogic || adminPage.subsLogic !== subsLogic){
+            adminPage.subsLogic = subsLogic;
+        }
+        if(adminPage.subscriptionListModel !== listModel){
+            adminPage.subscriptionListModel = listModel;
+        }
+    }
+
+    onAdminPageChanged: {
+        attachAdminPage();
+    }
+
     function msg(m){ if(notify) notify(m); else console.log(m) }
     function planToTicket(p){ p=(''+p).toLowerCase(); if(p.indexOf('th')===0||p.indexOf('month')===0) return 'monthly'; if(p.indexOf('qu')===0||p.indexOf('quarter')===0) return 'quarterly'; if(p.indexOf('nă')===0||p.indexOf('ye')===0||p.indexOf('year')===0) return 'yearly'; return p }
     function labelFromTicket(t){ if(t==='monthly') return 'Tháng'; if(t==='quarterly') return 'Quý'; if(t==='yearly') return 'Năm'; return '' }
@@ -216,13 +230,26 @@ Item {
         } else if (sid > -1) {
             if (price > 0 && r && r.insertRevenue) {
                 try {
-                    r.insertRevenue(undefined, sid, userId, price, payment, 'subscription', isExtend ? 'extend' : 'create');
+                    r.insertRevenue(null, sid, userId, price, payment, 'subscription', isExtend ? 'extend' : 'create');
                 } catch (e) {
                     console.log("[SubscriptionsLogic] Failed to insert revenue record. Error: " + e);
                 }
             }
             msg((isExtend ? 'Gia hạn' : 'Tạo') + ' đăng ký thành công');
             _inExtendedState = false;
+            
+            // Clear form after successful creation (not extension)
+            if (!isExtend && adminPage) {
+                if (adminPage.subUserText) adminPage.subUserText.text = '';
+                if (adminPage.subPlate) adminPage.subPlate.text = '';
+                if (adminPage.subRfid) adminPage.subRfid.text = '';
+                if (adminPage.subPrice) adminPage.subPrice.text = '';
+                if (adminPage.subPlan && 'text' in adminPage.subPlan) adminPage.subPlan.text = '';
+                if (adminPage.subStart) adminPage.subStart.text = '';
+                if (adminPage.subEnd) adminPage.subEnd.text = '';
+            }
+            
+            // Immediate refresh without Qt.callLater to ensure list updates right away
             refreshSubs();
             if(adminPage) adminPage.triggerSubsChanged = !adminPage.triggerSubsChanged;
         } else {
@@ -516,12 +543,53 @@ Item {
         target: adminPage ? adminPage.tabBar : null
         function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===4) fullRefresh() }
     }
-    Component.onCompleted: fullRefresh()
+    Component.onCompleted: {
+        attachAdminPage();
+        fullRefresh();
+    }
     Connections {
         target: adminPage
         function onTriggerSubsChangedChanged() {
-            if (adminPage.triggerSubsChanged) {
-                refreshSubs();
+            refreshSubs();
+            adminPage.triggerSubsChanged = false;
+        }
+        function onTriggerSubsSaveDialogAcceptedChanged() {
+            if (adminPage.triggerSubsSaveDialogAccepted) {
+                const r = rRepo();
+                if (r && r.saveTextToFile && adminPage.subsFileSaveDialog) {
+                    try {
+                        const dialog = adminPage.subsFileSaveDialog;
+                        const path = dialog.selectedFile || (dialog.selectedFiles && dialog.selectedFiles.length > 0 ? dialog.selectedFiles[0] : "");
+                        const ok = r.saveTextToFile(path, adminPage.expiredCsvBuffer || "");
+                        msg(ok ? "Đã lưu file CSV đăng ký" : "Lỗi khi lưu file");
+                    } catch(e) {
+                        console.log('[SubscriptionsLogic] Save dialog error:', e);
+                        msg("Lỗi khi lưu file");
+                    }
+                } else {
+                    msg("Thiếu API lưu file");
+                }
+                adminPage.triggerSubsSaveDialogAccepted = false;
+            }
+        }
+    }
+    
+    // Auto-open duplicate plate picker ComboBox when it becomes visible
+    Connections {
+        target: adminPage ? adminPage.subPlatePick : null
+        function onVisibleChanged(){
+            if (adminPage && adminPage.subPlatePick && adminPage.subPlatePick.visible && 
+                (adminPage.subPlatePick.currentIndex === -1 || adminPage.subPlatePick.currentIndex === undefined)) {
+                try {
+                    if (adminPage.subPlatePick.popup && !adminPage.subPlatePick.popup.visible) {
+                        adminPage.subPlatePick.popup.open();
+                    } else if (adminPage.subPlatePick.showPopup) {
+                        adminPage.subPlatePick.showPopup();
+                    }
+                    adminPage.subPlatePick.forceActiveFocus();
+                } catch(e) {
+                    console.log('[SubscriptionsLogic] Error auto-opening ComboBox:', e);
+                }
             }
         }
     }
