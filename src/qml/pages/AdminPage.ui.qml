@@ -1462,6 +1462,7 @@ Item {
 										ListView {
 											id: subsListView
 											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
+											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: adminPage.subscriptionListModel
 											clip: true

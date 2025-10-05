@@ -29,7 +29,7 @@
 DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
 {
     DB_Connection = QSqlDatabase::addDatabase("QSQLITE");
-    const QString dbPath = QCoreApplication::applicationDirPath() + "/../../database/parking.db";
+    const QString dbPath = QCoreApplication::applicationDirPath() + "/database/parking_1.db";
     dbFilePath_ = dbPath;
     qDebug() << "[DB] Expected database path:" << dbPath;
     {
