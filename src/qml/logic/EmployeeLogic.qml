@@ -95,7 +95,7 @@ Item {
             let newSelectionData = null;
             for (let i = 0; i < employees.length; i++) {
                 const emp = employees[i];
-                employeeModel.append(emp);
+                employeeModel.insert(0,emp);
                 if (emp.id === currentId) {
                     newSelectionData = emp;
                 }

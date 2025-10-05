@@ -1731,7 +1731,7 @@ Item {
 												RowLayout {
 													anchors.fill: parent
 													spacing: 8
-													Text { text: id; color: "white"; Layout.preferredWidth: 50 }
+													Text { text: (index + 1); color: "white"; Layout.preferredWidth: 50 }
 													Text { text: full_name; color: "white"; Layout.preferredWidth: 180; elide: Text.ElideRight }
 													Text { text: staff_id; color: "white"; Layout.preferredWidth: 120 }
 													Text { text: role; color: "white"; Layout.preferredWidth: 120 }
