@@ -74,7 +74,7 @@ Item {
             Layout.fillHeight: true
         }
         // Trang Quản trị
-        Pages.AdminPage {
+        AdminPage {
             id: adminPage
             Layout.fillWidth: true
             Layout.fillHeight: true

@@ -965,12 +965,25 @@ Item {
 											radius: 8
 										}
 									}
-									ComboBox {
-										id: userVehicleType
-										model: ["Xe máy", "Ô tô"]
+									// ComboBox {
+									// 	id: userVehicleType
+									// 	model: ["Xe máy", "Ô tô"]
+									// 	Layout.preferredWidth: 140
+									// 	Layout.preferredHeight: 24
+									// 	background: Rectangle {
+									// 		radius: 8
+									// 	}
+									// }
+									TextField {
+										id: userVehicleType // <-- THIS LINE IS CRUCIAL FOR THE ALIAS
+										placeholderText: "Loại xe"
+										placeholderTextColor: "#bbb"
+										color: "white"
+										readOnly: true
 										Layout.preferredWidth: 140
-										Layout.preferredHeight: 24
 										background: Rectangle {
+											color: "#444"
+											border.color: "#555"
 											radius: 8
 										}
 									}

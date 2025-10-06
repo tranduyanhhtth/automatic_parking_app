@@ -13,6 +13,7 @@ Item {
     property alias listModel: usersModel
     property int selectedUserId: -1
 
+    // This function is no longer needed here, but we can leave it for now.
     function normalizeVehicleLabel(txt) {
         var t = (''+txt).toLowerCase()
         if (t.indexOf('ô') === 0 || t.indexOf('o t') === 0 || t.indexOf('car') === 0) return 'car'
@@ -28,6 +29,7 @@ Item {
         for (var i=0;i<rows.length;i++) usersModel.append(rows[i])
     }
 
+    // --- Adjust selectUser function ---
     function selectUser(id, full_name, phone, rfid, plate, vehicle_type) {
         selectedUserId = id
         if (!adminPage) return
@@ -35,9 +37,13 @@ Item {
         if (adminPage.userPhone) adminPage.userPhone.text = phone
         if (adminPage.userRfid) adminPage.userRfid.text = rfid
         if (adminPage.userPlate) adminPage.userPlate.text = plate
-        if (adminPage.userVehicleType) adminPage.userVehicleType.currentIndex = (vehicle_type === 'car'?1:0)
+        // [-] REMOVE setting currentIndex on a ComboBox
+        // if (adminPage.userVehicleType) adminPage.userVehicleType.currentIndex = (vehicle_type === 'car'?1:0)
+        // [+] ADD setting the text of the new TextField
+        if (adminPage.userVehicleType) adminPage.userVehicleType.text = (vehicle_type === 'car' ? 'Ô tô' : 'Xe máy')
     }
 
+    // --- Adjust addOrUpdate function ---
     function addOrUpdate(isUpdate) {
         if (!adminPage) { console.log('[UsersLogic] addOrUpdate: adminPage undefined'); return }
         // Resolve field objects once with safe fallback
@@ -48,8 +54,7 @@ Item {
         var fVt = adminPage.userVehicleType ? adminPage.userVehicleType : null
         if(!fName || !fPhone || !fRfid || !fPlate || !fVt){
             console.log('[UsersLogic] Missing field refs', {hasName:!!fName, hasPhone:!!fPhone, hasRfid:!!fRfid, hasPlate:!!fPlate, hasVehicle:!!fVt})
-            if(notify) notify('Thiếu control form user');
-            return
+            if(notify) notify('Thiếu control form user'); return
         }
         var name = fName.text
         if (!name || name.length < 2) { if (notify) notify('Tên không hợp lệ'); return }
@@ -61,17 +66,29 @@ Item {
         var plate = fPlate.text
         if (!plate || !plate.length) { if (notify) notify('Vui lòng nhập biển số xe'); return }
 
-        var vt = normalizeVehicleLabel(fVt.currentText)
+        //REMOVE getting vehicle type from the UI component
+        // var vt = normalizeVehicleLabel(fVt.currentText)
+
         const r = rRepo()
         var card = r.getRfidCard(rfid)
         if (!card || !card.rfid) {
             if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' không tồn tại. Vui lòng tạo thẻ trước khi gán.")
             return; // Stop the entire process
         }
-        if (card.status !== 'available') {
-            if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' đã được gán hoặc không khả dụng.")
-            return; // Stop the entire process
+
+        // When updating, we should allow re-assigning to the same user.
+        if (card.status !== 'available' && !isUpdate) {
+             if (notify) notify("Lỗi: Thẻ RFID '" + rfid + "' đã được gán hoặc không khả dụng.")
+             return; // Stop the entire process
         }
+
+        //ADD getting vehicle type directly from the card object
+        var vt = card.vehicle_type; // e.g., 'car' or 'bike'
+        if (!vt) {
+            if (notify) notify("Lỗi: Không thể xác định loại xe từ thẻ RFID.");
+            return;
+        }
+
         if (!r || !r.upsertUser) { if (notify) notify('Thiếu repo.upsertUser'); return }
         console.log('[UsersLogic] upsertUser request', {name:name, phone:phone, rfid:rfid, plate:plate, vt:vt})
         var uid = r.upsertUser(name, phone, rfid, plate, vt)
@@ -103,6 +120,37 @@ Item {
             refresh();
             selectedUserId = -1;
             if(adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
+        }
+    }
+
+    // --- MODIFICATION 1: ADD a new Connections block for auto-filling ---
+    Connections {
+        // Target the userRfid field from AdminPage
+        target: adminPage ? adminPage.userRfid : null
+
+        // When its text changes, trigger our logic
+        onTextChanged: {
+            if (!adminPage || !adminPage.userRfid || !adminPage.userVehicleType) return;
+
+            const rfid = adminPage.userRfid.text;
+            const vehicleField = adminPage.userVehicleType;
+            const r = rRepo();
+
+            if (!rfid) {
+                vehicleField.text = ""; // Clear the vehicle field if RFID is empty
+                return;
+            }
+
+            if (r && r.getRfidCard) {
+                const card = r.getRfidCard(rfid);
+                if (card && card.rfid) {
+                    // Card found, update the UI with a user-friendly name
+                    vehicleField.text = (card.vehicle_type === 'car' ? 'Ô tô' : 'Xe máy');
+                } else {
+                    // Card not found
+                    vehicleField.text = "Không tìm thấy";
+                }
+            }
         }
     }
 
