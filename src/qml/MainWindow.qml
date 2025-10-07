@@ -74,7 +74,7 @@ Item {
             Layout.fillHeight: true
         }
         // Trang Quản trị
-        Pages.AdminPage {
+        AdminPage {
             id: adminPage
             Layout.fillWidth: true
             Layout.fillHeight: true
@@ -172,6 +172,13 @@ Item {
                 adminPage.usersLogic = item.usersLogic
                 adminPage.employeeLogic = item.employeeLogic
                 if(item.subsLogic) adminPage.subsLogic = item.subsLogic
+            }
+            if (item.rfidLogic) {
+                item.rfidLogic.tfRfid = adminPage.rfidTextField
+                item.rfidLogic.cbVehicle = adminPage.rfidVehicleCombo
+                item.rfidLogic.cbTicket = adminPage.rfidTicketCombo
+                item.rfidLogic.cbStatus = adminPage.rfidStatusCombo
+                item.rfidLogic.tfDesc = adminPage.rfidDescField
             }
         }
     }

@@ -73,6 +73,12 @@ Item {
 	property var usersLogic: null
 	property var employeeLogic: null
 	property alias tabBar: tabbar
+	// Add these aliases to expose the RFID tab controls
+	property alias rfidTextField: tfRfid
+	property alias rfidVehicleCombo: cbVehicle
+	property alias rfidTicketCombo: cbTicket
+	property alias rfidStatusCombo: cbStatus
+	property alias rfidDescField: tfDesc
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
 	property bool triggerUpdateUser: false
@@ -658,17 +664,17 @@ Item {
 								anchors.fill: parent
 								anchors.margins: 10
 								spacing: 8
-								RfidCardsLogic {
-									id: rfidLogic
-									adminPage: adminPage
-									tfRfid: tfRfid
-									cbVehicle: cbVehicle
-									cbTicket: cbTicket
-									cbStatus: cbStatus
-									tfDesc: tfDesc
-									repoRef: repo
-									notify: notifyLogic.push
-								}
+								// RfidCardsLogic {
+								// 	id: rfidLogic
+								// 	adminPage: adminPage
+								// 	tfRfid: tfRfid
+								// 	cbVehicle: cbVehicle
+								// 	cbTicket: cbTicket
+								// 	cbStatus: cbStatus
+								// 	tfDesc: tfDesc
+								// 	repoRef: repo
+								// 	notify: notifyLogic.push
+								// }
 								RowLayout {
 									Layout.fillWidth: true
 									spacing: 8
@@ -965,12 +971,25 @@ Item {
 											radius: 8
 										}
 									}
-									ComboBox {
-										id: userVehicleType
-										model: ["Xe máy", "Ô tô"]
+									// ComboBox {
+									// 	id: userVehicleType
+									// 	model: ["Xe máy", "Ô tô"]
+									// 	Layout.preferredWidth: 140
+									// 	Layout.preferredHeight: 24
+									// 	background: Rectangle {
+									// 		radius: 8
+									// 	}
+									// }
+									TextField {
+										id: userVehicleType 
+										placeholderText: "Loại xe"
+										placeholderTextColor: "white"
+										color: "white"
+										readOnly: true
 										Layout.preferredWidth: 140
-										Layout.preferredHeight: 24
 										background: Rectangle {
+											color: "#999"
+											border.color: "#555"
 											radius: 8
 										}
 									}
@@ -1462,6 +1481,7 @@ Item {
 										ListView {
 											id: subsListView
 											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 4) && !adminPage.loginVisible
+											Layout.fillWidth: true
 											Layout.fillHeight: true
 											model: adminPage.subscriptionListModel
 											clip: true

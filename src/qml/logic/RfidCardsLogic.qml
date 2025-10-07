@@ -56,13 +56,17 @@ Item {
         if (r.getRfidCard) {
             const ex = r.getRfidCard(rfid)
             existed = !!(ex && ex.rfid)
+            if (ex && ex.status === 'assigned' && ex.vehicle_type !== vt) {
+                if (notify) notify('Không thể đổi loại xe cho thẻ đã được gán')
+                    return 
+            }
         }
         const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '')
         console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
         if (notify) notify(ok ? (existed ? 'Đã cập nhật thẻ' : 'Đã tạo thẻ mới') : 'Không thể lưu thẻ')
         if (ok) {
+            lastNotifiedExistingRfid = rfid
             refresh(); prefill(rfid)
-            // Signal the Users/Subscriptions tabs to refresh
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
     }
@@ -101,6 +105,7 @@ Item {
         console.log('[RfidCardsLogic] status change result', ok)
         if(notify) notify(ok ? ('Đã chuyển trạng thái '+newStatus) : 'Không thể đổi trạng thái')
         if(ok){
+            lastNotifiedExistingRfid = rfid
             refresh(); prefill(rfid)
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
@@ -141,7 +146,8 @@ Item {
             if (idx < 0 || idx >= listModel.count) return
             const row = listModel.get(idx)
             if (!row) return
-            // Prefill top form directly from the selected row
+            scannedRfid = row.rfid || ''
+            lastNotifiedExistingRfid = scannedRfid
             if (tfRfid) tfRfid.text = row.rfid || ''
             if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 0 : 1)
             const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
@@ -151,9 +157,6 @@ Item {
             const sIdx = statusMap.indexOf(row.status || '')
             if (cbStatus && sIdx >= 0) cbStatus.currentIndex = sIdx
             if (tfDesc) tfDesc.text = row.description || ''
-            scannedRfid = row.rfid || ''
-            // Avoid duplicate toast on selection-driven prefill
-            lastNotifiedExistingRfid = scannedRfid
         }
     }
 
