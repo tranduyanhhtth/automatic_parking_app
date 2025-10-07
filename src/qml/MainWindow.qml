@@ -191,7 +191,11 @@ Item {
     Connections {
         target: adminPage
         function onTriggerCloseChanged() {
-            if (adminPage.triggerClose) contentStack.currentIndex = 0
+            if (adminPage.triggerClose) {
+                contentStack.currentIndex = 0
+                // Reset the trigger so it can be used again
+                adminPage.triggerClose = false
+            }
         }
     }
 
