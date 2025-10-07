@@ -67,6 +67,7 @@ Item {
         console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
         if (notify) notify(ok ? (existed ? 'Đã cập nhật thẻ' : 'Đã tạo thẻ mới') : 'Không thể lưu thẻ')
         if (ok) {
+            lastNotifiedExistingRfid = rfid
             refresh(); prefill(rfid)
             // Signal the Users/Subscriptions tabs to refresh
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
@@ -90,7 +91,7 @@ Item {
         const ok = r.deleteRfidCard(rfid)
         console.log('[RfidCardsLogic] delete result', ok)
         if (notify) notify(ok ? 'Đã xóa thẻ' : 'Không thể xóa thẻ')
-        if (ok) { 
+        if (ok) {
             tfRfid.text=''; tfDesc.text=''; scannedRfid=''; 
             refresh(); 
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
@@ -107,6 +108,7 @@ Item {
         console.log('[RfidCardsLogic] status change result', ok)
         if(notify) notify(ok ? ('Đã chuyển trạng thái '+newStatus) : 'Không thể đổi trạng thái')
         if(ok){
+            lastNotifiedExistingRfid = rfid
             refresh(); prefill(rfid)
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
