@@ -73,6 +73,12 @@ Item {
 	property var usersLogic: null
 	property var employeeLogic: null
 	property alias tabBar: tabbar
+	// Add these aliases to expose the RFID tab controls
+	property alias rfidTextField: tfRfid
+	property alias rfidVehicleCombo: cbVehicle
+	property alias rfidTicketCombo: cbTicket
+	property alias rfidStatusCombo: cbStatus
+	property alias rfidDescField: tfDesc
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
 	property bool triggerUpdateUser: false
@@ -145,6 +151,7 @@ Item {
 	//	 adminPage: adminPage
 	//	 notify: notifyLogic.push
 	// }
+
 	DashboardLogic {
 		id: dashboardLogic
 		adminPage: adminPage
@@ -658,17 +665,17 @@ Item {
 								anchors.fill: parent
 								anchors.margins: 10
 								spacing: 8
-								RfidCardsLogic {
-									id: rfidLogic
-									adminPage: adminPage
-									tfRfid: tfRfid
-									cbVehicle: cbVehicle
-									cbTicket: cbTicket
-									cbStatus: cbStatus
-									tfDesc: tfDesc
-									repoRef: repo
-									notify: notifyLogic.push
-								}
+								// RfidCardsLogic {
+								// 	id: rfidLogic
+								// 	adminPage: adminPage
+								// 	tfRfid: tfRfid
+								// 	cbVehicle: cbVehicle
+								// 	cbTicket: cbTicket
+								// 	cbStatus: cbStatus
+								// 	tfDesc: tfDesc
+								// 	repoRef: repo
+								// 	notify: notifyLogic.push
+								// }
 								RowLayout {
 									Layout.fillWidth: true
 									spacing: 8

@@ -56,6 +56,12 @@ Item {
         if (r.getRfidCard) {
             const ex = r.getRfidCard(rfid)
             existed = !!(ex && ex.rfid)
+            // if card was assgined, cannot change vehicle
+            if (ex && ex.status === 'assigned' && ex.vehicle_type !== vt) {
+                // Feature: A toast message that customer only can updated vehicle if it was not assigned
+                if (notify) notify('Không thể đổi loại xe cho thẻ đã được gán')
+                    return // Prevent saving
+            }
         }
         const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '')
         console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
@@ -141,6 +147,9 @@ Item {
             if (idx < 0 || idx >= listModel.count) return
             const row = listModel.get(idx)
             if (!row) return
+            scannedRfid = row.rfid || ''
+            // Avoid duplicate toast on selection-driven prefill
+            lastNotifiedExistingRfid = scannedRfid
             // Prefill top form directly from the selected row
             if (tfRfid) tfRfid.text = row.rfid || ''
             if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 0 : 1)
@@ -151,9 +160,6 @@ Item {
             const sIdx = statusMap.indexOf(row.status || '')
             if (cbStatus && sIdx >= 0) cbStatus.currentIndex = sIdx
             if (tfDesc) tfDesc.text = row.description || ''
-            scannedRfid = row.rfid || ''
-            // Avoid duplicate toast on selection-driven prefill
-            lastNotifiedExistingRfid = scannedRfid
         }
     }
 
