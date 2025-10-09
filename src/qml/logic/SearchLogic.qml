@@ -11,7 +11,6 @@ Item {
         interval: 60000 // 1 minute
         running: true
         repeat: true
-        onTriggered: updateCurrentTime()
     }
 
     function getDaysInMonth(year, month) { // month is 1-based (1=Jan, 2=Feb, etc.)
