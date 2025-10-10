@@ -177,6 +177,8 @@ bool DatabaseManager::ensureSchema()
     // Migrate: add checkout images columns if missing (ignore errors if already exist)
     q.exec("ALTER TABLE parking_sessions ADD COLUMN checkout_image1 BLOB");
     q.exec("ALTER TABLE parking_sessions ADD COLUMN checkout_image2 BLOB");
+    // Add the new payment_check column
+    q.exec("ALTER TABLE parking_sessions ADD COLUMN payment_check TEXT");
 
     // 3) pricing (new normalized schema)
     if (!q.exec(R"(
@@ -2028,7 +2030,8 @@ QList<QVariantMap> DatabaseManager::searchSessions(const QString &plate,
                                                    int limit,
                                                    int offset)
 {
-    QString sql = "SELECT id, user_id, rfid, plate, checkin_time, checkout_time, duration_minutes, fee, status FROM parking_sessions WHERE 1=1";
+    // Modified to select the new 'payment_check' column
+    QString sql = "SELECT id, user_id, rfid, plate, checkin_time, checkout_time, duration_minutes, fee, status, payment_check FROM parking_sessions WHERE 1=1";
     if (!plate.isEmpty())
         sql += " AND plate = :plate";
     if (!rfid.isEmpty())
@@ -2069,6 +2072,8 @@ QList<QVariantMap> DatabaseManager::searchSessions(const QString &plate,
             m.insert("duration_minutes", q.value("duration_minutes"));
             m.insert("fee", q.value("fee"));
             m.insert("status", q.value("status"));
+            // Added the new payment_check field to the result map
+            m.insert("payment_check", q.value("payment_check"));
             out.append(m);
         }
     }
@@ -2084,7 +2089,7 @@ QVariantMap DatabaseManager::getSessionDetails(int id)
     QVariantMap m;
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        SELECT id, rfid, plate, checkin_time, checkout_time, fee, checkin_image1, checkin_image2, checkout_image1, checkout_image2 
+        SELECT id, rfid, plate, checkin_time, checkout_time, fee, checkin_image1, checkin_image2, checkout_image1, checkout_image2
         FROM parking_sessions WHERE id = :id LIMIT 1
     )");
     q.bindValue(":id", id);

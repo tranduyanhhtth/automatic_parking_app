@@ -229,6 +229,8 @@ Item {
                     checkout: r.checkout_time || "",
                     fee: r.fee || 0,
                     status: r.status || "",
+                    // Add the new field to the model
+                    payment_check: r.payment_check || "",
                     thumbnail: ""
                 });
             }
