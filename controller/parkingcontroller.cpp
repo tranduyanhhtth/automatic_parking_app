@@ -11,6 +11,8 @@
 #include <QRegularExpression>
 #include <QVariant>
 #include <QMetaObject>
+#include <QLocale>
+#include <QStringList>
 
 ParkingController::ParkingController(ICameraSnapshotProvider *cam1,
                                      ICameraSnapshotProvider *cam2,
@@ -23,6 +25,19 @@ ParkingController::ParkingController(ICameraSnapshotProvider *cam1,
                                      QObject *parent)
     : QObject(parent), m_cam1(cam1), m_cam2(cam2), m_db(db), m_barrier1(barrier1), m_barrier2(barrier2), m_ocr(ocr), m_readerEntrance(entranceReader), m_readerExit(exitReader)
 {
+    m_laneMoneyMessages.fill({});
+    m_lanePreviewInput.fill({});
+    m_lanePreviewOutput.fill({});
+    m_laneSessionIds.fill(-1);
+    m_laneTicketTypes.fill({});
+    m_laneHasSubscriptions.fill(false);
+    m_laneCardIds.fill({});
+    m_feeUpdateTimer.setInterval(15000);
+    m_feeUpdateTimer.setSingleShot(false);
+    connect(&m_feeUpdateTimer, &QTimer::timeout, this, &ParkingController::refreshLiveFees);
+    m_feeUpdateTimer.start();
+    setLaneMoneyMessage(0, defaultLaneMessage(0));
+    setLaneMoneyMessage(1, defaultLaneMessage(1));
     if (m_readerEntrance)
         connect(m_readerEntrance, &ICardReader::rfidScanned, this, &ParkingController::onEntranceRfidScanned);
     if (m_readerExit)
@@ -88,9 +103,9 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
         // OCR/YOLO temporarily disabled
         // if (m_ocr) { ... }
         // Always update entrance preview with raw images
-        m_entranceImg1 = makeDataUrlFromBytes(img1);
-        m_entranceImg2 = makeDataUrlFromBytes(img2);
-        emit entrancePreviewChanged();
+        const QString preview1 = makeDataUrlFromBytes(img1);
+        const QString preview2 = makeDataUrlFromBytes(img2);
+        setLanePreview(laneIdx, preview1, preview2);
 
         // Cập nhật lastRfid cho UI khi thực sự tiến hành check-in
         m_lastRfid = normRfid;
@@ -107,8 +122,8 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
             m_message = QStringLiteral("Check-in thành công");
             // Set giờ vào tức thời (LOCAL) rồi đồng bộ lại từ DB nếu có
             m_checkInTime = QDateTime::currentDateTime().toString(Qt::ISODate);
-            auto open = m_db->fetchOpenSession(normRfid);
-            const QString dbTime = open.value("checkin_time").toString();
+            auto openSession = m_db->fetchOpenSession(normRfid);
+            const QString dbTime = openSession.value("checkin_time").toString();
             if (!dbTime.isEmpty())
                 m_checkInTime = dbTime;
             m_checkOutTime.clear();
@@ -136,8 +151,36 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
             // Set card type from registration (hourly/daily_day/daily_night/overnight/etc.)
             m_entranceCardType = card.value(QStringLiteral("ticket_type")).toString();
             emit entranceInfoChanged();
-            m_moneyMessage = QStringLiteral("Cổng vào: %1 - %2").arg(m_entranceCardType, m_entranceCardId);
-            emit moneyMessageChanged();
+            m_laneCardIds[laneIdx] = normRfid;
+            m_laneTicketTypes[laneIdx] = m_entranceCardType;
+            const QVariantMap openInfo = m_db->fetchOpenSession(normRfid);
+            const int sessionId = openInfo.value(QStringLiteral("id")).toInt();
+            m_laneSessionIds[laneIdx] = (sessionId > 0) ? sessionId : -1;
+            bool hasSubscription = false;
+            {
+                QObject *dbObj = dynamic_cast<QObject *>(m_db);
+                if (dbObj)
+                {
+                    bool ans = false;
+                    const bool okInvoke = QMetaObject::invokeMethod(dbObj, "hasActiveSubscription",
+                                                                    Q_RETURN_ARG(bool, ans),
+                                                                    Q_ARG(QString, normRfid),
+                                                                    Q_ARG(QString, m_plate),
+                                                                    Q_ARG(QString, QString()));
+                    Q_UNUSED(okInvoke);
+                    hasSubscription = ans;
+                }
+            }
+            m_laneHasSubscriptions[laneIdx] = hasSubscription;
+            if (hasSubscription)
+            {
+                setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
+            }
+            else
+            {
+                const int fee = computeFeeForSessionNow(sessionId);
+                setLaneMoneyMessage(laneIdx, formatLaneFeeMessage(laneIdx, fee));
+            }
         }
         else if (ok == CheckInResult::AlreadyOpen)
         {
@@ -148,6 +191,8 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
         else
         {
             m_message = QStringLiteral("Lỗi check-in");
+            emit messageChanged();
+            setLaneMoneyMessage(laneIdx, QString());
         }
     }
 }
@@ -173,6 +218,7 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         return;
     if (normRfid.isEmpty())
         return;
+    m_activeExitLane = laneIdx;
     if (!m_db->hasOpenSession(normRfid))
     {
         emit showToast(QStringLiteral("Thẻ chưa được sử dụng"));
@@ -295,11 +341,23 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
             // Price already computed via session pricing; just adjust display label if needed
         }
         if (isSub)
-            m_moneyMessage = QStringLiteral("Cổng ra: Vé đăng ký - không thu phí");
+        {
+            m_laneHasSubscriptions[laneIdx] = true;
+            m_laneSessionIds[laneIdx] = -1;
+            m_laneTicketTypes[laneIdx].clear();
+            m_laneCardIds[laneIdx] = normRfid;
+            setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
+        }
         else
-            m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND").arg(fee);
-        emit moneyMessageChanged();
-        emit showToast(QStringLiteral("Kết thúc phiên: %1 VND").arg(fee));
+        {
+            m_laneHasSubscriptions[laneIdx] = false;
+            m_laneSessionIds[laneIdx] = -1;
+            m_laneTicketTypes[laneIdx].clear();
+            m_laneCardIds[laneIdx] = normRfid;
+            setLaneMoneyMessage(laneIdx,
+                                QStringLiteral("%1: Thu phí %2 VND")
+                                    .arg(laneLabel(laneIdx), QLocale::system().toString(fee)));
+        }
         m_exitCardId = normRfid;
         m_exitPlate = plateBefore;
         m_exitTimeIn = checkinBefore;
@@ -315,6 +373,134 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
         m_message = QStringLiteral("Lỗi check-out");
         emit messageChanged();
     }
+}
+
+void ParkingController::refreshLiveFees()
+{
+    if (!m_db)
+        return;
+    const QString nowIso = QDateTime::currentDateTime().toString(Qt::ISODate);
+    for (int laneIdx = 0; laneIdx < static_cast<int>(m_laneSessionIds.size()); ++laneIdx)
+    {
+        const int sessionId = m_laneSessionIds[laneIdx];
+        if (sessionId <= 0)
+            continue;
+        if (m_laneHasSubscriptions[laneIdx])
+        {
+            setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
+            continue;
+        }
+        const int fee = computeFeeForSessionNow(sessionId, nowIso);
+        setLaneMoneyMessage(laneIdx, formatLaneFeeMessage(laneIdx, fee));
+    }
+}
+
+void ParkingController::setLaneMoneyMessage(int laneIdx, const QString &message)
+{
+    if (laneIdx < 0 || laneIdx >= static_cast<int>(m_laneMoneyMessages.size()))
+        return;
+    QString effective = message;
+    if (effective.trimmed().isEmpty())
+        effective = defaultLaneMessage(laneIdx);
+    const bool laneChanged = (m_laneMoneyMessages[laneIdx] != effective);
+    m_laneMoneyMessages[laneIdx] = effective;
+    QStringList parts;
+    for (const auto &msg : m_laneMoneyMessages)
+    {
+        if (!msg.isEmpty())
+            parts << msg;
+    }
+    const QString aggregated = parts.join(QStringLiteral(" | "));
+    const bool aggregatedChanged = (m_moneyMessage != aggregated);
+    if (laneChanged || aggregatedChanged)
+    {
+        m_moneyMessage = aggregated;
+        emit moneyMessageChanged();
+    }
+}
+
+void ParkingController::setLanePreview(int laneIdx, const QString &inputUrl, const QString &outputUrl)
+{
+    if (laneIdx < 0 || laneIdx >= static_cast<int>(m_lanePreviewInput.size()))
+        return;
+    bool changed = false;
+    if (m_lanePreviewInput[laneIdx] != inputUrl)
+    {
+        m_lanePreviewInput[laneIdx] = inputUrl;
+        changed = true;
+    }
+    if (m_lanePreviewOutput[laneIdx] != outputUrl)
+    {
+        m_lanePreviewOutput[laneIdx] = outputUrl;
+        changed = true;
+    }
+    if (laneIdx == 0)
+    {
+        if (m_entranceImg1 != inputUrl)
+        {
+            m_entranceImg1 = inputUrl;
+            changed = true;
+        }
+        if (m_entranceImg2 != outputUrl)
+        {
+            m_entranceImg2 = outputUrl;
+            changed = true;
+        }
+    }
+    if (changed)
+        emit entrancePreviewChanged();
+}
+
+void ParkingController::clearLaneState(int laneIdx)
+{
+    if (laneIdx < 0 || laneIdx >= static_cast<int>(m_laneSessionIds.size()))
+        return;
+    setLanePreview(laneIdx, QString(), QString());
+    m_laneSessionIds[laneIdx] = -1;
+    m_laneTicketTypes[laneIdx].clear();
+    m_laneHasSubscriptions[laneIdx] = false;
+    m_laneCardIds[laneIdx].clear();
+    setLaneMoneyMessage(laneIdx, QString());
+}
+
+int ParkingController::computeFeeForSessionNow(int sessionId, const QString &nowIso) const
+{
+    if (!m_db || sessionId <= 0)
+        return 0;
+    QString ts = nowIso;
+    if (ts.isEmpty())
+        ts = QDateTime::currentDateTime().toString(Qt::ISODate);
+    int fee = m_db->computeFeeForSession(sessionId, ts, false);
+    if (fee < 0)
+        fee = 0;
+    return fee;
+}
+
+QString ParkingController::formatLaneFeeMessage(int laneIdx, int fee) const
+{
+    const QString label = laneLabel(laneIdx);
+    if (fee < 0)
+        fee = 0;
+    const QString amountText = QLocale::system().toString(fee);
+    const QString cardType = m_laneTicketTypes[laneIdx];
+    const QString cardId = m_laneCardIds[laneIdx];
+    if (!cardType.isEmpty() && !cardId.isEmpty())
+        return QStringLiteral("%1: %2 (%3) - tạm tính %4 VND").arg(label, cardType, cardId, amountText);
+    if (!cardType.isEmpty())
+        return QStringLiteral("%1: %2 - tạm tính %3 VND").arg(label, cardType, amountText);
+    if (!cardId.isEmpty())
+        return QStringLiteral("%1: %2 - tạm tính %3 VND").arg(label, cardId, amountText);
+    return QStringLiteral("%1: Tạm tính %2 VND").arg(label, amountText);
+}
+
+QString ParkingController::laneLabel(int laneIdx) const
+{
+    return QStringLiteral("Làn %1").arg(laneIdx + 1);
+}
+
+QString ParkingController::defaultLaneMessage(int laneIdx) const
+{
+    return QStringLiteral("%1: ").arg(laneLabel(laneIdx));
 }
 
 QString ParkingController::makeDataUrlFromBytes(const QByteArray &bytes, const QString &mime)
@@ -334,6 +520,7 @@ void ParkingController::loadExitReview(const QString &rfid)
     {
         m_exitImg1.clear();
         m_exitImg2.clear();
+        setLanePreview(m_activeExitLane, QString(), QString());
         emit exitReviewChanged();
         return;
     }
@@ -341,6 +528,7 @@ void ParkingController::loadExitReview(const QString &rfid)
     QByteArray img2 = m.value("image2").toByteArray();
     m_exitImg1 = makeDataUrlFromBytes(img1);
     m_exitImg2 = makeDataUrlFromBytes(img2);
+    setLanePreview(m_activeExitLane, m_exitImg1, m_exitImg2);
     emit exitReviewChanged();
     const QString dbPlate = m.value("plate").toString();
     if (!dbPlate.isEmpty() && dbPlate != m_plate)
@@ -384,6 +572,8 @@ bool ParkingController::approveAndOpenBarrier()
         emit showToast(QStringLiteral("Thẻ chưa được sử dụng"));
         return false;
     }
+    m_activeExitLane = 1;
+    loadExitReview(m_lastRfid);
     QString coTime;
     // Chụp ảnh checkout tại cổng ra và lưu DB
     QByteArray exit1;
@@ -409,8 +599,13 @@ bool ParkingController::approveAndOpenBarrier()
         }
         if (fee >= 0)
         {
-            m_moneyMessage = QStringLiteral("Cổng ra: Thu phí %1 VND").arg(fee);
-            emit moneyMessageChanged();
+            setLaneMoneyMessage(1,
+                                QStringLiteral("%1: Thu phí %2 VND")
+                                    .arg(laneLabel(1), QLocale::system().toString(fee)));
+            m_laneSessionIds[1] = -1;
+            m_laneTicketTypes[1].clear();
+            m_laneHasSubscriptions[1] = false;
+            m_laneCardIds[1] = m_lastRfid;
         }
         // Cổng ra luôn dùng barrier2
         if (m_barrier2)

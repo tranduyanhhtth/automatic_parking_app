@@ -13,15 +13,22 @@ Item {
             const p = adminPage.loginPassField.text || ""
             const ok = allowedAccounts && allowedAccounts.some(a => a.username === u && a.password === p)
             if (ok) {
+                var root = adminPage
+                while (root.parent) { root = root.parent }
+                root.isAuthenticated = true
                 adminPage.loginVisible = false
                 if (notify) notify('Đăng nhập thành công')
             } else {
                 adminPage.loginErrorLabel.text = 'Sai tài khoản hoặc mật khẩu'
             }
+            adminPage.triggerLogin = false
         }
         function onTriggerLogoutAndCloseChanged() {
             if (!adminPage.triggerLogoutAndClose) return;
-            adminPage.loginVisible = false;
+            var root = adminPage
+            while (root.parent) { root = root.parent }
+            root.isAuthenticated = false; 
+            adminPage.loginVisible = true;
             if (adminPage.loginUserField) adminPage.loginUserField.text = '';
             if (adminPage.loginPassField) adminPage.loginPassField.text = '';
             if (adminPage.loginErrorLabel) adminPage.loginErrorLabel.text = '';

@@ -70,6 +70,8 @@ Item {
     property alias lane1OutputPreviewSource: lane1.outputPreviewSource
     property alias lane2InputPreviewSource: lane2.inputPreviewSource
     property alias lane2OutputPreviewSource: lane2.outputPreviewSource
+    property alias lane1MoneyMessage: lane1.moneyMessage
+    property alias lane2MoneyMessage: lane2.moneyMessage
 
     property string timeInText: ""
     property string timeOutText: ""
@@ -177,30 +179,6 @@ Item {
                             Layout.fillHeight: true
                             laneTitle: (app.dualMode === 1 ? "CỔNG VÀO" : "CỔNG RA")
                             isEntrance: app.dualMode === 1
-                        }
-                    }
-                    Rectangle {
-                        Layout.fillWidth: true
-                        Layout.preferredHeight: 52
-                        color: "#FFF7E0"
-                        border.color: "#E0C97A"
-                        RowLayout {
-                            anchors.fill: parent
-                            anchors.margins: 8
-                            spacing: 12
-                            Text {
-                                text: "THÔNG BÁO TIỀN:"
-                                font.bold: true
-                                font.pixelSize: 24
-                                color: "#8A6D3B"
-                            }
-                            Text {
-                                text: app.moneyMessage || ""
-                                color: "#8A6D3B"
-                                font.pixelSize: 24
-                                Layout.fillWidth: true
-                                elide: Text.ElideRight
-                            }
                         }
                     }
                 }

@@ -1,4 +1,5 @@
 import QtQuick
+import "./"
 
 // Orchestrator for Admin area: delegates to tab-level logic modules
 Item {

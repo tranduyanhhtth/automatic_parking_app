@@ -191,7 +191,10 @@ Item {
     Connections {
         target: adminPage
         function onTriggerCloseChanged() {
-            if (adminPage.triggerClose) contentStack.currentIndex = 0
+            if (adminPage.triggerClose) {
+                contentStack.currentIndex = 0
+                adminPage.triggerClose = false
+            }
         }
     }
 
@@ -271,33 +274,43 @@ Item {
     Binding {
         target: form
         property: "lane1InputPreviewSource"
-        value: app.exitReviewAvailable
-               ? (app.dualMode === 2 ? (app.entrancePreviewImage1DataUrl || "")
-                                      : (cameraLane1.inputSnapshotDataUrl))
-               : (app.dualMode !== 2 ? cameraLane1.inputSnapshotDataUrl : cameraLane2.inputSnapshotDataUrl)
+        value: app.lane1InputPreviewImage && app.lane1InputPreviewImage.length > 0
+               ? app.lane1InputPreviewImage
+               : (app.dualMode === 2 ? cameraLane2.inputSnapshotDataUrl
+                                      : cameraLane1.inputSnapshotDataUrl)
     }
     Binding {
         target: form
         property: "lane1OutputPreviewSource"
-        value: app.exitReviewAvailable
-               ? (app.dualMode === 2 ? (app.entrancePreviewImage2DataUrl || "")
-                                      : (cameraLane1.outputSnapshotDataUrl))
-               : (app.dualMode !== 2 ? cameraLane1.outputSnapshotDataUrl : cameraLane2.outputSnapshotDataUrl)
+        value: app.lane1OutputPreviewImage && app.lane1OutputPreviewImage.length > 0
+               ? app.lane1OutputPreviewImage
+               : (app.dualMode === 2 ? cameraLane2.outputSnapshotDataUrl
+                                      : cameraLane1.outputSnapshotDataUrl)
     }
     Binding {
         target: form
         property: "lane2InputPreviewSource"
-        value: app.exitReviewAvailable
-               ? (app.dualMode !== 1 ? (app.entrancePreviewImage1DataUrl || "")
-                                      : (cameraLane2.inputSnapshotDataUrl))
-               : (app.dualMode === 1 ? cameraLane1.inputSnapshotDataUrl : cameraLane2.inputSnapshotDataUrl)
+        value: app.lane2InputPreviewImage && app.lane2InputPreviewImage.length > 0
+               ? app.lane2InputPreviewImage
+               : (app.dualMode === 1 ? cameraLane1.inputSnapshotDataUrl
+                                      : cameraLane2.inputSnapshotDataUrl)
     }
     Binding {
         target: form
         property: "lane2OutputPreviewSource"
-        value: app.exitReviewAvailable
-               ? (app.dualMode !== 1 ? (app.entrancePreviewImage2DataUrl || "")
-                                      : (cameraLane2.outputSnapshotDataUrl))
-               : (app.dualMode === 1 ? cameraLane1.outputSnapshotDataUrl : cameraLane2.outputSnapshotDataUrl)
+        value: app.lane2OutputPreviewImage && app.lane2OutputPreviewImage.length > 0
+               ? app.lane2OutputPreviewImage
+               : (app.dualMode === 1 ? cameraLane1.outputSnapshotDataUrl
+                                      : cameraLane2.outputSnapshotDataUrl)
+    }
+    Binding {
+        target: form
+        property: "lane1MoneyMessage"
+        value: app.lane1MoneyMessage
+    }
+    Binding {
+        target: form
+        property: "lane2MoneyMessage"
+        value: app.lane2MoneyMessage
     }
 }

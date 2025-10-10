@@ -519,7 +519,6 @@ bool DatabaseManager::checkInEmployee(int employeeId)
     return q.numRowsAffected() > 0;
 }
 
-// ADDED: Implementation for check-out
 bool DatabaseManager::checkOutEmployee(int employeeId)
 {
     QSqlQuery q(DB_Connection);
@@ -2373,7 +2372,7 @@ bool DatabaseManager::deleteClosedSessions(const QString &rfid)
     const QString encRfid = rfid;
     QSqlQuery q(DB_Connection);
     // Preserve history but free the card by clearing RFID on closed sessions
-    q.prepare("UPDATE parking_sessions SET rfid = '' WHERE rfid = :rfid AND checkout_time IS NOT NULL");
+    q.prepare("UPDATE parking_sessions SET rfid = NULL WHERE rfid = :rfid AND checkout_time IS NOT NULL");
     q.bindValue(":rfid", encRfid);
     if (!q.exec())
     {
@@ -2974,9 +2973,27 @@ int DatabaseManager::computeFeeForSession(int sessionId,
 
     // Apply minimum base when duration beyond grace but fee came out 0 due to grace rules
     const qint64 durationMin = qMax<qint64>(0, tin.secsTo(tout) / 60);
-    const bool isPerUse = ttJoined.isEmpty() || ttJoined == QLatin1String("hourly") || ttJoined == QLatin1String("daily_day") || ttJoined == QLatin1String("daily_night") || ttJoined == QLatin1String("overnight");
-    if (durationMin > qMax(0, graceAll) && isPerUse && fee == 0 && baseMin > 0)
-        fee = baseMin;
+    const bool isHourly = ttJoined == QLatin1String("hourly") || ttJoined.isEmpty();
+    const bool isDaily = ttJoined == QLatin1String("daily_day") || ttJoined == QLatin1String("daily_night") || ttJoined == QLatin1String("overnight");
+    const bool isPerUse = isHourly || isDaily;
+
+    if (baseMin > 0)
+    {
+        if (isDaily)
+        {
+            if (fee <= 0)
+                fee = baseMin;
+        }
+        else if (isHourly)
+        {
+            if ((graceAll <= 0 || durationMin > qMax(0, graceAll)) && fee == 0)
+                fee = baseMin;
+        }
+        else if (isPerUse && durationMin > qMax(0, graceAll) && fee == 0)
+        {
+            fee = baseMin;
+        }
+    }
 
     return fee;
 }

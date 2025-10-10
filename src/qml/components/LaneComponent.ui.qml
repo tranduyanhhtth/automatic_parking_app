@@ -15,6 +15,7 @@ Rectangle {
     // Designer-safe: expose preview sources as properties set from logic outside
     property url inputPreviewSource: ""
     property url outputPreviewSource: ""
+    property string moneyMessage: ""
     property alias inputVideo: inputVideo
     property alias outputVideo: outputVideo
     property alias inputPreview: inputPreview
@@ -329,6 +330,26 @@ Rectangle {
                             }
                         }
                     }
+                }
+            }
+        }
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: moneyMessage.length > 0 ? 48 : 0
+            visible: moneyMessage.length > 0
+            color: "#FFF7E0"
+            border.color: "#E0C97A"
+            radius: 4
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 8
+                Text {
+                    text: moneyMessage
+                    font.pixelSize: 22
+                    font.bold: true
+                    color: "#8A6D3B"
+                    elide: Text.ElideRight
+                    Layout.fillWidth: true
                 }
             }
         }

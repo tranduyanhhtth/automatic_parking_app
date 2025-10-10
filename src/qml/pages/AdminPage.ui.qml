@@ -166,13 +166,12 @@ Item {
 		id: revenueSaveDialog
 		title: "Chọn nơi lưu CSV Doanh thu"
 		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
-		selectedFile: "bao_cao_doanh_thu.csv"
+		onAccepted: adminPage.triggerExportCsv = !adminPage.triggerExportCsv
 	}
 	FileDialog {
 		id: subsSaveDialog
 		title: "Chọn nơi lưu CSV Đăng ký"
 		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
-		selectedFile: "dang_ky_het_han.csv"
 		onAccepted: adminPage.triggerSubsSaveDialogAccepted = !adminPage.triggerSubsSaveDialogAccepted
 	}
 	// Content root to be blurred when login overlay is visible
@@ -585,6 +584,12 @@ Item {
 											font.bold: true
 											Layout.preferredWidth: 160
 										}
+										Text {
+											text: "Miễn phí (phút)"
+											color: "white"
+											font.bold: true
+											Layout.preferredWidth: 140
+										}
 									}
 
 									// Rows
@@ -646,6 +651,32 @@ Item {
 													target: tfPriceValue
 													function onTextChanged() {
 														pricingLogic.onPriceFieldChanged(ticket_type, tfPriceValue.text)
+													}
+												}
+												TextField {
+													id: tfGraceValue
+													text: grace_value
+													readOnly: !pricingLogic.editMode || grace_hint === "-"
+													enabled: grace_hint !== "-"
+													placeholderText: grace_hint
+													color: "black"
+													placeholderTextColor: "#bbbbbb"
+													Layout.preferredWidth: 140
+													validator: IntValidator {
+														bottom: 0
+														top: 1000
+													}
+													background: Rectangle {
+														color: tfGraceValue.readOnly ? "gray" : "white"
+														radius: 6
+														border.color: "#666666"
+													}
+												}
+
+												Connections {
+													target: tfGraceValue
+													function onTextChanged() {
+														pricingLogic.onGraceFieldChanged(ticket_type, tfGraceValue.text)
 													}
 												}
 											}
@@ -847,7 +878,7 @@ Item {
 											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 2) && !adminPage.loginVisible
 											Layout.fillWidth: true
 											Layout.fillHeight: true
-											model: rfidLogic.listModel
+											model: rfidLogic ? rfidLogic.listModel : null
 											clip: true
 											delegate: Rectangle {
 												color: (adminPage.pendingSelectRfidIndex === index) ? "#334455" : ((tfRfid && rfid === tfRfid.text) ? "#4ec9b0" : "transparent")

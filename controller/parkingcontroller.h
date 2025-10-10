@@ -5,6 +5,8 @@
 #include <QString>
 #include <QByteArray>
 #include <QVariantMap>
+#include <QTimer>
+#include <array>
 #include "domain/ports/icamerasnapshotprovider.h"
 #include "domain/ports/iparkingrepository.h"
 #include "domain/ports/ibarrier.h"
@@ -38,6 +40,8 @@ class ParkingController : public QObject
     Q_PROPERTY(QString exitCardId READ exitCardId NOTIFY exitInfoChanged)
     // Thông báo tiền
     Q_PROPERTY(QString moneyMessage READ moneyMessage NOTIFY moneyMessageChanged)
+    Q_PROPERTY(QString lane1MoneyMessage READ lane1MoneyMessage NOTIFY moneyMessageChanged)
+    Q_PROPERTY(QString lane2MoneyMessage READ lane2MoneyMessage NOTIFY moneyMessageChanged)
     Q_PROPERTY(int gateMode READ gateMode WRITE setGateMode NOTIFY gateModeChanged) // 0: Cổng vào, 1: Cổng ra
     Q_PROPERTY(int lane READ lane WRITE setLane NOTIFY laneChanged)                 // 0: Làn 1, 1: Làn 2
     Q_PROPERTY(int openCount READ openCount NOTIFY openCountChanged)
@@ -50,6 +54,10 @@ class ParkingController : public QObject
     // Ảnh xem trước cổng vào có vẽ bounding boxes
     Q_PROPERTY(QString entrancePreviewImage1DataUrl READ entrancePreviewImage1DataUrl NOTIFY entrancePreviewChanged)
     Q_PROPERTY(QString entrancePreviewImage2DataUrl READ entrancePreviewImage2DataUrl NOTIFY entrancePreviewChanged)
+    Q_PROPERTY(QString lane1InputPreviewImage READ lane1InputPreviewImage NOTIFY entrancePreviewChanged)
+    Q_PROPERTY(QString lane1OutputPreviewImage READ lane1OutputPreviewImage NOTIFY entrancePreviewChanged)
+    Q_PROPERTY(QString lane2InputPreviewImage READ lane2InputPreviewImage NOTIFY entrancePreviewChanged)
+    Q_PROPERTY(QString lane2OutputPreviewImage READ lane2OutputPreviewImage NOTIFY entrancePreviewChanged)
 public:
     explicit ParkingController(ICameraSnapshotProvider *cam1,
                                ICameraSnapshotProvider *cam2,
@@ -74,6 +82,8 @@ public:
         {
             m_gateMode = m;
             emit gateModeChanged();
+            clearLaneState(0);
+            clearLaneState(1);
 
             // Khi chuyển cổng, reset debounce để cho phép quẹt thẻ ngay lập tức
             if (auto hid = qobject_cast<QObject *>(m_readerEntrance))
@@ -161,6 +171,8 @@ public:
             return;
         m_lane = l;
         emit laneChanged();
+        clearLaneState(0);
+        clearLaneState(1);
         // Khi đổi làn, làm sạch UI tương tự đổi cổng
         if (m_cam1)
             m_cam1->clearSnapshots();
@@ -224,6 +236,8 @@ public slots:
             return;
         m_dualMode = mode;
         emit dualModeChanged();
+        clearLaneState(0);
+        clearLaneState(1);
         // Clear transient UI and reset debounce on mode change
         if (m_cam1)
             m_cam1->clearSnapshots();
@@ -323,6 +337,15 @@ private:
     QString m_exitTimeIn;
     QString m_exitTimeOut;
     QString m_exitCardId;
+    std::array<QString, 2> m_laneMoneyMessages{};
+    std::array<QString, 2> m_lanePreviewInput{};
+    std::array<QString, 2> m_lanePreviewOutput{};
+    std::array<int, 2> m_laneSessionIds{{-1, -1}};
+    std::array<QString, 2> m_laneTicketTypes{};
+    std::array<bool, 2> m_laneHasSubscriptions{{false, false}};
+    std::array<QString, 2> m_laneCardIds{};
+    int m_activeExitLane = 1;
+    QTimer m_feeUpdateTimer;
 
     QString m_moneyMessage;
 
@@ -332,6 +355,14 @@ private:
     inline IBarrier *currentBarrier() const { return m_lane == 0 ? m_barrier1 : m_barrier2; }
     inline ICameraSnapshotProvider *camForLane(int lane) const { return lane == 0 ? m_cam1 : m_cam2; }
     inline IBarrier *barrierForLane(int lane) const { return lane == 0 ? m_barrier1 : m_barrier2; }
+    void refreshLiveFees();
+    void setLaneMoneyMessage(int laneIdx, const QString &message);
+    void setLanePreview(int laneIdx, const QString &inputUrl, const QString &outputUrl);
+    void clearLaneState(int laneIdx);
+    int computeFeeForSessionNow(int sessionId, const QString &nowIso = QString()) const;
+    QString formatLaneFeeMessage(int laneIdx, int fee) const;
+    QString laneLabel(int laneIdx) const;
+    QString defaultLaneMessage(int laneIdx) const;
     void processEntranceRfid(const QString &normRfid, int laneIdx);
     void processExitRfid(const QString &normRfid, int laneIdx);
     // Helper cho QML
@@ -346,6 +377,12 @@ public:
     QString exitTimeOut() const { return m_exitTimeOut; }
     QString exitCardId() const { return m_exitCardId; }
     QString moneyMessage() const { return m_moneyMessage; }
+    QString lane1MoneyMessage() const { return m_laneMoneyMessages[0]; }
+    QString lane2MoneyMessage() const { return m_laneMoneyMessages[1]; }
+    QString lane1InputPreviewImage() const { return m_lanePreviewInput[0]; }
+    QString lane1OutputPreviewImage() const { return m_lanePreviewOutput[0]; }
+    QString lane2InputPreviewImage() const { return m_lanePreviewInput[1]; }
+    QString lane2OutputPreviewImage() const { return m_lanePreviewOutput[1]; }
 };
 
 #endif // PARKINGCONTROLLER_H

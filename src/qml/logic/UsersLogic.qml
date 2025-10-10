@@ -111,7 +111,7 @@ Item {
 
     Connections {
         target: adminPage ? adminPage.userRfid : null
-        onTextChanged: {
+        function onTextChanged() {
             if (!adminPage || !adminPage.userRfid || !adminPage.userVehicleType) return;
 
             const rfid = adminPage.userRfid.text;
@@ -119,7 +119,7 @@ Item {
             const r = rRepo();
 
             if (!rfid) {
-                vehicleField.text = ""; 
+                vehicleField.text = "";
                 return;
             }
 

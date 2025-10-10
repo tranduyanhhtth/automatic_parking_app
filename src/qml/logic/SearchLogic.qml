@@ -5,6 +5,13 @@ import QtQuick.Layouts
 Item {
     property Item searchPage
 
+    Timer {
+        id: timeUpdater
+        interval: 60000 
+        running: true
+        repeat: true
+    }
+
     function getDaysInMonth(year, month) { // month is 1-based (1=Jan, 2=Feb, etc.)
            return new Date(year, month, 0).getDate();
     }
@@ -34,8 +41,22 @@ Item {
         return `${year}-${monthStr}-${dayStr}`;
     }
 
-    // Function to update current date
-    function updateCurrentDate() {
+    // Function to update current time for both the 'From' and 'To' fields
+    function updateCurrentTime() {
+        if (searchPage) {
+            let now = new Date();
+            let hours = now.getHours();
+            let minutes = now.getMinutes();
+
+            searchPage.fromHour.currentIndex = hours;
+            searchPage.fromMinute.currentIndex = minutes;
+            searchPage.toHour.currentIndex = hours;
+            searchPage.toMinute.currentIndex = minutes;
+        }
+    }
+
+    // Function to update current date and time to defaults (today, live time for both)
+    function updateCurrentDateTime() {
         if (searchPage) {
             let now = new Date();
             let year = now.getFullYear();
@@ -43,15 +64,7 @@ Item {
             let day = now.getDate();
             searchPage.dpFrom.text = formatDate(year, month, day);
             searchPage.dpTo.text = formatDate(year, month, day);
-            // Cập nhật lại khi quay lại trang (nếu có sự kiện quay lại)
-            if (searchPage.onVisibleChanged) {
-                searchPage.onVisibleChanged.connect(function() {
-                    if (searchPage.visible) {
-                        searchPage.dpFrom.text = formatDate(year, month, day);
-                        searchPage.dpTo.text = formatDate(year, month, day);
-                    }
-                });
-            }
+            updateCurrentTime();
         }
     }
 
@@ -119,7 +132,7 @@ Item {
             // let day = now.getDate();
             // searchPage.dpFrom.text = formatDate(year, month, day);
             // searchPage.dpTo.text = formatDate(year, month, day);
-            updateCurrentDate();
+            updateCurrentDateTime();
         }
     }
 
@@ -229,12 +242,7 @@ Item {
             if (!searchPage.triggerClose) return; // chỉ xử lý khi vừa toggle
             searchPage.tfQuery.text = "";
             searchPage.cbStatus.currentIndex = 0;
-            searchPage.dpFrom.text = "";
-            searchPage.dpTo.text = "";
-            searchPage.fromHour.currentIndex = 0;
-            searchPage.fromMinute.currentIndex = 0;
-            searchPage.toHour.currentIndex = 0;
-            searchPage.toMinute.currentIndex = 0;
+            updateCurrentDateTime();
             searchPage.resultsModel.clear();
             if (searchPage.lblSummary)
                 searchPage.lblSummary.text = "0 kết quả";
@@ -282,27 +290,16 @@ Item {
                 searchPage.sessionDetailDialog.checkoutImg1Source = "";
                 searchPage.sessionDetailDialog.checkoutImg2Source = "";
             }
-            // try {
-            //     var uid = (row && row.userId) ? parseInt(row.userId) : 0;
-            //     if (uid && uid > 0 && repo.getUserById) {
-            //         var u = repo.getUserById(uid);
-            //         searchPage.userNameLabel.text = "Họ tên: " + (u.full_name || "-");
-            //         searchPage.userPhoneLabel.text = "SĐT: " + (u.phone || "-");
-            //         searchPage.userVehicleTypeLabel.text = "Loại xe: " + (u.vehicle_type || "-");
-            //         searchPage.userNoteLabel.text = "Ghi chú: " + (u.note || "-");
-            //     } else {
-            //         searchPage.userNameLabel.text = "Họ tên: -";
-            //         searchPage.userPhoneLabel.text = "SĐT: -";
-            //         searchPage.userVehicleTypeLabel.text = "Loại xe: -";
-            //         searchPage.userNoteLabel.text = "Ghi chú: -";
-            //     }
-            // } catch (e) {
-            //     searchPage.userNameLabel.text = "Họ tên: -";
-            //     searchPage.userPhoneLabel.text = "SĐT: -";
-            //     searchPage.userVehicleTypeLabel.text = "Loại xe: -";
-            //     searchPage.userNoteLabel.text = "Ghi chú: -";
-            // }
             searchPage.sessionDetailDialog.dialog.open();
+        }
+    }
+
+    Connections {
+        target: searchPage
+        function onVisibleChanged() {
+            if (searchPage.visible) {
+                updateCurrentDateTime();
+            }
         }
     }
 
