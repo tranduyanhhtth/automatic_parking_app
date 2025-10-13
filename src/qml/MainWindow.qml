@@ -88,9 +88,9 @@ Item {
         anchors.top: parent.top
         z: 9999
     }
-    
-    NotifyLogic { 
-        id: notifyLogic 
+
+    NotifyLogic {
+        id: notifyLogic
         toast: toast
     }
 

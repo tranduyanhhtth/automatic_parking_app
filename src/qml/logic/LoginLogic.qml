@@ -13,6 +13,7 @@ Item {
             const p = adminPage.loginPassField.text || ""
             const ok = allowedAccounts && allowedAccounts.some(a => a.username === u && a.password === p)
             if (ok) {
+                // Find the root item to access its properties
                 var root = adminPage
                 while (root.parent) { root = root.parent }
                 root.isAuthenticated = true
@@ -21,19 +22,19 @@ Item {
             } else {
                 adminPage.loginErrorLabel.text = 'Sai tài khoản hoặc mật khẩu'
             }
-            adminPage.triggerLogin = false
         }
         function onTriggerLogoutAndCloseChanged() {
-            if (!adminPage.triggerLogoutAndClose) return;
-            var root = adminPage
-            while (root.parent) { root = root.parent }
-            root.isAuthenticated = false; 
-            adminPage.loginVisible = true;
-            if (adminPage.loginUserField) adminPage.loginUserField.text = '';
-            if (adminPage.loginPassField) adminPage.loginPassField.text = '';
-            if (adminPage.loginErrorLabel) adminPage.loginErrorLabel.text = '';
-            adminPage.triggerLogoutAndClose = false;
-            adminPage.triggerClose = true;
-        }
+        if (!adminPage.triggerLogoutAndClose) return;
+        // Find the root item to access its properties
+        var root = adminPage
+        while (root.parent) { root = root.parent }
+        root.isAuthenticated = false; // <-- ADD THIS LINE
+        adminPage.loginVisible = true;
+        if (adminPage.loginUserField) adminPage.loginUserField.text = '';
+        if (adminPage.loginPassField) adminPage.loginPassField.text = '';
+        if (adminPage.loginErrorLabel) adminPage.loginErrorLabel.text = '';
+        adminPage.triggerLogoutAndClose = false;
+        adminPage.triggerClose = true;
+               }
     }
 }

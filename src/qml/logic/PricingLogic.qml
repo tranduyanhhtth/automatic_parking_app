@@ -106,27 +106,42 @@ Item {
     }
 
     function setPriceFor(ticketType, value) {
-        // Update the source model, then refresh filtered view
-        for (var i = 0; i < model.count; ++i) {
-            var it = model.get(i)
-            if (it.vehicle_type === selectedVehicle && it.ticket_type === ticketType) {
-                model.setProperty(i, 'price_value', value)
-                break
+            // Update the source model
+            for (var i = 0; i < model.count; ++i) {
+                var it = model.get(i)
+                if (it.vehicle_type === selectedVehicle && it.ticket_type === ticketType) {
+                    model.setProperty(i, 'price_value', value)
+                    break
+                }
             }
+            // Also update the filtered model directly to avoid a full refresh
+            for (var j = 0; j < filtered.count; ++j) {
+                if (filtered.get(j).ticket_type === ticketType) {
+                    filtered.setProperty(j, 'price_value', value)
+                    break
+                }
+            }
+            //updateFiltered()
         }
-        updateFiltered()
-    }
 
     function setGraceFor(ticketType, value) {
-        for (var i = 0; i < model.count; ++i) {
-            var it = model.get(i)
-            if (it.vehicle_type === selectedVehicle && it.ticket_type === ticketType) {
-                model.setProperty(i, 'grace_value', value)
-                break
+            // Update the source model
+            for (var i = 0; i < model.count; ++i) {
+                var it = model.get(i)
+                if (it.vehicle_type === selectedVehicle && it.ticket_type === ticketType) {
+                    model.setProperty(i, 'grace_value', value)
+                    break
+                }
             }
+            // Also update the filtered model directly
+            for (var j = 0; j < filtered.count; ++j) {
+                if (filtered.get(j).ticket_type === ticketType) {
+                    filtered.setProperty(j, 'grace_value', value)
+                    break
+                }
+            }
+            //updateFiltered() here
         }
-        updateFiltered()
-    }
 
     onSelectedVehicleChanged: updateFiltered()
     Component.onCompleted: {
