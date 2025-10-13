@@ -68,6 +68,7 @@ qt_add_qml_module(appsmart_parking_system
         controller/parkingcontroller.h controller/parkingcontroller.cpp
         domain/ports/icardreader.h
         domain/model/parkingrecord.h
+        QML_FILES
 )
 
 # Include QML and other resources from qrc files (AUTORCC is enabled for the target)
