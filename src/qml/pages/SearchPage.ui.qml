@@ -329,6 +329,12 @@ Item {
                             Layout.preferredWidth: 80
                         }
                         Text {
+                            text: "Phương thức thanh toán"
+                            color: "white"
+                            font.bold: true
+                            Layout.preferredWidth: 100
+                        }
+                        Text {
                             text: ""
                             color: "white"
                             Layout.preferredWidth: 75
@@ -399,6 +405,11 @@ Item {
                                 text: status
                                 color: "#ddd"
                                 Layout.preferredWidth: 80
+                            }
+                            Text {
+                                text: payment_check
+                                color: "#ddd"
+                                Layout.preferredWidth: 110
                             }
                             Image {
                                 source: thumbnail

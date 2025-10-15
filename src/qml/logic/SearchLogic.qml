@@ -229,6 +229,7 @@ Item {
                     checkout: r.checkout_time || "",
                     fee: r.fee || 0,
                     status: r.status || "",
+                    payment_check: r.payment_check || "",
                     thumbnail: ""
                 });
             }

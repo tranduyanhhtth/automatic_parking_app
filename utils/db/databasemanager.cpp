@@ -173,6 +173,8 @@ bool DatabaseManager::ensureSchema()
     q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_plate ON parking_sessions(plate)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_time ON parking_sessions(checkin_time, checkout_time)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_sessions_status ON parking_sessions(status)");
+    // Add the new payment_check column
+    q.exec("ALTER TABLE parking_sessions ADD COLUMN payment_check TEXT");
 
     // Migrate: add checkout images columns if missing (ignore errors if already exist)
     q.exec("ALTER TABLE parking_sessions ADD COLUMN checkout_image1 BLOB");
@@ -2027,7 +2029,7 @@ QList<QVariantMap> DatabaseManager::searchSessions(const QString &plate,
                                                    int limit,
                                                    int offset)
 {
-    QString sql = "SELECT id, user_id, rfid, plate, checkin_time, checkout_time, duration_minutes, fee, status FROM parking_sessions WHERE 1=1";
+    QString sql = "SELECT id, user_id, rfid, plate, checkin_time, checkout_time, duration_minutes, fee, status, payment_check FROM parking_sessions WHERE 1=1";
     if (!plate.isEmpty())
         sql += " AND plate = :plate";
     if (!rfid.isEmpty())
@@ -2068,6 +2070,8 @@ QList<QVariantMap> DatabaseManager::searchSessions(const QString &plate,
             m.insert("duration_minutes", q.value("duration_minutes"));
             m.insert("fee", q.value("fee"));
             m.insert("status", q.value("status"));
+            // Added the new payment_check field to the result map
+            m.insert("payment_check", q.value("payment_check"));
             out.append(m);
         }
     }
