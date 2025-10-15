@@ -214,166 +214,148 @@ void ParkingController::onExitRfidScanned(const QString &rfid)
 
 void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
 {
-    if (!m_db)
-        return;
-    if (normRfid.isEmpty())
-        return;
+    if (!m_db) return;
+    if (normRfid.isEmpty()) return;
+
     m_activeExitLane = laneIdx;
-    if (!m_db->hasOpenSession(normRfid))
-    {
+    if (!m_db->hasOpenSession(normRfid)) {
         emit showToast(QStringLiteral("Thẻ chưa được sử dụng"));
         return;
     }
-    ICameraSnapshotProvider *cam = camForLane(laneIdx);
-    IBarrier *bar = barrierForLane(laneIdx);
-    if (!cam || !bar)
-        return;
+
     m_lastRfid = normRfid;
     emit lastRfidChanged();
     loadExitReview(normRfid);
-    QByteArray live1 = cam->captureInputSnapshot(85);
-    QByteArray live2 = cam->captureOutputSnapshot(85);
-    // if (m_ocr)
-    // {
-    //     QVariantMap full = m_db->fetchFullOpenSession(normRfid);
-    //     const QString storedPlate = full.value("plate").toString();
-    //     auto normalizePlate = [](QString p)
-    //     {
-    //         p = p.toUpper();
-    //         p.remove(QRegularExpression("[^A-Z0-9]"));
-    //         return p;
-    //     };
-    //     QString ocrPlate;
-    //     {
-    //         const QVariantMap res = m_ocr->recognizePlates(live1, live2);
-    //         const QString backend = res.value("backend").toString();
-    //         const int fbc = res.value("frontBoxCount").toInt();
-    //         const int rbc = res.value("rearBoxCount").toInt();
-    //         emit showToast(QStringLiteral("OCR(%1) boxes F:%2 R:%3").arg(backend).arg(fbc).arg(rbc));
-    //         ocrPlate = res.value("front").toString();
-    //         if (ocrPlate.isEmpty())
-    //             ocrPlate = res.value("rear").toString();
-    //         if (ocrPlate.isEmpty())
-    //             ocrPlate = QStringLiteral("unknown");
-    //         emit showToast(QStringLiteral("OCR plate: %1").arg(ocrPlate));
-    //     }
-    //     const QString a = normalizePlate(storedPlate);
-    //     const QString b = normalizePlate(ocrPlate);
-    //     if (!a.isEmpty() && !b.isEmpty() && a == b)
-    //         emit showToast(QStringLiteral("Biển số khớp: %1").arg(ocrPlate));
-    //     else
-    //         emit showToast(QStringLiteral("Biển số không khớp"));
-    // }
+
     QVariantMap openBefore = m_db->fetchFullOpenSession(normRfid);
     const QString plateBefore = openBefore.value("plate").toString();
-    const QString checkinBefore = openBefore.value("checkin_time").toString();
     const int sessionId = openBefore.value("id").toInt();
-    // Resolve card for pricing hint
-    auto getCard = [this](const QString &code) -> QVariantMap
-    {
-        QObject *dbObj = dynamic_cast<QObject *>(m_db);
-        if (!dbObj)
-            return {};
-        QVariantMap ret;
-        bool ok = QMetaObject::invokeMethod(dbObj, "getRfidCard",
-                                            Q_RETURN_ARG(QVariantMap, ret),
-                                            Q_ARG(QString, code));
-        return ok ? ret : QVariantMap{};
-    };
-    const QVariantMap card = getCard(normRfid);
-    // Helper: check active subscription for this card/plate at current time
-    auto hasSubNow = [this](const QString &code, const QString &pl) -> bool
-    {
-        QObject *dbObj = dynamic_cast<QObject *>(m_db);
-        if (!dbObj)
-            return false;
-        bool ans = false;
-        bool ok = QMetaObject::invokeMethod(dbObj, "hasActiveSubscription",
-                                            Q_RETURN_ARG(bool, ans),
-                                            Q_ARG(QString, code),
-                                            Q_ARG(QString, pl),
-                                            Q_ARG(QString, QString()));
-        Q_UNUSED(ok);
-        return ans;
-    };
-    QString coTime;
-    // Lưu ảnh checkout vào DB như cổng vào
-    // Store annotated images if we have them
-    const QByteArray store1 = live1;
-    const QByteArray store2 = live2;
-    const CheckOutResult r = m_db->checkOutRfidWithImages(normRfid, &coTime, store1, store2);
-    if (r == CheckOutResult::OkMatched)
-    {
-        m_checkOutTime = coTime;
-        emit timesChanged();
-        m_db->deleteClosedSessions(normRfid);
-        if (bar)
-        {
-            emit debugLog(QStringLiteral("OUT: pulse barrier(L%1) 500ms").arg(laneIdx + 1));
-            if (auto relay = dynamic_cast<UsbRelayBarrier *>(bar))
-                relay->pulse(500);
-            else
-            {
-                bar->open();
-                QTimer::singleShot(500, this, [this, laneIdx]
-                                   { if (auto b = barrierForLane(laneIdx)) b->close(); });
-            }
-        }
-        m_message = QStringLiteral("Check-out thành công");
-        emit messageChanged();
-        const bool isSub = hasSubNow(normRfid, plateBefore);
-        int fee = 0;
-        if (!isSub && sessionId > 0)
-            fee = m_db->computeFeeForSession(sessionId, coTime, false);
-        if (fee < 0)
-        {
-            // Fallback simple estimation only if compute failed
-            QDateTime tin = QDateTime::fromString(checkinBefore, Qt::ISODate);
-            QDateTime tout = QDateTime::fromString(coTime, Qt::ISODate);
-            qint64 mins = qMax<qint64>(1, tin.secsTo(tout) / 60);
-            qint64 hours = (mins + 59) / 60;
-            fee = qMax<qint64>(5000, hours * 5000);
-        }
-        // If card is a short-term type, we still charge per-use via pricing rules (no subscription needed)
-        const QString tt = card.value(QStringLiteral("ticket_type")).toString();
-        if (!tt.isEmpty() && (tt == QLatin1String("hourly") || tt == QLatin1String("daily_day") || tt == QLatin1String("daily_night") || tt == QLatin1String("overnight")))
-        {
-            // Price already computed via session pricing; just adjust display label if needed
-        }
-        if (isSub)
-        {
-            m_laneHasSubscriptions[laneIdx] = true;
-            m_laneSessionIds[laneIdx] = -1;
-            m_laneTicketTypes[laneIdx].clear();
-            m_laneCardIds[laneIdx] = normRfid;
-            setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
-        }
-        else
-        {
-            m_laneHasSubscriptions[laneIdx] = false;
-            m_laneSessionIds[laneIdx] = -1;
-            m_laneTicketTypes[laneIdx].clear();
-            m_laneCardIds[laneIdx] = normRfid;
-            setLaneMoneyMessage(laneIdx,
-                                QStringLiteral("%1: Thu phí %2 VND")
-                                    .arg(laneLabel(laneIdx), QLocale::system().toString(fee)));
-        }
-        m_exitCardId = normRfid;
-        m_exitPlate = plateBefore;
-        m_exitTimeIn = checkinBefore;
-        m_exitTimeOut = QDateTime::currentDateTime().toString(Qt::ISODate);
-        emit exitInfoChanged();
-        if (auto hid1 = qobject_cast<QObject *>(m_readerEntrance))
-            QMetaObject::invokeMethod(hid1, "resetDebounce", Qt::QueuedConnection);
-        if (auto hid2 = qobject_cast<QObject *>(m_readerExit))
-            QMetaObject::invokeMethod(hid2, "resetDebounce", Qt::QueuedConnection);
+
+    // Determine if the user has a subscription
+    bool hasSubscription = m_db->hasActiveSubscription(normRfid, plateBefore, QString());
+
+    // Compute the fee
+    int fee = 0;
+    if (!hasSubscription && sessionId > 0) {
+        fee = m_db->computeFeeForSession(sessionId, QDateTime::currentDateTime().toString(Qt::ISODate), false);
     }
-    else
-    {
-        m_message = QStringLiteral("Lỗi check-out");
-        emit messageChanged();
+
+    if (fee > 0) {
+        // If there's a fee, emit signal to QML to show the payment dialog
+        emit checkoutRequiresPayment(normRfid, plateBefore, fee);
+    } else {
+        // If no fee (or subscription), checkout immediately
+        QString paymentNote = hasSubscription ? "Vé tháng" : "Miễn phí";
+        completeCheckout(normRfid, plateBefore, paymentNote);
     }
 }
+//     const int sessionId = openBefore.value("id").toInt();
+//     // Resolve card for pricing hint
+//     auto getCard = [this](const QString &code) -> QVariantMap
+//     {
+//         QObject *dbObj = dynamic_cast<QObject *>(m_db);
+//         if (!dbObj)
+//             return {};
+//         QVariantMap ret;
+//         bool ok = QMetaObject::invokeMethod(dbObj, "getRfidCard",
+//                                             Q_RETURN_ARG(QVariantMap, ret),
+//                                             Q_ARG(QString, code));
+//         return ok ? ret : QVariantMap{};
+//     };
+//     const QVariantMap card = getCard(normRfid);
+//     // Helper: check active subscription for this card/plate at current time
+//     auto hasSubNow = [this](const QString &code, const QString &pl) -> bool
+//     {
+//         QObject *dbObj = dynamic_cast<QObject *>(m_db);
+//         if (!dbObj)
+//             return false;
+//         bool ans = false;
+//         bool ok = QMetaObject::invokeMethod(dbObj, "hasActiveSubscription",
+//                                             Q_RETURN_ARG(bool, ans),
+//                                             Q_ARG(QString, code),
+//                                             Q_ARG(QString, pl),
+//                                             Q_ARG(QString, QString()));
+//         Q_UNUSED(ok);
+//         return ans;
+//     };
+//     QString coTime;
+//     // Lưu ảnh checkout vào DB như cổng vào
+//     // Store annotated images if we have them
+//     const QByteArray store1 = live1;
+//     const QByteArray store2 = live2;
+//     const CheckOutResult r = m_db->checkOutRfidWithImages(normRfid, &coTime, store1, store2);
+//     if (r == CheckOutResult::OkMatched)
+//     {
+//         m_checkOutTime = coTime;
+//         emit timesChanged();
+//         m_db->deleteClosedSessions(normRfid);
+//         if (bar)
+//         {
+//             emit debugLog(QStringLiteral("OUT: pulse barrier(L%1) 500ms").arg(laneIdx + 1));
+//             if (auto relay = dynamic_cast<UsbRelayBarrier *>(bar))
+//                 relay->pulse(500);
+//             else
+//             {
+//                 bar->open();
+//                 QTimer::singleShot(500, this, [this, laneIdx]
+//                                    { if (auto b = barrierForLane(laneIdx)) b->close(); });
+//             }
+//         }
+//         m_message = QStringLiteral("Check-out thành công");
+//         emit messageChanged();
+//         const bool isSub = hasSubNow(normRfid, plateBefore);
+//         int fee = 0;
+//         if (!isSub && sessionId > 0)
+//             fee = m_db->computeFeeForSession(sessionId, coTime, false);
+//         if (fee < 0)
+//         {
+//             // Fallback simple estimation only if compute failed
+//             QDateTime tin = QDateTime::fromString(checkinBefore, Qt::ISODate);
+//             QDateTime tout = QDateTime::fromString(coTime, Qt::ISODate);
+//             qint64 mins = qMax<qint64>(1, tin.secsTo(tout) / 60);
+//             qint64 hours = (mins + 59) / 60;
+//             fee = qMax<qint64>(5000, hours * 5000);
+//         }
+//         // If card is a short-term type, we still charge per-use via pricing rules (no subscription needed)
+//         const QString tt = card.value(QStringLiteral("ticket_type")).toString();
+//         if (!tt.isEmpty() && (tt == QLatin1String("hourly") || tt == QLatin1String("daily_day") || tt == QLatin1String("daily_night") || tt == QLatin1String("overnight")))
+//         {
+//             // Price already computed via session pricing; just adjust display label if needed
+//         }
+//         if (isSub)
+//         {
+//             m_laneHasSubscriptions[laneIdx] = true;
+//             m_laneSessionIds[laneIdx] = -1;
+//             m_laneTicketTypes[laneIdx].clear();
+//             m_laneCardIds[laneIdx] = normRfid;
+//             setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
+//         }
+//         else
+//         {
+//             m_laneHasSubscriptions[laneIdx] = false;
+//             m_laneSessionIds[laneIdx] = -1;
+//             m_laneTicketTypes[laneIdx].clear();
+//             m_laneCardIds[laneIdx] = normRfid;
+//             setLaneMoneyMessage(laneIdx,
+//                                 QStringLiteral("%1: Thu phí %2 VND")
+//                                     .arg(laneLabel(laneIdx), QLocale::system().toString(fee)));
+//         }
+//         m_exitCardId = normRfid;
+//         m_exitPlate = plateBefore;
+//         m_exitTimeIn = checkinBefore;
+//         m_exitTimeOut = QDateTime::currentDateTime().toString(Qt::ISODate);
+//         emit exitInfoChanged();
+//         if (auto hid1 = qobject_cast<QObject *>(m_readerEntrance))
+//             QMetaObject::invokeMethod(hid1, "resetDebounce", Qt::QueuedConnection);
+//         if (auto hid2 = qobject_cast<QObject *>(m_readerExit))
+//             QMetaObject::invokeMethod(hid2, "resetDebounce", Qt::QueuedConnection);
+//     }
+//     else
+//     {
+//         m_message = QStringLiteral("Lỗi check-out");
+//         emit messageChanged();
+//     }
+// }
 
 void ParkingController::refreshLiveFees()
 {
@@ -583,7 +565,7 @@ bool ParkingController::approveAndOpenBarrier()
         exit1 = cam->captureInputSnapshot(85);
         exit2 = cam->captureOutputSnapshot(85);
     }
-    const CheckOutResult r = m_db->checkOutRfidWithImages(normalizeRfid(m_lastRfid), &coTime, exit1, exit2);
+    const CheckOutResult r = m_db->checkOutRfidWithImages(normalizeRfid(m_lastRfid), &coTime, exit1, exit2, QStringLiteral("Tiền mặt (thủ công)"));
     if (r == CheckOutResult::OkMatched)
     {
         m_checkOutTime = coTime;
@@ -664,11 +646,69 @@ void ParkingController::manualOpenBarrier()
     }
 }
 
+void ParkingController::completeCheckout(const QString &rfid, const QString &plate, const QString &paymentMethod)
+{
+    int laneIdx = m_activeExitLane;
+    ICameraSnapshotProvider *cam = camForLane(laneIdx);
+    IBarrier *bar = barrierForLane(laneIdx);
+    if (!cam || !bar) return;
+
+    // Capture checkout images
+    QByteArray live1 = cam->captureInputSnapshot(85);
+    QByteArray live2 = cam->captureOutputSnapshot(85);
+
+    QString coTime;
+    // Pass the paymentMethod to the database function
+    const CheckOutResult r = m_db->checkOutRfidWithImages(rfid, &coTime, live1, live2, paymentMethod);
+
+    if (r == CheckOutResult::OkMatched) {
+        m_checkOutTime = coTime;
+        emit timesChanged();
+        m_db->deleteClosedSessions(rfid);
+
+        if (bar) {
+            emit debugLog(QStringLiteral("OUT: pulse barrier(L%1) 500ms").arg(laneIdx + 1));
+            bar->open();
+            QTimer::singleShot(500, this, [this, laneIdx] {
+                if (auto b = barrierForLane(laneIdx)) b->close();
+            });
+        }
+
+        m_message = QStringLiteral("Check-out thành công");
+        emit messageChanged();
+
+        // Re-fetch session info to get final fee and check-in time for UI display
+        QVariantMap finalSession = m_db->fetchFullOpenSession(rfid);
+        const QString checkinBefore = finalSession.value("checkin_time").toString();
+
+        bool isSub = m_db->hasActiveSubscription(rfid, plate, QString());
+        int fee = isSub ? 0 : m_db->computeFeeForSession(finalSession.value("id").toInt(), coTime, false);
+
+        if (isSub) {
+            setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
+        } else {
+            setLaneMoneyMessage(laneIdx,
+                                QStringLiteral("%1: Đã thu %2 VND (%3)")
+                                    .arg(laneLabel(laneIdx), QLocale::system().toString(fee), paymentMethod));
+        }
+
+        m_exitCardId = rfid;
+        m_exitPlate = plate;
+        m_exitTimeIn = checkinBefore;
+        m_exitTimeOut = coTime;
+        emit exitInfoChanged();
+    } else {
+        m_message = QStringLiteral("Lỗi check-out");
+        emit messageChanged();
+    }
+}
+
 void ParkingController::manualCloseBarrier()
 {
     if (currentBarrier())
         currentBarrier()->close();
 }
+
 
 QString ParkingController::normalizeRfid(const QString &r) const
 {

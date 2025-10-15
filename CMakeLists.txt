@@ -34,6 +34,7 @@ qt_add_qml_module(appsmart_parking_system
         src/qml/dialogs/BarrierSettingsDialog.ui.qml
         src/qml/dialogs/SearchDialog.ui.qml
         src/qml/dialogs/LoginDialog.ui.qml
+        src/qml/dialogs/PaymentDialog.qml
         src/qml/dialogs/SessionDetailDialog.ui.qml
         # Pages
         src/qml/pages/SearchPage.ui.qml

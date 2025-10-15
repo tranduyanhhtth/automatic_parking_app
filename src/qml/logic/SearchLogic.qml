@@ -202,7 +202,7 @@ Item {
             // Ta truyền plate nếu có; rfid để trống vì chưa có input.
             const results = repo.searchSessions(
                 query || "",
-                "",
+                query || "",
                 fromIso || "",
                 toIso || "",
                 status || "",

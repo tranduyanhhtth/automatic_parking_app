@@ -216,6 +216,9 @@ Item {
     HidLogLogic {
         id: hidLogLogic
     }
+    PaymentDialog {
+            id: paymentDialog
+    }
 
     // Initialize streams and sinks
     Component.onCompleted: {
@@ -267,6 +270,17 @@ Item {
             console.log(msg)
         }
     }
+
+    Connections {
+           target: app // This connects to your ParkingController instance
+
+           function onCheckoutRequiresPayment(rfid, plate, fee) {
+               paymentDialog.rfid = rfid
+               paymentDialog.plate = plate
+               paymentDialog.fee = fee
+               paymentDialog.open()
+           }
+       }
 
     // Preview source bindings for lanes (bind to alias properties on form)
     // During exit review, only the exit lane should show entrance snapshots

@@ -47,7 +47,8 @@ public:
     Q_INVOKABLE CheckOutResult checkOutRfidWithImages(const QString &rfid,
                                                       QString *checkoutTimeOut,
                                                       const QByteArray &image1,
-                                                      const QByteArray &image2) override;
+                                                      const QByteArray &image2,
+                                                      const QString &paymentMethod) override;
 
     Q_INVOKABLE bool deleteClosedSessions(const QString &rfid) override;
 

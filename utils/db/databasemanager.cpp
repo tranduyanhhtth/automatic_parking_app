@@ -2031,7 +2031,7 @@ QList<QVariantMap> DatabaseManager::searchSessions(const QString &plate,
 {
     QString sql = "SELECT id, user_id, rfid, plate, checkin_time, checkout_time, duration_minutes, fee, status, payment_check FROM parking_sessions WHERE 1=1";
     if (!plate.isEmpty())
-        sql += " AND plate = :plate";
+        sql += " AND (plate LIKE :plate OR rfid LIKE :rfid)";
     if (!rfid.isEmpty())
         sql += " AND rfid = :rfid";
     if (!fromIso.isEmpty())
@@ -2324,50 +2324,105 @@ CheckOutResult DatabaseManager::checkOutRfidOnly(const QString &rfid, QString *c
 {
     const QString encRfid = rfid;
     auto openRec = findOpenByRfid(encRfid);
-    if (!openRec.has_value())
+    if (!openRec.has_value()) {
         return CheckOutResult::NoOpen;
+    }
+
     const int id = openRec->value("id").toInt();
     const QString ts = nowIso8601();
+
+    // Compute fee before updating the session
+    const int fee = computeFeeForSession(id, ts, false);
+
+    DB_Connection.transaction();
     QSqlQuery q(DB_Connection);
-    q.prepare("UPDATE parking_sessions SET checkout_time = :ts, status = :st WHERE id = :id");
+    q.prepare("UPDATE parking_sessions SET checkout_time = :ts, status = :st, fee = :fee, duration_minutes = :dur WHERE id = :id");
     q.bindValue(":ts", ts);
     q.bindValue(":st", QStringLiteral("checked_out"));
+    q.bindValue(":fee", fee);
+
+    // Calculate duration
+    const QString checkinTs = openRec->value("checkin_time").toString();
+    QDateTime tin = QDateTime::fromString(checkinTs, Qt::ISODate);
+    QDateTime tout = QDateTime::fromString(ts, Qt::ISODate);
+    qint64 mins = qMax<qint64>(0, tin.secsTo(tout) / 60);
+    q.bindValue(":dur", static_cast<int>(mins));
     q.bindValue(":id", id);
-    if (!q.exec())
-    {
-        qWarning() << "checkOutRfidOnly error:" << q.lastError().text();
+
+    if (!q.exec()) {
+        qWarning() << "checkOutRfidOnly update error:" << q.lastError().text();
+        DB_Connection.rollback();
         return CheckOutResult::Error;
     }
-    if (checkoutTimeOut)
+
+    // Insert into revenues table if there was a fee
+    if (fee > 0) {
+        // Use a default payment method for this simpler checkout
+        insertRevenue(id, std::nullopt, std::nullopt, fee, "cash", "parking_session", "Tiền mặt");
+    }
+
+    DB_Connection.commit();
+
+    if (checkoutTimeOut) {
         *checkoutTimeOut = ts;
+    }
+
     return CheckOutResult::OkMatched;
 }
 
 CheckOutResult DatabaseManager::checkOutRfidWithImages(const QString &rfid,
                                                        QString *checkoutTimeOut,
                                                        const QByteArray &image1,
-                                                       const QByteArray &image2)
+                                                       const QByteArray &image2,
+                                                       const QString &paymentMethod) // ADD paymentMethod parameter
 {
     const QString encRfid = rfid;
     auto openRec = findOpenByRfid(encRfid);
     if (!openRec.has_value())
         return CheckOutResult::NoOpen;
+
     const int id = openRec->value("id").toInt();
     const QString ts = nowIso8601();
+
+    // Compute fee before updating the session
+    const int fee = computeFeeForSession(id, ts, false);
+
+    DB_Connection.transaction();
     QSqlQuery q(DB_Connection);
-    q.prepare("UPDATE parking_sessions SET checkout_time = :ts, status = :st, checkout_image1 = :img1, checkout_image2 = :img2 WHERE id = :id");
+    q.prepare("UPDATE parking_sessions SET checkout_time = :ts, status = :st, checkout_image1 = :img1, checkout_image2 = :img2, payment_check = :payment, fee = :fee, duration_minutes = :dur WHERE id = :id");
     q.bindValue(":ts", ts);
     q.bindValue(":st", QStringLiteral("checked_out"));
     q.bindValue(":img1", image1);
     q.bindValue(":img2", image2);
+    q.bindValue(":payment", paymentMethod); // Bind the new payment method
+    q.bindValue(":fee", fee);
+
+    // Calculate duration
+    const QString checkinTs = openRec->value("checkin_time").toString();
+    QDateTime tin = QDateTime::fromString(checkinTs, Qt::ISODate);
+    QDateTime tout = QDateTime::fromString(ts, Qt::ISODate);
+    qint64 mins = qMax<qint64>(0, tin.secsTo(tout) / 60);
+    q.bindValue(":dur", static_cast<int>(mins));
+
     q.bindValue(":id", id);
     if (!q.exec())
     {
         qWarning() << "checkOutRfidWithImages error:" << q.lastError().text();
+        DB_Connection.rollback();
         return CheckOutResult::Error;
     }
+
+    // Insert into revenues table if there was a fee
+    if (fee > 0)
+    {
+        insertRevenue(id, std::nullopt, std::nullopt, fee, "cash", "parking_session", paymentMethod);
+    }
+
+    DB_Connection.commit();
+
     if (checkoutTimeOut)
         *checkoutTimeOut = ts;
+
     return CheckOutResult::OkMatched;
 }
 

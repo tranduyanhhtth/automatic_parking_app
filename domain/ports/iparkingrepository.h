@@ -40,7 +40,8 @@ public:
     virtual CheckOutResult checkOutRfidWithImages(const QString &rfid,
                                                   QString *checkoutTimeOut,
                                                   const QByteArray &image1,
-                                                  const QByteArray &image2) = 0;
+                                                  const QByteArray &image2,
+                                                  const QString &paymentMethod) = 0; // ADD paymentMethod
     // Xóa các bản ghi đã đóng (checkout_time NOT NULL) cho RFID
     virtual bool deleteClosedSessions(const QString &rfid) = 0;
     // Lấy full thông tin phiên mở (kèm ảnh) để hiển thị
@@ -118,6 +119,10 @@ public:
     // Lấy cấu hình pricing JSON mới nhất cho vehicle_type + ticket_type
     virtual QVariantMap getLatestPricing(const QString &vehicleType,
                                          const QString &ticketType) = 0;
+
+    virtual bool hasActiveSubscription(const QString &rfid,
+                                       const QString &plate = QString(),
+                                       const QString &nowIso = QString()) = 0;
 
     // Liệt kê các subscription (tham số lọc đơn giản tuỳ chọn)
     virtual QList<QVariantMap> listSubscriptions(int limit = 500,
