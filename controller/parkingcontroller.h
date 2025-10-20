@@ -228,7 +228,7 @@ public slots:
     // Dự phòng: luôn mở barrier (không động tới DB)
     Q_INVOKABLE void manualOpenBarrier();
     Q_INVOKABLE void manualCloseBarrier();
-    Q_INVOKABLE void completeCheckout(const QString& rfid, const QString& plate, const QString& paymentMethod);
+    Q_INVOKABLE void completeCheckout(const QString& rfid, const QString& plate, const QString& paymentMethod, int fee);
     Q_INVOKABLE void setDualMode(int mode)
     {
         if (mode < 0 || mode > 2)

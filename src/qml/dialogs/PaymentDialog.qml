@@ -44,7 +44,7 @@ Dialog {
                 Layout.preferredHeight: 45
                 font.pixelSize: 16
                 onClicked: {
-                    app.completeCheckout(root.rfid, root.plate, "Chuyển khoản")
+                    app.completeCheckout(root.rfid, root.plate, "Chuyển khoản", root.fee)
                     root.close()
                 }
             }
@@ -55,7 +55,7 @@ Dialog {
                 Layout.preferredHeight: 45
                 font.pixelSize: 16
                 onClicked: {
-                    app.completeCheckout(root.rfid, root.plate, "Tiền mặt")
+                    app.completeCheckout(root.rfid, root.plate, "Tiền mặt", root.fee)
                     root.close()
                 }
             }

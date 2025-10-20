@@ -246,7 +246,7 @@ void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
     } else {
         // If no fee (or subscription), checkout immediately
         QString paymentNote = hasSubscription ? "Vé tháng" : "Miễn phí";
-        completeCheckout(normRfid, plateBefore, paymentNote);
+        completeCheckout(normRfid, plateBefore, paymentNote, fee);
     }
 }
 //     const int sessionId = openBefore.value("id").toInt();
@@ -646,7 +646,7 @@ void ParkingController::manualOpenBarrier()
     }
 }
 
-void ParkingController::completeCheckout(const QString &rfid, const QString &plate, const QString &paymentMethod)
+void ParkingController::completeCheckout(const QString &rfid, const QString &plate, const QString &paymentMethod, int fee)
 {
     int laneIdx = m_activeExitLane;
     ICameraSnapshotProvider *cam = camForLane(laneIdx);
@@ -682,7 +682,6 @@ void ParkingController::completeCheckout(const QString &rfid, const QString &pla
         const QString checkinBefore = finalSession.value("checkin_time").toString();
 
         bool isSub = m_db->hasActiveSubscription(rfid, plate, QString());
-        int fee = isSub ? 0 : m_db->computeFeeForSession(finalSession.value("id").toInt(), coTime, false);
 
         if (isSub) {
             setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
