@@ -76,8 +76,8 @@ Item {
     }
     function validate(){ if(!adminPage) return 'Trang Admin chưa sẵn sàng'; if(!adminPage.subUserText || !adminPage.subUserText.text || adminPage.subUserText.text.length<2) return 'Nhập tên user'; if(!(adminPage.subPlate&&adminPage.subPlate.text)||adminPage.subPlate.text.length<4) return 'Biển số không hợp lệ'; if(!(adminPage.subRfid&&adminPage.subRfid.text)||adminPage.subRfid.text.length<3) return 'RFID không hợp lệ'; if(!(adminPage.subPrice&&adminPage.subPrice.text)) return 'Thiếu giá'; return '' }
     function refreshUsers(){ const r=rRepo(); if(!r||!r.listUsers) return; usersCache=r.listUsers(500,0)||[] }
-    function findUserByName(name){ 
-        if(!name) return null; 
+    function findUserByName(name){
+        if(!name) return null;
         if(usersCache.length === 0) refreshUsers()
         const low=(''+name).toLowerCase();
         let matches=[];
@@ -237,7 +237,7 @@ Item {
             }
             msg((isExtend ? 'Gia hạn' : 'Tạo') + ' đăng ký thành công');
             _inExtendedState = false;
-            
+
             // Clear form after successful creation (not extension)
             if (!isExtend && adminPage) {
                 if (adminPage.subUserText) adminPage.subUserText.text = '';
@@ -248,7 +248,7 @@ Item {
                 if (adminPage.subStart) adminPage.subStart.text = '';
                 if (adminPage.subEnd) adminPage.subEnd.text = '';
             }
-            
+
             // Immediate refresh without Qt.callLater to ensure list updates right away
             refreshSubs();
             if(adminPage) adminPage.triggerSubsChanged = !adminPage.triggerSubsChanged;
@@ -256,110 +256,110 @@ Item {
             msg('Lỗi lưu đăng ký');
         }
     }
-    
+
 
     function cancelExtend(){
         if(!_inExtendedState){ msg('Không có gia hạn để hủy'); return }
         if(adminPage){ if(adminPage.subStart) adminPage.subStart.text=_origStart; if(adminPage.subEnd) adminPage.subEnd.text=_origEnd }
         _inExtendedState=false; msg('Đã khôi phục ngày cũ')
     }
-    
-    // Auto expiry every 60s
-    Timer { 
-        interval: 60000; 
-        running: true; 
-        repeat: true; 
-        onTriggered: { 
-            const r=rRepo();
-            if(r && r.expireDueSubscriptions){ 
-                const day=todayIso(); 
-                const n=r.expireDueSubscriptions(day); 
-                if(n>0){ 
-                    msg('Tự động hết hạn '+n+' đăng ký'); 
-                    refreshSubs() 
-                } 
-            } 
-        } 
-    }
 
-    function markLost(){ 
-        if(selectedSubId<=0){ 
-            msg('Chưa chọn đăng ký'); 
-            return 
-        } 
-        const r=rRepo();
-        if(!r||!r.markSubscriptionLostCard){ 
-            msg('Thiếu API lost card'); 
-            return 
-        } 
-        const ok=r.markSubscriptionLostCard(selectedSubId); 
-        msg(ok?'Đã đánh dấu mất thẻ':'Không thể đánh dấu mất'); 
-        if(ok){ 
-            refreshSubs(); 
-            selectedSubId=-1 
+    // Auto expiry every 60s
+    Timer {
+        interval: 60000;
+        running: true;
+        repeat: true;
+        onTriggered: {
+            const r=rRepo();
+            if(r && r.expireDueSubscriptions){
+                const day=todayIso();
+                const n=r.expireDueSubscriptions(day);
+                if(n>0){
+                    msg('Tự động hết hạn '+n+' đăng ký');
+                    refreshSubs()
+                }
+            }
         }
     }
 
-    function cancelSub(){ 
-        if(selectedSubId<=0){ 
-            msg('Chưa chọn đăng ký'); 
-            return 
-        } 
+    function markLost(){
+        if(selectedSubId<=0){
+            msg('Chưa chọn đăng ký');
+            return
+        }
         const r=rRepo();
-        if(!r||!r.cancelSubscription){ 
-            msg('Thiếu API cancelSubscription'); 
-            return 
-        } 
-        const ok=r.cancelSubscription(selectedSubId); 
-        msg(ok?'Đã hủy đăng ký':'Không thể hủy'); 
-        if(ok){ 
-            refreshSubs(); 
-            selectedSubId=-1 
-        } 
+        if(!r||!r.markSubscriptionLostCard){
+            msg('Thiếu API lost card');
+            return
+        }
+        const ok=r.markSubscriptionLostCard(selectedSubId);
+        msg(ok?'Đã đánh dấu mất thẻ':'Không thể đánh dấu mất');
+        if(ok){
+            refreshSubs();
+            selectedSubId=-1
+        }
     }
 
-    Connections { 
-        target: adminPage; 
-        function onTriggerSubCreateChanged(){ 
-            if(adminPage.triggerSubCreate){ 
-                createOrExtend(false); 
-                adminPage.triggerSubCreate=false 
-            } 
-        } 
-        function onTriggerSubExtendChanged(){ 
-            if(adminPage.triggerSubExtend){ 
-                createOrExtend(true); 
-                adminPage.triggerSubExtend=false 
-            } 
-        } 
-        function onTriggerSubCancelExtendChanged(){ 
-            if(adminPage.triggerSubCancelExtend){ 
-                cancelExtend(); 
-                adminPage.triggerSubCancelExtend=false 
-            } 
-        } 
-        function onTriggerSubLostDeleteChanged(){ 
-            if(adminPage.triggerSubLostDelete){ 
-                markLost(); 
-                adminPage.triggerSubLostDelete=false 
-            } 
-        } 
-        function onTriggerSubCancelChanged(){ 
-            if(adminPage.triggerSubCancel){ 
-                cancelSub(); 
-                adminPage.triggerSubCancel=false 
-            } 
-        } 
-        function onPendingSelectSubIndexChanged(){ 
-            var idx=adminPage.pendingSelectSubIndex; 
-            if(idx>=0 && idx<listModel.count){ 
-                var r=listModel.get(idx); 
-                selectSubscription(r.id, r.user_id, r.plate, r.rfid, r.plan_type, r.start_date, r.end_date, r.payment_mode, r.price, r.status) 
-            } 
-        } 
-        function onTriggerUsersChangedChanged(){ 
-            fullRefresh() 
-        } 
+    function cancelSub(){
+        if(selectedSubId<=0){
+            msg('Chưa chọn đăng ký');
+            return
+        }
+        const r=rRepo();
+        if(!r||!r.cancelSubscription){
+            msg('Thiếu API cancelSubscription');
+            return
+        }
+        const ok=r.cancelSubscription(selectedSubId);
+        msg(ok?'Đã hủy đăng ký':'Không thể hủy');
+        if(ok){
+            refreshSubs();
+            selectedSubId=-1
+        }
+    }
+
+    Connections {
+        target: adminPage;
+        function onTriggerSubCreateChanged(){
+            if(adminPage.triggerSubCreate){
+                createOrExtend(false);
+                adminPage.triggerSubCreate=false
+            }
+        }
+        function onTriggerSubExtendChanged(){
+            if(adminPage.triggerSubExtend){
+                createOrExtend(true);
+                adminPage.triggerSubExtend=false
+            }
+        }
+        function onTriggerSubCancelExtendChanged(){
+            if(adminPage.triggerSubCancelExtend){
+                cancelExtend();
+                adminPage.triggerSubCancelExtend=false
+            }
+        }
+        function onTriggerSubLostDeleteChanged(){
+            if(adminPage.triggerSubLostDelete){
+                markLost();
+                adminPage.triggerSubLostDelete=false
+            }
+        }
+        function onTriggerSubCancelChanged(){
+            if(adminPage.triggerSubCancel){
+                cancelSub();
+                adminPage.triggerSubCancel=false
+            }
+        }
+        function onPendingSelectSubIndexChanged(){
+            var idx=adminPage.pendingSelectSubIndex;
+            if(idx>=0 && idx<listModel.count){
+                var r=listModel.get(idx);
+                selectSubscription(r.id, r.user_id, r.plate, r.rfid, r.plan_type, r.start_date, r.end_date, r.payment_mode, r.price, r.status)
+            }
+        }
+        function onTriggerUsersChangedChanged(){
+            fullRefresh()
+        }
         function prefillSubscriptionForUser(userId) {
             const r=rRepo();
             if(userId <= 0 || !r || !r.getLatestSubscriptionForUser)
@@ -374,11 +374,11 @@ Item {
             if(adminPage.subPrice) adminPage.subPrice.text = ''+sub.price
             return true
         }
-        function onTriggerSubUserTextChangedChanged(){ 
-            if(adminPage.triggerSubUserTextChanged){ 
-                if(adminPage && adminPage.subUserText){ 
-                    var nm=adminPage.subUserText.text; 
-                    var u=findUserByName(nm); 
+        function onTriggerSubUserTextChangedChanged(){
+            if(adminPage.triggerSubUserTextChanged){
+                if(adminPage && adminPage.subUserText){
+                    var nm=adminPage.subUserText.text;
+                    var u=findUserByName(nm);
                     if(u){
                         if(adminPage.subPlate) adminPage.subPlate.text=u.plate||'';
                         if(adminPage.subRfid) adminPage.subRfid.text=u.rfid||'';
@@ -399,9 +399,9 @@ Item {
                         if(adminPage.subStart) adminPage.subStart.text='';
                         if(adminPage.subEnd) adminPage.subEnd.text='';
                     }
-                } 
-                adminPage.triggerSubUserTextChanged=false 
-            } 
+                }
+                adminPage.triggerSubUserTextChanged=false
+            }
         }
     }
     // React when subPlan is a ComboBox
@@ -470,11 +470,11 @@ Item {
             updateEnd();
         }
     }
-    Connections { 
-        target: adminPage?adminPage.subStart:null; 
-        function onTextChanged(){ 
-            updateEnd() 
-        } 
+    Connections {
+        target: adminPage?adminPage.subStart:null;
+        function onTextChanged(){
+            updateEnd()
+        }
     }
 
     function fullRefresh(){ refreshUsers(); refreshSubs() }
@@ -512,7 +512,7 @@ Item {
 
     Connections {
         target: adminPage
-        function onTriggerSubFilterChangedChanged(){ 
+        function onTriggerSubFilterChangedChanged(){
             if(adminPage && adminPage.triggerSubFilterChanged){
                 if(adminPage.subFilter){
                     const idx = adminPage.subFilter.currentIndex
@@ -523,11 +523,11 @@ Item {
                 adminPage.triggerSubFilterChanged = false
             } }
     function onTriggerUsersChangedChanged(){ fullRefresh() }
-        function onTriggerExportExpiredChanged(){ 
-            if(adminPage && adminPage.triggerExportExpired){ 
+        function onTriggerExportExpiredChanged(){
+            if(adminPage && adminPage.triggerExportExpired){
                 // Ensure filter is 'expired' for this dedicated export button
                 try { if (adminPage.subFilter) adminPage.subFilter.currentIndex = 1; } catch(e) {}
-                exportCsvForCurrentFilter(); 
+                exportCsvForCurrentFilter();
                 // Open save dialog for subscriptions CSV if available
                 try {
                     if (adminPage.subsFileSaveDialog) {
@@ -535,8 +535,8 @@ Item {
                         adminPage.subsFileSaveDialog.open();
                     }
                 } catch(e) { console.log(e) }
-                adminPage.triggerExportExpired=false 
-            } 
+                adminPage.triggerExportExpired=false
+            }
         }
     }
     Connections {
@@ -573,12 +573,12 @@ Item {
             }
         }
     }
-    
+
     // Auto-open duplicate plate picker ComboBox when it becomes visible
     Connections {
         target: adminPage ? adminPage.subPlatePick : null
         function onVisibleChanged(){
-            if (adminPage && adminPage.subPlatePick && adminPage.subPlatePick.visible && 
+            if (adminPage && adminPage.subPlatePick && adminPage.subPlatePick.visible &&
                 (adminPage.subPlatePick.currentIndex === -1 || adminPage.subPlatePick.currentIndex === undefined)) {
                 try {
                     if (adminPage.subPlatePick.popup && !adminPage.subPlatePick.popup.visible) {

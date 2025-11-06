@@ -60,6 +60,10 @@ Item {
                 if (notify) notify('Không thể đổi loại xe cho thẻ đã được gán')
                     return 
             }
+            if (ex && ex.status === 'assigned' && ex.ticket_type !== tt) {
+                if (notify) notify('Không thể đổi loại vé cho thẻ đã được gán')
+                    return
+            }
         }
         const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '')
         console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
@@ -83,6 +87,7 @@ Item {
                 if (notify) notify('Thẻ đang được gán cho người dùng, không thể xóa')
                 return
             }
+
         }
         console.log('[RfidCardsLogic] deleteRfidCard', rfid)
         const ok = r.deleteRfidCard(rfid)

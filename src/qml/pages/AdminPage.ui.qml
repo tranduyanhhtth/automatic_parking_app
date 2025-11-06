@@ -119,7 +119,8 @@ Item {
 	property bool triggerRevFromSelect: false
 	property bool triggerRevToSelect: false
 	property bool triggerRevenueFilter: false
-	// Triggers for exporting files 
+	property bool triggerOpenImage: false
+	// Triggers for exporting files
 	property bool triggerExportCsv: false
 	property bool triggerExportPdf: false
 	// Expose inner ComboBoxes to logic via aliases
@@ -132,6 +133,7 @@ Item {
 	// Expose save dialogs for logic modules
 	property alias fileSaveDialog: revenueSaveDialog
 	property alias subsFileSaveDialog: subsSaveDialog
+	property alias imageOpenDialog: imageOpenDialog
 
 	// Logic instances
 	ToastComponent {
@@ -168,6 +170,15 @@ Item {
 		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
 		onAccepted: adminPage.triggerExportCsv = !adminPage.triggerExportCsv
 	}
+
+	FileDialog {
+		id: imageOpenDialog
+		title: "Chọn ảnh để tải lên"
+		nameFilters: ["Image files (*.png *.jpg *.jpeg)", "All files (*.*)"]
+		onAccepted:
+				uploadedImageViewer.source = imageOpenDialog.selectedFile
+		}
+
 	FileDialog {
 		id: subsSaveDialog
 		title: "Chọn nơi lưu CSV Đăng ký"
@@ -282,7 +293,7 @@ Item {
 									if (dashboardLogic && dashboardLogic.refreshByTicketBar)
 										dashboardLogic.refreshByTicketBar(ticketBar, ticketAxisX, ticketAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
 								}
-                        
+
 								function onRefreshCharts() {
 									if (dashboardLogic && dashboardLogic.refreshDailyChart)
 										dashboardLogic.refreshDailyChart(dSeries, dAxisX, dAxisY, dashboardLogic.defaultFrom && dashboardLogic.defaultFrom(), dashboardLogic.todayIso())
@@ -415,7 +426,7 @@ Item {
 													id: dailyRevenueRangePicker
 													Layout.preferredWidth: 120
 													model: ["7 ngày", "30 ngày", "90 ngày"]
-													currentIndex: 1 
+													currentIndex: 1
 												}
 											}
 											ChartView {
@@ -740,11 +751,11 @@ Item {
 										}
 									}
 									ComboBox {
-									 	id: cbStatus
-									 	Layout.preferredWidth: 0
+										id: cbStatus
+										Layout.preferredWidth: 0
 										Layout.preferredHeight: 0
-										visible: false          
-										enabled: false  
+										visible: false
+										enabled: false
 										model: ["available"]
 										currentIndex: 0
 									}
@@ -1012,7 +1023,7 @@ Item {
 									// 	}
 									// }
 									TextField {
-										id: userVehicleType 
+										id: userVehicleType
 										placeholderText: "Loại xe"
 										placeholderTextColor: "white"
 										color: "white"
@@ -1209,8 +1220,7 @@ Item {
 													}
 													Text {
 														text: status
-														color: status
-															   === 'inactive' ? '#ff9800' : '#ccc'
+														color: status === 'inactive' ? '#ff9800' : '#ccc'
 														Layout.preferredWidth: 80
 													}
 													Item {
@@ -1505,6 +1515,12 @@ Item {
 												color: "white"
 												Layout.preferredWidth: 100
 											}
+											Text {
+												text: "Hình thức thanh toán"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+
 											Item {
 												Layout.fillWidth: true
 											}
@@ -1900,6 +1916,50 @@ Item {
 										MouseArea { anchors.fill: parent; onClicked: revenueLogic && (revenueLogic.triggerSeedDemo = !revenueLogic.triggerSeedDemo) }
 									}
 								}
+
+								Item {
+									id: imageContainer
+									Layout.alignment: Qt.AlignHCenter
+									Layout.preferredHeight: uploadedImageViewer.source ? 300 : 0
+									Layout.preferredWidth: uploadedImageViewer.source ? uploadedImageViewer.width : 0
+									visible: uploadedImageViewer.source && uploadedImageViewer.source.toString().length > 0
+
+												Image {
+													id: uploadedImageViewer
+													source: "" // Initially empty
+													height: imageContainer.Layout.preferredHeight
+													fillMode: Image.PreserveAspectFit
+
+													// --- MODIFICATION ---
+													// Also bind this visibility to the source
+													visible: uploadedImageViewer.source
+												}
+												Rectangle { // Close button
+													width: 24
+													height: 24
+													radius: 12
+													color: "#222"
+													anchors.top: parent.top
+													anchors.right: parent.right
+													anchors.margins: 8
+
+													// --- MODIFICATION ---
+													// Bind this visibility to the source as well
+													visible: uploadedImageViewer.source
+												Text {
+													text: "×"
+													color: "white"
+													font.pixelSize: 18
+													font.bold: true
+													anchors.centerIn: parent
+												}
+												MouseArea {
+													anchors.fill: parent
+													onClicked: uploadedImageViewer.source = ""
+												}
+											}
+										}
+
 								// Bảng kết quả
 								Rectangle {
 									Layout.fillWidth: true
@@ -1963,14 +2023,31 @@ Item {
 									}
 								}
 								// Thống kê tổng + Export
-								RowLayout {
-									Layout.fillWidth: true
-									spacing: 12
-									Text { id: revSummaryTotal; text: "Tổng doanh thu: 0"; color: "white" }
-									Text { id: revSummaryBreakdown; text: "Trong đó: vé lượt 0, vé tháng 0"; color: "white" }
-									Item {
+									RowLayout {
 										Layout.fillWidth: true
-									}
+										spacing: 12
+										Text { id: revSummaryTotal; text: "Tổng doanh thu: 0"; color: "white" }
+										Text { id: revSummaryBreakdown; text: "Trong đó: vé lượt 0, vé tháng 0"; color: "white" }
+										Item {
+											Layout.fillWidth: true
+										}
+
+										Rectangle {
+											width: 110
+											height: 28
+											radius: 8
+											color: "#007bff" // Blue color for distinction
+											Text {
+												anchors.centerIn: parent
+												text: "Tải ảnh lên"
+												color: "white"
+											}
+											MouseArea {
+												anchors.fill: parent
+												onClicked: adminPage.triggerOpenImage = !adminPage.triggerOpenImage
+											}
+										}
+
 									Rectangle {
 										width: 110
 										height: 28

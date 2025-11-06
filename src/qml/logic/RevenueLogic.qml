@@ -246,6 +246,27 @@ Item {
         });
     }
 
+    Connections {
+            target: adminPage
+
+            // +++ ADD THIS NEW FUNCTION +++
+            function onTriggerOpenImageChanged() {
+                if (!adminPage || !adminPage.triggerOpenImage) return;
+
+                // Now you can safely call open() from the logic file
+                if (adminPage.imageOpenDialog) {
+                    adminPage.imageOpenDialog.open();
+                }
+
+                // Reset the trigger so it can be clicked again
+                adminPage.triggerOpenImage = false;
+            }
+
+            function onTriggerExportPdfChanged() {
+                // ...
+            }
+        }
+
     // Refresh upon async seeding done
     Connections {
         target: repo
