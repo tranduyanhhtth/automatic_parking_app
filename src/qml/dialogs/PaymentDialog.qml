@@ -15,9 +15,9 @@ Dialog {
     property string rfid: ""
     property string plate: ""
 
-    // Position in right middle center
-    x: parent.width - width - (parent.width * 0.25 - width / 2)
-    y: (parent.height - height) / 2
+    // Position in the center-right of screen
+    // Position in the center of screen
+    anchors.centerIn: parent
 
     ColumnLayout {
         anchors.fill: parent

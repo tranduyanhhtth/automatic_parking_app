@@ -1923,42 +1923,35 @@ Item {
 									Layout.preferredHeight: uploadedImageViewer.source ? 300 : 0
 									Layout.preferredWidth: uploadedImageViewer.source ? uploadedImageViewer.width : 0
 									visible: uploadedImageViewer.source && uploadedImageViewer.source.toString().length > 0
-
-												Image {
-													id: uploadedImageViewer
-													source: "" // Initially empty
-													height: imageContainer.Layout.preferredHeight
-													fillMode: Image.PreserveAspectFit
-
-													// --- MODIFICATION ---
-													// Also bind this visibility to the source
-													visible: uploadedImageViewer.source
-												}
-												Rectangle { // Close button
-													width: 24
-													height: 24
-													radius: 12
-													color: "#222"
-													anchors.top: parent.top
-													anchors.right: parent.right
-													anchors.margins: 8
-
-													// --- MODIFICATION ---
-													// Bind this visibility to the source as well
-													visible: uploadedImageViewer.source
-												Text {
-													text: "×"
-													color: "white"
-													font.pixelSize: 18
-													font.bold: true
-													anchors.centerIn: parent
-												}
-												MouseArea {
-													anchors.fill: parent
-													onClicked: uploadedImageViewer.source = ""
-												}
-											}
-										}
+								Image {
+									id: uploadedImageViewer
+									source: "" // Initially empty
+									height: imageContainer.Layout.preferredHeight
+									fillMode: Image.PreserveAspectFit
+									visible: uploadedImageViewer.source
+								}
+								Rectangle { // Close button
+									width: 24
+									height: 24
+									radius: 12
+									color: "#222"
+									anchors.top: parent.top
+									anchors.right: parent.right
+									anchors.margins: 8
+									visible: uploadedImageViewer.source
+								Text {
+									text: "×"
+									color: "white"
+									font.pixelSize: 18
+									font.bold: true
+									anchors.centerIn: parent
+								}
+								MouseArea {
+									anchors.fill: parent
+									onClicked: uploadedImageViewer.source = ""
+								}
+							}
+						}
 
 								// Bảng kết quả
 								Rectangle {

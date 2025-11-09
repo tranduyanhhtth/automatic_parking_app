@@ -50,6 +50,20 @@ Item {
             navDrawer.opened = !navDrawer.opened
             e.accepted = true
         }
+                        // --- BẮT ĐẦU CODE TEST: Thêm vào đây ---
+                                else if (e.key === Qt.Key_F12) {
+                                    console.log("[TEST] Kích hoạt PaymentDialog thủ công")
+
+                                    // Đặt dữ liệu giả lập
+                                    paymentDialog.rfid = "TEST_RFID_123"
+                                    paymentDialog.plate = "29A-123.45"
+                                    paymentDialog.fee = 5000 // Giả lập phí 5000
+
+                                    // Mở pop-up
+                                    paymentDialog.open()
+
+                                    e.accepted = true
+                                }
     }
 
     // Khu vực nội dung chính (Content Pane) bên phải

@@ -1363,7 +1363,7 @@ QList<QVariantMap> DatabaseManager::listUsers(int limit, int offset)
 {
     QList<QVariantMap> out;
     QSqlQuery q(DB_Connection);
-    q.prepare("SELECT id, full_name, phone, rfid, plate, vehicle_type, status, created_at FROM users ORDER BY id DESC LIMIT :limit OFFSET :offset");
+    q.prepare("SELECT id, full_name, phone, rfid, plate, vehicle_type, status, created_at FROM users WHERE status='active' ORDER BY id DESC LIMIT :limit OFFSET :offset");
     q.bindValue(":limit", limit);
     q.bindValue(":offset", offset);
     if (q.exec())
@@ -1399,39 +1399,64 @@ bool DatabaseManager::softDeleteUser(int userId)
     DB_Connection.transaction();
     // Find phone for this user to nullify rfid_cards.user_phone
     QString phone;
+    QString rfid;
     {
         QSqlQuery qph(DB_Connection);
         qph.prepare("SELECT phone FROM users WHERE id=:id LIMIT 1");
         qph.bindValue(":id", userId);
-        if (qph.exec() && qph.next())
+        if (qph.exec() && qph.next()){
             phone = qph.value(0).toString();
+            rfid = qph.value(1).toString();
+        } else {
+            DB_Connection.rollback();
+            return false;
+        }
     }
-    QSqlQuery qc(DB_Connection);
-    if (!phone.isEmpty())
+    // 2. Clear associated RFID card (if any)
+    if (!phone.isEmpty() || !rfid.isEmpty())
     {
-        qc.prepare("UPDATE rfid_cards SET user_phone=NULL, status='available', assigned_at=NULL WHERE user_phone=:ph");
+        QSqlQuery qc(DB_Connection);
+        // Free up the card by phone (from rfid_cards table) or by rfid (from users table)
+        qc.prepare("UPDATE rfid_cards SET user_phone=NULL, status='available', assigned_at=NULL WHERE user_phone=:ph OR rfid=:rfid");
         qc.bindValue(":ph", phone);
+        qc.bindValue(":rfid", rfid);
+
+        if (!qc.exec())
+        {
+            qWarning() << "softDeleteUser free cards:" << qc.lastError().text();
+            DB_Connection.rollback();
+            return false;
+        }
     }
-    else
+
+    // 3. Cancel any active subscriptions for this user
     {
-        qc.prepare("UPDATE rfid_cards SET user_phone=NULL, status='available', assigned_at=NULL WHERE 1=0");
+        QSqlQuery qsub(DB_Connection);
+        qsub.prepare("UPDATE subscriptions SET status='canceled' WHERE user_id = :id AND status = 'active'");
+        qsub.bindValue(":id", userId);
+        if (!qsub.exec())
+        {
+            qWarning() << "softDeleteUser cancel subs:" << qsub.lastError().text();
+            DB_Connection.rollback();
+            return false;
+        }
     }
-    if (!qc.exec())
-    {
-        qWarning() << "deleteUser free cards:" << qc.lastError().text();
-        DB_Connection.rollback();
-        return false;
-    }
+    // 4. Finally, mark the user "inactive" and clear their unique fields
+    // This frees up the RFID and plate for a new user, but keeps the user row for history
     QSqlQuery qdel(DB_Connection);
-    qdel.prepare("DELETE FROM users WHERE id=:id");
+    qdel.prepare("UPDATE users SET status='inactive', rfid=NULL, plate=NULL WHERE id=:id");
     qdel.bindValue(":id", userId);
     if (!qdel.exec())
     {
-        qWarning() << "deleteUser users:" << qdel.lastError().text();
+        qWarning() << "softDeleteUser update users:" << qdel.lastError().text();
         DB_Connection.rollback();
         return false;
     }
+
+    // 5. Commit all changes
     DB_Connection.commit();
+
+    // Return true if the final update was successful
     return qdel.numRowsAffected() > 0;
 }
 
@@ -2428,6 +2453,7 @@ CheckOutResult DatabaseManager::checkOutRfidWithImages(const QString &rfid,
 
 bool DatabaseManager::deleteClosedSessions(const QString &rfid)
 {
+    return true;
     const QString encRfid = rfid;
     QSqlQuery q(DB_Connection);
     // Preserve history but free the card by clearing RFID on closed sessions
