@@ -221,9 +221,10 @@ Item {
         }
         let vehicleType='car'; for(let i=0;i<usersCache.length;i++) if(usersCache[i].id===userId){ vehicleType=usersCache[i].vehicle_type; break }
         const r=rRepo(); const pid=(r&&r.getPricingId)? r.getPricingId(vehicleType,ticket):-1; if(pid<=0){ msg('Không tìm thấy bảng giá'); return }
-        console.log('[SubsLogic] create/extend params', {userId:userId,pid:pid,plate:plate,rfid:rfid,ticket:ticket,start:startDate,end:endDate,payment:payment,price:price})
-        const sid=(r&&r.createSubscription)? r.createSubscription(userId,pid,plate,rfid,ticket,startDate,endDate,payment,price,'active'):-1;
-        console.log('[SubsLogic] create/extend result subscriptionId=', sid)
+        const imagePath = (adminPage && adminPage.subImageSource) ? adminPage.subImageSource.toString() : ""
+        console.log('[SubsLogic] create/extend params', {userId:userId,pid:pid,plate:plate,rfid:rfid,ticket:ticket,start:startDate,end:endDate,payment:payment,price:price, image: imagePath})
+        const sid=(r&&r.createSubscriptionWithImage)?
+        r.createSubscriptionWithImage(userId,pid,plate,rfid,ticket,startDate,endDate,payment,price,'active', imagePath):-1;        console.log('[SubsLogic] create/extend result subscriptionId=', sid)
         if(sid===-2){
             msg('Đăng ký trùng lặp: người dùng/biển số hoặc RFID đã có đăng ký hoạt động trong khoảng này');
             return;
@@ -245,6 +246,7 @@ Item {
                 if (adminPage.subRfid) adminPage.subRfid.text = '';
                 if (adminPage.subPrice) adminPage.subPrice.text = '';
                 if (adminPage.subPlan && 'text' in adminPage.subPlan) adminPage.subPlan.text = '';
+                if (adminPage.subImageSource) adminPage.subImageSource = '' ;
                 if (adminPage.subStart) adminPage.subStart.text = '';
                 if (adminPage.subEnd) adminPage.subEnd.text = '';
             }

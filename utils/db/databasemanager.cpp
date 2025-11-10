@@ -220,6 +220,7 @@ bool DatabaseManager::ensureSchema()
             payment_mode TEXT NOT NULL CHECK (payment_mode IN ('prepaid','postpaid')),
             price INTEGER NOT NULL,
             status TEXT DEFAULT 'active' CHECK (status IN ('active','expired','canceled')),
+            subscription_image BLOB,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
             FOREIGN KEY(pricing_id) REFERENCES pricing(id) ON DELETE CASCADE,
             FOREIGN KEY(rfid) REFERENCES rfid_cards(rfid) ON DELETE SET NULL
@@ -230,6 +231,22 @@ bool DatabaseManager::ensureSchema()
         DB_Connection.rollback();
         return false;
     }
+    // Migrate subscriptions table if needed (add new column)
+    {
+        QSqlQuery checkCols(DB_Connection);
+        checkCols.exec("PRAGMA table_info(subscriptions)");
+        bool hasSubImageCol = false;
+        while (checkCols.next())
+        {
+            if (checkCols.value(1).toString() == "subscription_image")
+                hasSubImageCol = true;
+        }
+        if (!hasSubImageCol){
+            qDebug() << "Migrating subscriptions table: adding subscription_image column";
+            q.exec("ALTER TABLE subscriptions ADD COLUMN subscription_image BLOB");
+    }
+        }
+
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_dates ON subscriptions(start_date, end_date)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_plate_rfid ON subscriptions(plate, rfid)");
@@ -747,6 +764,28 @@ static QSqlDatabase openThreadDb(const QString &filePath)
     prag.exec("PRAGMA journal_mode=WAL");
     prag.exec("PRAGMA synchronous=NORMAL");
     return db;
+}
+// Helper to read a QML file URL/path into a QByteArray
+static QByteArray readImageToByteArray(const QString &imagePath)
+{
+    if (imagePath.isEmpty()) {
+        return QByteArray();
+    }
+
+    QUrl imageUrl(imagePath);
+    QString localPath;
+    if (imageUrl.isLocalFile()) {
+        localPath = imageUrl.toLocalFile();
+    } else {
+        localPath = imagePath; // Assume it's a local path if not a URL
+    }
+
+    QFile file(localPath);
+    if (!file.open(QIODevice::ReadOnly)) {
+        qWarning() << "readImageToByteArray: Could not open file:" << file.fileName() << "from path" << imagePath;
+        return QByteArray();
+    }
+    return file.readAll();
 }
 
 void DatabaseManager::getDashboardStatsAsync(const QString &todayIso)
@@ -1855,17 +1894,20 @@ int DatabaseManager::upsertUser(const QString &fullName,
     return userId;
 }
 
-int DatabaseManager::createSubscription(int userId,
-                                        int pricingId,
-                                        const QString &plate,
-                                        const QString &rfid,
-                                        const QString &planType,
-                                        const QString &startDate,
-                                        const QString &endDate,
-                                        const QString &paymentMode,
-                                        int price,
-                                        const QString &status)
+int DatabaseManager::createSubscriptionWithImage(int userId,
+                                                 int pricingId,
+                                                 const QString &plate,
+                                                 const QString &rfid,
+                                                 const QString &planType,
+                                                 const QString &startDate,
+                                                 const QString &endDate,
+                                                 const QString &paymentMode,
+                                                 int price,
+                                                 const QString &status,
+                                                 const QString &imagePath)
 {
+    const QByteArray imageBytes = readImageToByteArray(imagePath);
+
     // Guard: prevent duplicate active subscriptions for the same user + RFID/plate overlapping the same period
     {
         QSqlQuery chk(DB_Connection);
@@ -1885,15 +1927,14 @@ int DatabaseManager::createSubscription(int userId,
         if (chk.exec() && chk.next())
         {
             qWarning() << "createSubscription: duplicate active subscription exists for user" << userId << "rfid/plate" << rfid << plate;
-            // Return a negative code distinct from SQL error to indicate duplicate
             return -2;
         }
     }
 
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
-        INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status)
-        VALUES (:uid,:pid,:pl,:rf,:pt,:sd,:ed,:pm,:pr,:st)
+        INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status, subscription_image)
+        VALUES (:uid,:pid,:pl,:rf,:pt,:sd,:ed,:pm,:pr,:st, :img)
     )");
     q.bindValue(":uid", userId);
     q.bindValue(":pid", pricingId);
@@ -1905,6 +1946,7 @@ int DatabaseManager::createSubscription(int userId,
     q.bindValue(":pm", paymentMode);
     q.bindValue(":pr", price);
     q.bindValue(":st", status);
+    q.bindValue(":img", imageBytes.isEmpty() ? QVariant() : imageBytes);
     if (!q.exec())
     {
         qWarning() << "createSubscription:" << q.lastError().text();
@@ -1913,17 +1955,20 @@ int DatabaseManager::createSubscription(int userId,
     return q.lastInsertId().toInt();
 }
 
-bool DatabaseManager::updateSubscription(int id,
-                                         int userId,
-                                         const QString &plate,
-                                         const QString &rfid,
-                                         const QString &planType,
-                                         const QString &startDate,
-                                         const QString &endDate,
-                                         const QString &paymentMode,
-                                         int price,
-                                         const QString &status)
+bool DatabaseManager::updateSubscriptionWithImage(int id,
+                                                  int userId,
+                                                  const QString &plate,
+                                                  const QString &rfid,
+                                                  const QString &planType,
+                                                  const QString &startDate,
+                                                  const QString &endDate,
+                                                  const QString &paymentMode,
+                                                  int price,
+                                                  const QString &status,
+                                                  const QString &imagePath)
 {
+    const QByteArray imageBytes = readImageToByteArray(imagePath);
+
     // Determine pricing_id from user vehicle type and normalized plan type
     QString vt = QStringLiteral("car");
     {
@@ -1937,12 +1982,18 @@ bool DatabaseManager::updateSubscription(int id,
     }
     const QString ticket = normalizePlan(planType);
     const int pid = getPricingIdFor(vt, ticket);
+
     QSqlQuery q(DB_Connection);
-    q.prepare(R"(
+    QString sql = R"(
         UPDATE subscriptions SET user_id=:uid, pricing_id=:pid, plate=:pl, rfid=:rf, plan_type=:pt, start_date=:sd, end_date=:ed,
                payment_mode=:pm, price=:pr, status=:st
-        WHERE id=:id
-    )");
+    )";
+    if (!imagePath.isEmpty()) {
+        sql += ", subscription_image=:img";
+    }
+    sql += " WHERE id=:id";
+
+    q.prepare(sql);
     q.bindValue(":uid", userId);
     q.bindValue(":pid", pid > 0 ? QVariant(pid) : QVariant());
     q.bindValue(":pl", plate);
@@ -1954,12 +2005,63 @@ bool DatabaseManager::updateSubscription(int id,
     q.bindValue(":pr", price);
     q.bindValue(":st", status);
     q.bindValue(":id", id);
+    if (!imagePath.isEmpty()) {
+        q.bindValue(":img", imageBytes);
+    }
     if (!q.exec())
     {
         qWarning() << "updateSubscription:" << q.lastError().text();
         return false;
     }
     return q.numRowsAffected() > 0;
+}
+
+int DatabaseManager::createSubscription(int userId,
+                                        int pricingId,
+                                        const QString &plate,
+                                        const QString &rfid,
+                                        const QString &planType,
+                                        const QString &startDate,
+                                        const QString &endDate,
+                                        const QString &paymentMode,
+                                        int price,
+                                        const QString &status)
+{
+    return createSubscriptionWithImage(userId,
+                                       pricingId,
+                                       plate,
+                                       rfid,
+                                       planType,
+                                       startDate,
+                                       endDate,
+                                       paymentMode,
+                                       price,
+                                       status,
+                                       QString());
+}
+
+bool DatabaseManager::updateSubscription(int id,
+                                         int userId,
+                                         const QString &plate,
+                                         const QString &rfid,
+                                         const QString &planType,
+                                         const QString &startDate,
+                                         const QString &endDate,
+                                         const QString &paymentMode,
+                                         int price,
+                                         const QString &status)
+{
+    return updateSubscriptionWithImage(id,
+                                       userId,
+                                       plate,
+                                       rfid,
+                                       planType,
+                                       startDate,
+                                       endDate,
+                                       paymentMode,
+                                       price,
+                                       status,
+                                       QString());
 }
 
 QVariantMap DatabaseManager::findActiveSubscription(const QString &rfid,
