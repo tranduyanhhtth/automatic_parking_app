@@ -73,8 +73,6 @@ public:
                                        const QString &endDate,
                                        const QString &paymentMode,
                                        int price,
-                                       const QString &status) override;
-
                                        const QString &status,
                                        const QString &paymentmethod) override;
     Q_INVOKABLE bool updateSubscription(int id,
@@ -86,32 +84,6 @@ public:
                                         const QString &endDate,
                                         const QString &paymentMode,
                                         int price,
-                                        const QString &status) override;
-
-    Q_INVOKABLE int createSubscriptionWithImage(int userId,
-                                                int pricingId,
-                                                const QString &plate,
-                                                const QString &rfid,
-                                                const QString &planType,
-                                                const QString &startDate,
-                                                const QString &endDate,
-                                                const QString &paymentMode,
-                                                int price,
-                                                const QString &status,
-                                                const QString &imagePath);
-
-    Q_INVOKABLE bool updateSubscriptionWithImage(int id,
-                                                 int userId,
-                                                 const QString &plate,
-                                                 const QString &rfid,
-                                                 const QString &planType,
-                                                 const QString &startDate,
-                                                 const QString &endDate,
-                                                 const QString &paymentMode,
-                                                 int price,
-                                                 const QString &status,
-                                                 const QString &imagePath);
-
                                         const QString &status,
                                         const QString &paymentMethod) override;
     Q_INVOKABLE bool updateSubscriptionPaymentDetails(int id,

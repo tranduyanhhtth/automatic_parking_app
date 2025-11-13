@@ -258,11 +258,66 @@ Item {
 						}
 					}
 					Connections {
-						// When switching to Revenue tab (index 5), ask logic to refresh via trigger
+						// When switching tabs, clear all forms
 						target: tabbar
 						function onCurrentIndexChanged() {
-							if (tabbar.currentIndex === 6)
-								adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
+						if (rfidTextField) rfidTextField.text = ""
+						if (rfidVehicleCombo) rfidVehicleCombo.currentIndex = 0
+						if (rfidTicketCombo) rfidTicketCombo.currentIndex = 0
+						if (rfidDescField) rfidDescField.text = ""
+						pendingSelectRfidIndex = -1 // Clear list selection
+						// --- Users Tab (Index 3) ---
+						if (userName) userName.text = ""
+						if (userPhone) userPhone.text = ""
+						if (userRfid) userRfid.text = ""
+						if (userPlate) userPlate.text = ""
+						if (userVehicleType) userVehicleType.text = ""
+						if (userNote) userNote.text = ""
+						if (usersLogic) usersLogic.selectedUserId = -1 // Reset logic state
+						pendingSelectUserIndex = -1 // Clear list selection
+						// --- Subscriptions Tab (Index 4) ---
+						if (subUserText) subUserText.text = ""
+						if (subPlate) subPlate.text = ""
+						if (subRfid) subRfid.text = ""
+						if (subPlan) subPlan.text = ""
+						if (subStart) subStart.text = ""
+						if (subEnd) subEnd.text = ""
+						if (subPayment) subPayment.currentIndex = 0
+						if (subPaymentMethod) subPaymentMethod.currentIndex = 0
+						if (subPrice) subPrice.text = ""
+						if (subsLogic) subsLogic.selectedSubId = -1 // Reset logic state
+						pendingSelectSubIndex = -1 // Clear list selection
+						if (uploadedImageViewer) uploadedImageViewer.source = ""
+						// --- Employee Tab (Index 5) ---
+						if (tfEmployeeName) tfEmployeeName.text = ""
+						if (tfEmployeeStaffId) tfEmployeeStaffId.text = ""
+						if (taEmployeeNote) taEmployeeNote.text = ""
+						if (cbEmployeeRole) cbEmployeeRole.currentIndex = 0
+						pendingSelectEmployeeIndex = -1 // Clear list selection
+						// Reset check-in/out button states
+						canEmployeeCheckIn = false
+						canEmployeeCheckOut = false
+						// --- Revenue Tab (Index 6) ---
+						if (revFrom) revFrom.text = ""
+						if (revTo) revTo.text = ""
+						if (revType) revType.currentIndex = 0
+						// --- Pricing Tab (Index 1) ---
+						if (pricingVehicle) pricingVehicle.currentIndex = 0
+						// --- END: Clear all form fields ---
+						// --- Keep existing logic for Revenue tab ---
+						if (tabbar.currentIndex === 6) {
+							adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
+								}
+						}
+					}
+					Connections {
+					// When switching tabs, clear all forms
+						target: tabbar
+						function onCurrentIndexChanged() {
+						adminPage.clearAllTabForms()
+						if (tabbar.currentIndex === 6) {
+							adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
+							}
 						}
 					}
 					Connections {
