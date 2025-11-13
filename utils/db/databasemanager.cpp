@@ -219,6 +219,7 @@ bool DatabaseManager::ensureSchema()
             end_date TEXT NOT NULL,
             payment_mode TEXT NOT NULL CHECK (payment_mode IN ('prepaid','postpaid')),
             price INTEGER NOT NULL,
+            payment_method TEXT NOT NULL CHECK (payment_method IN ('cash','transfer')),
             status TEXT DEFAULT 'active' CHECK (status IN ('active','expired','canceled')),
             subscription_image BLOB,
             FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
@@ -247,6 +248,11 @@ bool DatabaseManager::ensureSchema()
     }
         }
 
+    if (!columnExists("subscriptions", "payment_method"))
+    {
+        qDebug() << "Migrating subscription table: adding payment_method column";
+        q.exec("ALTER TABLE subscriptions ADD COLUMN payment_method TEXT");
+    }
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_user ON subscriptions(user_id)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_dates ON subscriptions(start_date, end_date)");
     q.exec("CREATE INDEX IF NOT EXISTS idx_subs_plate_rfid ON subscriptions(plate, rfid)");
@@ -1905,6 +1911,17 @@ int DatabaseManager::createSubscriptionWithImage(int userId,
                                                  int price,
                                                  const QString &status,
                                                  const QString &imagePath)
+int DatabaseManager::createSubscription(int userId,
+                                        int pricingId,
+                                        const QString &plate,
+                                        const QString &rfid,
+                                        const QString &planType,
+                                        const QString &startDate,
+                                        const QString &endDate,
+                                        const QString &paymentMode,
+                                        int price,
+                                        const QString &status,
+                                        const QString &paymentmethod)
 {
     const QByteArray imageBytes = readImageToByteArray(imagePath);
 
@@ -1935,6 +1952,8 @@ int DatabaseManager::createSubscriptionWithImage(int userId,
     q.prepare(R"(
         INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status, subscription_image)
         VALUES (:uid,:pid,:pl,:rf,:pt,:sd,:ed,:pm,:pr,:st, :img)
+        INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status, payment_method)
+        VALUES (:uid,:pid,:pl,:rf,:pt,:sd,:ed,:pm,:pr,:st, :pmeth)
     )");
     q.bindValue(":uid", userId);
     q.bindValue(":pid", pricingId);
@@ -1947,6 +1966,7 @@ int DatabaseManager::createSubscriptionWithImage(int userId,
     q.bindValue(":pr", price);
     q.bindValue(":st", status);
     q.bindValue(":img", imageBytes.isEmpty() ? QVariant() : imageBytes);
+    q.bindValue(":pmeth", paymentmethod);
     if (!q.exec())
     {
         qWarning() << "createSubscription:" << q.lastError().text();
@@ -1966,6 +1986,17 @@ bool DatabaseManager::updateSubscriptionWithImage(int id,
                                                   int price,
                                                   const QString &status,
                                                   const QString &imagePath)
+bool DatabaseManager::updateSubscription(int id,
+                                         int userId,
+                                         const QString &plate,
+                                         const QString &rfid,
+                                         const QString &planType,
+                                         const QString &startDate,
+                                         const QString &endDate,
+                                         const QString &paymentMode,
+                                         int price,
+                                         const QString &status,
+                                         const QString &paymentMethod)
 {
     const QByteArray imageBytes = readImageToByteArray(imagePath);
 
@@ -1994,6 +2025,9 @@ bool DatabaseManager::updateSubscriptionWithImage(int id,
     sql += " WHERE id=:id";
 
     q.prepare(sql);
+               payment_mode=:pm, price=:pr, status=:st, payment_method=:pmeth
+        WHERE id=:id
+    )");
     q.bindValue(":uid", userId);
     q.bindValue(":pid", pid > 0 ? QVariant(pid) : QVariant());
     q.bindValue(":pl", plate);
@@ -2008,12 +2042,32 @@ bool DatabaseManager::updateSubscriptionWithImage(int id,
     if (!imagePath.isEmpty()) {
         q.bindValue(":img", imageBytes);
     }
+    q.bindValue(":pmeth", paymentMethod);
     if (!q.exec())
     {
         qWarning() << "updateSubscription:" << q.lastError().text();
         return false;
     }
     return q.numRowsAffected() > 0;
+}
+bool DatabaseManager::updateSubscriptionPaymentDetails(int id,
+                                                       const QString &paymentMode,
+                                                       const QString &paymentMethod)
+{
+    QSqlQuery q(DB_Connection);
+    q.prepare(R"(
+    UPDATE subscriptions SET payment_mode = :pm, payment_method = :pmeth
+      WHERE id = :id
+    )");
+    q.bindValue(":pm", paymentMode);
+    q.bindValue(":pmeth", paymentMethod);
+    q.bindValue(":id", id);
+        if (!q.exec())
+            {
+               qWarning() << "updateSubscriptionPaymentDetails:" << q.lastError().text();
+       return false;
+           }
+        return q.numRowsAffected() > 0;
 }
 
 int DatabaseManager::createSubscription(int userId,
@@ -3249,7 +3303,7 @@ QList<QVariantMap> DatabaseManager::listSubscriptions(int limit, int offset)
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
         SELECT s.id, s.user_id, u.full_name, u.vehicle_type, s.plate, s.rfid, s.plan_type,
-               s.start_date, s.end_date, s.payment_mode, s.price, s.status
+               s.start_date, s.end_date, s.payment_mode, s.price, s.status, s.payment_method
         FROM subscriptions s
         LEFT JOIN users u ON u.id = s.user_id
         ORDER BY s.id DESC
@@ -3274,6 +3328,7 @@ QList<QVariantMap> DatabaseManager::listSubscriptions(int limit, int offset)
             m.insert("payment_mode", q.value("payment_mode"));
             m.insert("price", q.value("price"));
             m.insert("status", q.value("status"));
+            m.insert("payment_method", q.value("payment_method"));
             out.append(m);
         }
     }
@@ -3297,7 +3352,7 @@ QVariantMap DatabaseManager::getLatestSubscriptionForUser(int userId)
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
         SELECT s.id, s.user_id, s.plate, s.rfid, s.plan_type, s.start_date, s.end_date,
-               s.payment_mode, s.price, s.status
+               s.payment_mode, s.price, s.status, s.payment_method
         FROM subscriptions s
         WHERE s.user_id = :uid
         ORDER BY s.id DESC

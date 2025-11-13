@@ -128,7 +128,7 @@ Item {
             _expiredWarned = false
         }
     }
-    function selectSubscription(id,user_id,plate,rfid,plan_type,start_date,end_date,payment_mode,price,status){
+    function selectSubscription(id,user_id,plate,rfid,plan_type,start_date,end_date,payment_mode,price,status, payment_method){
         selectedSubId=id; selectedUserId=user_id; _inExtendedState=false; _origStart=''; _origEnd='';
         if(adminPage){
             if(adminPage.subPlate) adminPage.subPlate.text=plate;
@@ -136,6 +136,13 @@ Item {
             if(adminPage.subPlan){ setPlanLabel(plan_type) }
             if(adminPage.subStart) adminPage.subStart.text=start_date;
             if(adminPage.subEnd) adminPage.subEnd.text=end_date;
+            if(adminPage.subPaymentMethod) { // <-- ADDED
+                let methIdx = 0; // default to "Tiền mặt"
+                if (payment_method === 'transfer') {
+                    methIdx = 1; // "Chuyển khoản"
+                }
+                adminPage.subPaymentMethod.currentIndex = methIdx;
+            }
             if(adminPage.subPayment) adminPage.subPayment.currentIndex= payment_mode==='postpaid'?1:0;
             if(adminPage.subPrice) adminPage.subPrice.text=''+price;
             if(adminPage.subUserText){
@@ -206,7 +213,10 @@ Item {
         })();
         const plate=(adminPage.subPlate&&adminPage.subPlate.text)?adminPage.subPlate.text:''; const rfid=(adminPage.subRfid&&adminPage.subRfid.text)?adminPage.subRfid.text:'';
         let startDate=(adminPage.subStart&&adminPage.subStart.text)?adminPage.subStart.text:''; let endDate=(adminPage.subEnd&&adminPage.subEnd.text)?adminPage.subEnd.text:'';
-        const paymentRaw=adminPage.subPayment?adminPage.subPayment.currentText:''; const payment=paymentRaw.toLowerCase().indexOf('sau')>=0?'postpaid':'prepaid';
+        const paymentRaw=adminPage.subPayment?adminPage.subPayment.currentText:'';
+        const payment=paymentRaw.toLowerCase().indexOf('sau')>=0?'postpaid':'prepaid';
+        const paymentMethodRaw=adminPage.subPaymentMethod?adminPage.subPaymentMethod.currentText:'';
+        const paymentMethod=paymentMethodRaw.toLowerCase().indexOf('chuy')>=0?'transfer':'cash';
         if(!(adminPage.subPrice&&adminPage.subPrice.text && adminPage.subPrice.text.length>0)) prefillPrice(userId, ticket)
         const price=parseInt((adminPage.subPrice&&adminPage.subPrice.text)?adminPage.subPrice.text:'0')||0;
         if(isExtend && selectedSubId>0){
@@ -225,13 +235,16 @@ Item {
         console.log('[SubsLogic] create/extend params', {userId:userId,pid:pid,plate:plate,rfid:rfid,ticket:ticket,start:startDate,end:endDate,payment:payment,price:price, image: imagePath})
         const sid=(r&&r.createSubscriptionWithImage)?
         r.createSubscriptionWithImage(userId,pid,plate,rfid,ticket,startDate,endDate,payment,price,'active', imagePath):-1;        console.log('[SubsLogic] create/extend result subscriptionId=', sid)
+        console.log('[SubsLogic] create/extend params', {userId:userId,pid:pid,plate:plate,rfid:rfid,ticket:ticket,start:startDate,end:endDate,payment:payment,price:price})
+        const sid=(r&&r.createSubscription)? r.createSubscription(userId,pid,plate,rfid,ticket,startDate,endDate,payment,price,'active', paymentMethod):-1;
+        console.log('[SubsLogic] create/extend result subscriptionId=', sid)
         if(sid===-2){
             msg('Đăng ký trùng lặp: người dùng/biển số hoặc RFID đã có đăng ký hoạt động trong khoảng này');
             return;
         } else if (sid > -1) {
             if (price > 0 && r && r.insertRevenue) {
                 try {
-                    r.insertRevenue(null, sid, userId, price, payment, 'subscription', isExtend ? 'extend' : 'create');
+                    r.insertRevenue(null, sid, userId, price,paymentMethod, 'subscription', isExtend ? 'extend' : 'create');
                 } catch (e) {
                     console.log("[SubscriptionsLogic] Failed to insert revenue record. Error: " + e);
                 }
@@ -258,6 +271,49 @@ Item {
             msg('Lỗi lưu đăng ký');
         }
     }
+
+        function updateSubscription(){ // <-- ADDED FUNCTION
+            if(selectedSubId <= 0){
+                msg('Chưa chọn đăng ký để cập nhật');
+                return;
+            }
+            const r=rRepo();
+            if(!r || !r.updateSubscription){
+                msg('Thiếu API updateSubscription');
+                return;
+            }
+
+            // Read current values from form
+            const paymentRaw = adminPage.subPayment ? adminPage.subPayment.currentText : '';
+            const payment = paymentRaw.toLowerCase().indexOf('sau') >= 0 ? 'postpaid' : 'prepaid';
+            const paymentMethodRaw = adminPage.subPaymentMethod ? adminPage.subPaymentMethod.currentText : '';
+            const paymentMethod = paymentMethodRaw.toLowerCase().indexOf('chuy') >= 0 ? 'transfer' : 'cash';
+
+            // Find the full record to pass all fields to updateSubscription
+            var currentSub = null;
+            for(let i=0; i<listModel.count; i++) {
+                if(listModel.get(i).id === selectedSubId) {
+                    currentSub = listModel.get(i);
+                    break;
+                }
+            }
+
+            if (!currentSub) {
+                msg('Không tìm thấy đăng ký đã chọn');
+                return;
+            }
+
+            // Call updateSubscription with ALL fields, substituting the changed ones
+            const ok = r.updateSubscriptionPaymentDetails(selectedSubId, payment, paymentMethod);
+
+
+            if(ok){
+                msg('Cập nhật đăng ký thành công');
+                refreshSubs(); // Refresh the list to show new values
+            } else {
+                msg('Lỗi khi cập nhật đăng ký');
+            }
+        }
 
 
     function cancelExtend(){
@@ -334,6 +390,12 @@ Item {
                 adminPage.triggerSubExtend=false
             }
         }
+        function onTriggerSubUpdateChanged(){ // <-- ADDED
+                    if(adminPage.triggerSubUpdate){
+                        updateSubscription();
+                        adminPage.triggerSubUpdate=false
+                    }
+                 }
         function onTriggerSubCancelExtendChanged(){
             if(adminPage.triggerSubCancelExtend){
                 cancelExtend();
@@ -356,7 +418,7 @@ Item {
             var idx=adminPage.pendingSelectSubIndex;
             if(idx>=0 && idx<listModel.count){
                 var r=listModel.get(idx);
-                selectSubscription(r.id, r.user_id, r.plate, r.rfid, r.plan_type, r.start_date, r.end_date, r.payment_mode, r.price, r.status)
+                selectSubscription(r.id, r.user_id, r.plate, r.rfid, r.plan_type, r.start_date, r.end_date, r.payment_mode, r.price, r.status, r.payment_method)
             }
         }
         function onTriggerUsersChangedChanged(){

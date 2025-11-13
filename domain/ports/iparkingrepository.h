@@ -69,7 +69,9 @@ public:
                                    const QString &endDate,
                                    const QString &paymentMode,
                                    int price,
-                                   const QString &status = QStringLiteral("active")) = 0;
+                                   const QString &status,
+                                   const QString &paymentmethod) = 0;
+
     // Cập nhật subscription hiện có (trả về true nếu thành công)
     virtual bool updateSubscription(int id,
                                     int userId,
@@ -80,7 +82,8 @@ public:
                                     const QString &endDate,
                                     const QString &paymentMode,
                                     int price,
-                                    const QString &status = QStringLiteral("active")) = 0;
+                                    const QString &status,
+                                    const QString &paymentMethod) = 0;
     // Tìm subscription còn hạn tại thời điểm nowIso (nếu nowIso rỗng dùng hiện tại)
     virtual QVariantMap findActiveSubscription(const QString &rfid,
                                                const QString &plate,

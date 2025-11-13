@@ -59,8 +59,8 @@ Item {
 	property alias subPayment: subPayment
 	property alias subPrice: subPrice
 	property alias subFilter: subFilter
+	property alias subPaymentMethod: subPaymentMethod
 	property alias subPlatePick: subPlatePick
-	property alias subImageSource: subsUploadedImageViewer.source // new alias for upload image in sub tab
 	// Revenue summary aliases (labels in Revenue section)
 	property alias revSummaryTotal: revSummaryTotal
 	property alias revSummaryBreakdown: revSummaryBreakdown
@@ -104,6 +104,7 @@ Item {
 	property bool triggerExportExpired: false
 	property bool triggerSubUserTextChanged: false
 	property bool triggerSubCancelExtend: false
+	property bool triggerSubUpdate: false
 	property bool triggerSubsChanged: false
 	property bool triggerSubsSaveDialogAccepted: false
 	// buffer for generated expired CSV
@@ -176,7 +177,9 @@ Item {
 		id: imageOpenDialog
 		title: "Chọn ảnh để tải lên"
 		nameFilters: ["Image files (*.png *.jpg *.jpeg)", "All files (*.*)"]
-	}
+		onAccepted:
+				uploadedImageViewer.source = imageOpenDialog.selectedFile
+		}
 
 	FileDialog {
 		id: subsSaveDialog
@@ -262,16 +265,6 @@ Item {
 								adminPage.triggerRevenueFilter = !adminPage.triggerRevenueFilter;
 						}
 					}
-					Connections {
-							target: imageOpenDialog
-							function onAccepted() {
-								if (adminPage.tabBar.currentIndex === 6) { // Revenue Tab
-									uploadedImageViewer.source = imageOpenDialog.selectedFile
-								} else if (adminPage.tabBar.currentIndex === 4) { // Subscriptions Tab
-									subsUploadedImageViewer.source = imageOpenDialog.selectedFile
-								}
-							}
-						}
 					Connections {
 						target: dailyRevenueRangePicker // The ID of your new ComboBox
 						function onCurrentIndexChanged() {
@@ -493,11 +486,10 @@ Item {
 												}
 											}
 										}
-																	}
-
-																}
-															}
-														}
+									}
+								}
+							}
+						}
 						// Pricing
 						Rectangle {
 							color: "lightgray"
@@ -703,26 +695,6 @@ Item {
 											}
 										}
 									}
-								}
-							}
-
-							// Save hook back to admin
-							Connections {
-								target: pricingLogic
-								function onSaved(json) {
-									try {
-										console.log('[AdminPage] onSaved JSON length:',
-													(json || '').length)
-										const arr = JSON.parse(json)
-										console.log('[AdminPage] rows to upsert:',
-													Array.isArray(
-														arr) ? arr.length : -1)
-									} catch (e) {
-										console.log('[AdminPage] JSON parse failed:',
-													e)
-									}
-									pricingJson.text = json
-									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
 								}
 							}
 						}
@@ -1391,6 +1363,15 @@ Item {
 											radius: 8
 										}
 									}
+									ComboBox {
+										id: subPaymentMethod // New ID
+										model: ["Tiền mặt", "Chuyển khoản"] // Your requested options
+										Layout.preferredWidth: 140
+										Layout.preferredHeight: 24
+										background: Rectangle {
+											radius: 8
+										}
+									}
 									TextField {
 										id: subPrice
 										placeholderText: "Giá vé"
@@ -1439,6 +1420,36 @@ Item {
 													   = !adminPage.triggerSubExtend
 										}
 									}
+									Rectangle { // <-- ADDED BLOCK
+										width: 110
+										height: 28
+										radius: 8
+										color: "#ffc107" // Amber
+										Text {
+											anchors.centerIn: parent
+											text: "Cập nhật"
+											color: "black"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerSubUpdate = !adminPage.triggerSubUpdate
+										}
+									}
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#007bff" // Blue color for distinction
+										Text {
+											anchors.centerIn: parent
+											text: "Tải ảnh lên"
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: adminPage.triggerOpenImage = !adminPage.triggerOpenImage
+										}
+									}
 									Rectangle {
 										width: 110
 										height: 28
@@ -1455,156 +1466,46 @@ Item {
 													   = !adminPage.triggerSubCancelExtend
 										}
 									}
-									Rectangle {
-											width: subsUploadedImageViewer.source.toString().length > 0 ? 140 : 120
-											height: 28
-											radius: 8
-											color: "#007bff"
-											Text {
-												anchors.centerIn: parent
-												text: subsUploadedImageViewer.source.toString().length > 0 ? "Đổi ảnh khác" : "Tải ảnh lên"
-												color: "white"
-												font.pixelSize: 12
-											}
-											MouseArea {
-												anchors.fill: parent
-												onClicked: adminPage.triggerOpenImage = !adminPage.triggerOpenImage
-											}
-											}
-										}
-
-										// Clear image button (only show when image exists)
-										Rectangle {
-											visible: subsUploadedImageViewer.source.toString().length > 0
-											width: 100
-											height: 28
-											radius: 8
-											color: "#c62828"
-											Text {
-												anchors.centerIn: parent
-												text: "Xóa ảnh"
-												color: "white"
-												font.pixelSize: 12
-											}
-											MouseArea {
-												anchors.fill: parent
-												onClicked: subsUploadedImageViewer.source = ""
-											}
-
-
-										Item {
-											Layout.fillWidth: true
-										}
-									}
-
-									// Image Preview Container - Always shows last uploaded image
 									Item {
-										id: subImageContainer
 										Layout.fillWidth: true
-										Layout.preferredHeight: subsUploadedImageViewer.source.toString().length > 0 ? 500 : 0
-										Layout.topMargin: subsUploadedImageViewer.source.toString().length > 0 ? 10 : 0
-										visible: subsUploadedImageViewer.source.toString().length > 0
-										clip: true
-
-										Rectangle {
-											anchors.fill: parent
-											color: "#1a1a1a"
-											radius: 8
-											border.color: "#333"
-											border.width: 2
-
-											ColumnLayout {
-												anchors.fill: parent
-												anchors.margins: 8
-												spacing: 4
-
-												// Header with label
-												RowLayout {
-													Layout.fillWidth: true
-													Text {
-														text: "Ảnh đã tải lên:"
-														color: "#4ec9b0"
-														font.pixelSize: 12
-														font.bold: true
-													}
-													Item { Layout.fillWidth: true }
-												}
-
-												// Image display
-												Rectangle {
-													Layout.fillWidth: true
-													Layout.fillHeight: true
-													color: "#222"
-													radius: 4
-
-													Image {
-														id: subsUploadedImageViewer
-														source: ""
-														anchors.fill: parent
-														anchors.margins: 4
-														fillMode: Image.PreserveAspectFit
-
-													// 	// Show file name below image
-													// 	Text {
-													// 		anchors.bottom: parent.bottom
-													// 		anchors.horizontalCenter: parent.horizontalCenter
-													// 		anchors.bottomMargin: 8
-													// 		text: subsUploadedImageViewer.source ? subsUploadedImageViewer.source.toString().split('/').pop() : ""
-													// 		color: "#ccc"
-													// 		font.pixelSize: 10
-													// 	TextField {
-													// 		background: Rectangle {
-													// 			implicitWidth: 100
-													// 			implicitHeight: 40
-													// 			color: "#000000cc"
-													// 			radius: 3
-													// 			anchors.fill: parent
-													// 			anchors.margins: -4
-													// 		}
-													// 	}
-													// }
-
-														// Loading indicator
-														BusyIndicator {
-															anchors.centerIn: parent
-															running: subsUploadedImageViewer.status === Image.Loading
-															visible: running
-														}
-
-														// Error message
-														Text {
-															anchors.centerIn: parent
-															visible: subsUploadedImageViewer.status === Image.Error
-															text: "Không thể tải ảnh"
-															color: "#e53935"
-														}
-													}
-												}
-											}
-										}
-
-										Rectangle { // Close button
-											width: 24
-											height: 24
-											radius: 12
-											color: "#222"
-											anchors.top: parent.top
-											anchors.right: parent.right
-											anchors.margins: 8
-											visible: subsUploadedImageViewer.source.toString().length > 0
-											Text {
-												text: "x"
-												color: "white"
-												font.pixelSize: 18
-												font.bold: true
-												anchors.centerIn: parent
-											}
-											MouseArea {
-												anchors.fill: parent
-												onClicked: subsUploadedImageViewer.source = ""
-											}
-										}
 									}
+								}
+								Item {
+									id: imageContainer
+									Layout.alignment: Qt.AlignHCenter
+									Layout.preferredHeight: uploadedImageViewer.source ? 500 : 0
+									Layout.preferredWidth: uploadedImageViewer.source ? uploadedImageViewer.width : 0
+									visible: uploadedImageViewer.source && uploadedImageViewer.source.toString().length > 0
+								Image {
+									id: uploadedImageViewer
+									source: "" // Initially empty
+									height: imageContainer.Layout.preferredHeight
+									fillMode: Image.PreserveAspectFit
+									visible: uploadedImageViewer.source
+								}
+								Rectangle { // Close button
+									width: 24
+									height: 24
+									radius: 12
+									color: "#222"
+									anchors.top: parent.top
+									anchors.right: parent.right
+									anchors.margins: 8
+									visible: uploadedImageViewer.source
+									Text {
+										text: "×"
+										color: "white"
+										font.pixelSize: 18
+										font.bold: true
+										anchors.centerIn: parent
+									}
+									MouseArea {
+										anchors.fill: parent
+										onClicked: uploadedImageViewer.source = ""
+									}
+								}
+							}
+
 								// Danh sách vé tháng
 								Rectangle {
 									Layout.fillWidth: true
@@ -1762,6 +1663,11 @@ Item {
 													}
 													Text {
 														text: payment_mode
+														color: "white"
+														Layout.preferredWidth: 90
+													}
+													Text {
+														text: payment_method
 														color: "white"
 														Layout.preferredWidth: 90
 													}
@@ -2092,43 +1998,6 @@ Item {
 										MouseArea { anchors.fill: parent; onClicked: revenueLogic && (revenueLogic.triggerSeedDemo = !revenueLogic.triggerSeedDemo) }
 									}
 								}
-
-								Item {
-									id: imageContainer
-									Layout.alignment: Qt.AlignHCenter
-									Layout.preferredHeight: uploadedImageViewer.source ? 300 : 0
-									Layout.preferredWidth: uploadedImageViewer.source ? uploadedImageViewer.width : 0
-									visible: uploadedImageViewer.source && uploadedImageViewer.source.toString().length > 0
-									Image {
-										id: uploadedImageViewer
-										source: "" // Initially empty
-										height: imageContainer.Layout.preferredHeight
-										fillMode: Image.PreserveAspectFit
-										visible: uploadedImageViewer.source
-									}
-									Rectangle { // Close button
-										width: 24
-										height: 24
-										radius: 12
-										color: "#222"
-										anchors.top: parent.top
-										anchors.right: parent.right
-										anchors.margins: 8
-										visible: uploadedImageViewer.source
-										Text {
-											text: "×"
-											color: "white"
-											font.pixelSize: 18
-											font.bold: true
-											anchors.centerIn: parent
-										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: uploadedImageViewer.source = ""
-										}
-									}
-								}
-
 								// Bảng kết quả
 								Rectangle {
 									Layout.fillWidth: true
@@ -2200,23 +2069,6 @@ Item {
 										Item {
 											Layout.fillWidth: true
 										}
-
-										Rectangle {
-											width: 110
-											height: 28
-											radius: 8
-											color: "#007bff" // Blue color for distinction
-											Text {
-												anchors.centerIn: parent
-												text: "Tải ảnh lên"
-												color: "white"
-											}
-											MouseArea {
-												anchors.fill: parent
-												onClicked: adminPage.triggerOpenImage = !adminPage.triggerOpenImage
-											}
-										}
-
 									Rectangle {
 										width: 110
 										height: 28
@@ -2247,6 +2099,25 @@ Item {
 											onClicked: adminPage.triggerExportPdf = !adminPage.triggerExportPdf
 										}
 									}
+								}
+							}
+							// Save hook back to admin
+							Connections {
+								target: pricingLogic
+								function onSaved(json) {
+									try {
+										console.log('[AdminPage] onSaved JSON length:',
+													(json || '').length)
+										const arr = JSON.parse(json)
+										console.log('[AdminPage] rows to upsert:',
+													Array.isArray(
+														arr) ? arr.length : -1)
+									} catch (e) {
+										console.log('[AdminPage] JSON parse failed:',
+													e)
+									}
+									pricingJson.text = json
+									adminPage.triggerSavePricing = !adminPage.triggerSavePricing
 								}
 							}
 						}
@@ -2328,7 +2199,7 @@ Item {
 					model: 31
 					popup.height: 240
 					delegate: ItemDelegate { text: (index + 1) < 10 ? "0" + (index + 1) : "" + (index + 1) }
-					displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (index + 1)
+					displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
 					Layout.preferredWidth: 90
 					currentIndex: 1
 				}

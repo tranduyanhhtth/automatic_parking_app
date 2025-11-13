@@ -75,6 +75,8 @@ public:
                                        int price,
                                        const QString &status) override;
 
+                                       const QString &status,
+                                       const QString &paymentmethod) override;
     Q_INVOKABLE bool updateSubscription(int id,
                                         int userId,
                                         const QString &plate,
@@ -110,6 +112,11 @@ public:
                                                  const QString &status,
                                                  const QString &imagePath);
 
+                                        const QString &status,
+                                        const QString &paymentMethod) override;
+    Q_INVOKABLE bool updateSubscriptionPaymentDetails(int id,
+                                                      const QString &paymentMode,
+                                                      const QString &paymentMethod);
     Q_INVOKABLE QVariantMap findActiveSubscription(const QString &rfid,
                                                    const QString &plate,
                                                    const QString &nowIso) override;
