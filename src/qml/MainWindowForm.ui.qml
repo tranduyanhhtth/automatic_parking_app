@@ -18,6 +18,7 @@ Item {
     property alias outputVideoLane2: lane2.outputVideo
     property alias inputPreviewLane2: lane2.inputPreview
     property alias outputPreviewLane2: lane2.outputPreview
+    property alias btnSearch: btnSearch
     property alias btnSettings: btnSettings
     property alias settingsMenu: settingsMenu
     // Expose dialog wrapper components and their fields (avoid aliasing to inner alias properties)
@@ -76,6 +77,9 @@ Item {
     property string timeInText: ""
     property string timeOutText: ""
 
+    property alias lane1Obj: lane1
+    property alias lane2Obj: lane2
+
     Rectangle {
         anchors.fill: parent
         color: "#f0f0f0"
@@ -108,6 +112,14 @@ Item {
                     Item {
                         Layout.fillWidth: true
                     }
+                    ToolButton{
+                        id: btnSearch
+                        text: "🔍"
+                        font.pixelSize: 24
+                        Accessible.name: "Search"
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
+                    }
+
                     ToolButton {
                         id: btnSettings
                         text: "⚙"

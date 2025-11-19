@@ -242,7 +242,7 @@ Item {
 							text: "Bảng giá"
 						}
 						TabButton {
-							text: "Phân loại thẻ"
+							text: "Quản lý thẻ"
 						}
 						TabButton {
 							text: "Người dùng"
@@ -570,6 +570,7 @@ Item {
 										Component.onCompleted: pricingLogic.selectedVehicle = (currentIndex === 0 ? "bike" : "car")
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									Item {
@@ -796,6 +797,7 @@ Item {
 										model: ["Xe máy", "Ô tô"]
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									ComboBox {
@@ -805,6 +807,7 @@ Item {
 										model: ["Giờ", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm", "Tháng", "Quý", "Năm"]
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									ComboBox {
@@ -907,6 +910,16 @@ Item {
 											Layout.fillWidth: true
 											spacing: 8
 											Text {
+												text: "Họ tên"
+												color: "white"
+												Layout.preferredWidth: 160
+											}
+											Text {
+												text: "Biển số"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+											Text {
 												text: "RFID"
 												color: "white"
 												Layout.preferredWidth: 160
@@ -957,6 +970,19 @@ Item {
 												RowLayout {
 													anchors.fill: parent
 													spacing: 8
+													Text {
+														// Check if full_name exists, otherwise show empty string
+														text: (typeof full_name === "undefined" || full_name === null) ? "" : full_name
+														color: "white"
+														Layout.preferredWidth: 160
+														elide: Text.ElideRight
+													}
+													Text {
+														// Check if plate exists, otherwise show empty string
+														text: (typeof plate === "undefined" || plate === null) ? "" : plate
+														color: "white"
+														Layout.preferredWidth: 120
+													}
 													Text {
 														text: rfid
 														color: "white"
@@ -1416,6 +1442,7 @@ Item {
 										Layout.preferredHeight: 24
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									ComboBox {
@@ -1425,6 +1452,7 @@ Item {
 										Layout.preferredHeight: 24
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									TextField {
@@ -1628,6 +1656,12 @@ Item {
 												Layout.preferredWidth: 120
 											}
 											Text {
+												text: "Loại vé"
+												color: "white"
+												Layout.preferredWidth: 120
+											}
+
+											Text {
 												text: "Bắt đầu"
 												color: "white"
 												Layout.preferredWidth: 120
@@ -1700,6 +1734,15 @@ Item {
 														text: rfid
 														color: "white"
 														Layout.preferredWidth: 120
+													}
+													Text {
+														// Use nested ternary operators instead of a JS block
+														text: plan_type === 'monthly' ? "Tháng" :
+															  (plan_type === 'quarterly' ? "Quý" :
+															  (plan_type === 'yearly' ? "Năm" : plan_type))
+
+														color: "white"
+														Layout.preferredWidth: 120 // Make sure this matches the header width
 													}
 													Text {
 														text: start_date
@@ -1788,6 +1831,7 @@ Item {
 										Layout.preferredHeight: 24
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									Item { Layout.fillWidth: true }
@@ -2006,6 +2050,7 @@ Item {
 										Layout.preferredHeight: 24
 										background: Rectangle {
 											radius: 8
+											color: "#111"
 										}
 									}
 									Item {
@@ -2391,7 +2436,7 @@ Item {
 						id: tfLoginUser
 						Layout.fillWidth: true
 						placeholderText: "admin"
-						color: "#111"
+						color: "#fff"
 					}
 				}
 				RowLayout {
@@ -2408,7 +2453,7 @@ Item {
 						Layout.fillWidth: true
 						placeholderText: "••••••"
 						echoMode: TextInput.Password
-						color: "#111"
+						color: "#fff"
 						Keys.onReturnPressed: adminPage.triggerLogin = !adminPage.triggerLogin
 					}
 				}

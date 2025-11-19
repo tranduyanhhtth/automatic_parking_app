@@ -229,7 +229,10 @@ public slots:
     Q_INVOKABLE void manualOpenBarrier();
     Q_INVOKABLE void manualCloseBarrier();
     Q_INVOKABLE void completeCheckout(const QString& rfid, const QString& plate, const QString& paymentMethod, int fee);
+    // [NEW] Method to manually update plate from UI - 18/11
+    Q_INVOKABLE void updateManualPlate(int laneIdx, const QString &newPlate);
     Q_INVOKABLE void setDualMode(int mode)
+
     {
         if (mode < 0 || mode > 2)
             mode = 0;

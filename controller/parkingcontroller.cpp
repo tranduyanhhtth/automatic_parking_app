@@ -61,6 +61,7 @@ void ParkingController::onEntranceRfidScanned(const QString &rfid)
 
 void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx)
 {
+    clearLaneState(laneIdx);
     if (!m_db)
         return;
     // Require RFID to be registered in rfid_cards (short-term cards are allowed without user/subscription)
@@ -101,8 +102,20 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
         QString detectedPlate;
         QByteArray ann1, ann2;
         // OCR/YOLO temporarily disabled
-        // if (m_ocr) { ... }
-        // Always update entrance preview with raw images
+        // if (m_ocr)
+        // {
+        //     const QVariantMap res = m_ocr->recognizePlates(img1, img2);
+        //     detectedPlate = res.value("front").toString();
+        //     if (detectedPlate.isEmpty())
+        //         detectedPlate = res.value("rear").toString();
+        //     // HID log OCR ở cổng vào
+        //     if (auto hid = qobject_cast<QObject *>(m_reader))
+        //     {
+        //         const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
+        //                                 .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
+        //         QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
+        //     }
+        // }        // Always update entrance preview with raw images
         const QString preview1 = makeDataUrlFromBytes(img1);
         const QString preview2 = makeDataUrlFromBytes(img2);
         setLanePreview(laneIdx, preview1, preview2);
@@ -197,6 +210,39 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
     }
 }
 
+// [NEW] Implementation - 18/11
+void ParkingController::updateManualPlate(int laneIdx, const QString &newPlate)
+{
+    QString upperPlate = normalizeRfid(newPlate); // Reuse normalize for uppercase/trim
+
+    // Determine if this lane is currently acting as Entrance or Exit
+    // Based on dualMode and laneIdx logic:
+    // Mode 0 (Mixed): Lane 0 = IN, Lane 1 = OUT
+    // Mode 1 (All In): Lane 0 = IN, Lane 1 = IN
+    // Mode 2 (All Out): Lane 0 = OUT, Lane 1 = OUT
+
+    bool isEntrance = false;
+    if (m_dualMode == 0) isEntrance = (laneIdx == 0);
+    else if (m_dualMode == 1) isEntrance = true;
+    else if (m_dualMode == 2) isEntrance = false;
+
+    // Update operational variable used for CheckIn/CheckOut calls
+    m_plate = upperPlate;
+    emit plateChanged();
+
+    if (isEntrance) {
+        m_entrancePlate = upperPlate;
+        emit entranceInfoChanged();
+    } else {
+        m_exitPlate = upperPlate;
+        emit exitInfoChanged();
+    }
+
+    emit debugLog(QStringLiteral("Manual Plate Update (L%1): %2")
+                      .arg(laneIdx + 1)
+                      .arg(upperPlate));
+    }
+
 void ParkingController::onExitRfidScanned(const QString &rfid)
 {
     const QString normRfid = normalizeRfid(rfid);
@@ -214,6 +260,7 @@ void ParkingController::onExitRfidScanned(const QString &rfid)
 
 void ParkingController::processExitRfid(const QString &normRfid, int laneIdx)
 {
+    clearLaneState(laneIdx);
     if (!m_db) return;
     if (normRfid.isEmpty()) return;
 

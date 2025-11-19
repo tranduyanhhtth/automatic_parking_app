@@ -50,20 +50,6 @@ Item {
             navDrawer.opened = !navDrawer.opened
             e.accepted = true
         }
-                        // --- BẮT ĐẦU CODE TEST: Thêm vào đây ---
-                                else if (e.key === Qt.Key_F12) {
-                                    console.log("[TEST] Kích hoạt PaymentDialog thủ công")
-
-                                    // Đặt dữ liệu giả lập
-                                    paymentDialog.rfid = "TEST_RFID_123"
-                                    paymentDialog.plate = "29A-123.45"
-                                    paymentDialog.fee = 5000 // Giả lập phí 5000
-
-                                    // Mở pop-up
-                                    paymentDialog.open()
-
-                                    e.accepted = true
-                                }
     }
 
     // Khu vực nội dung chính (Content Pane) bên phải
@@ -79,6 +65,72 @@ Item {
             MainWindowForm {
                 id: form
                 anchors.fill: parent
+                Connections {
+                            target: form.lane1Obj.exitPlateMouseArea
+                            function onClicked() {
+                                form.lane1Obj.exitPlateInput.visible = true
+                                form.lane1Obj.exitPlateInput.forceActiveFocus()
+                            }
+                        }
+                        Connections {
+                            target: form.lane1Obj.exitPlateInput
+                            function onAccepted() {
+                                // Lane 1 is index 0
+                                app.updateManualPlate(0, form.lane1Obj.exitPlateInput.text)
+                                form.lane1Obj.exitPlateInput.visible = false
+                                form.lane1Obj.exitPlateInput.text = ""
+                            }
+                        }
+
+                        // Logic for Lane 1 (Entrance Plate)
+                        Connections {
+                            target: form.lane1Obj.entrancePlateMouseArea
+                            function onClicked() {
+                                form.lane1Obj.entrancePlateInput.visible = true
+                                form.lane1Obj.entrancePlateInput.forceActiveFocus()
+                            }
+                        }
+                        Connections {
+                            target: form.lane1Obj.entrancePlateInput
+                            function onAccepted() {
+                                app.updateManualPlate(0, form.lane1Obj.entrancePlateInput.text)
+                                form.lane1Obj.entrancePlateInput.visible = false
+                                form.lane1Obj.entrancePlateInput.text = ""
+                            }
+                        }
+
+                        // Repeat Logic for Lane 2 (Index 1)
+                        Connections {
+                            target: form.lane2Obj.exitPlateMouseArea
+                            function onClicked() {
+                                form.lane2Obj.exitPlateInput.visible = true
+                                form.lane2Obj.exitPlateInput.forceActiveFocus()
+                            }
+                        }
+                        Connections {
+                            target: form.lane2Obj.exitPlateInput
+                            function onAccepted() {
+                                app.updateManualPlate(1, form.lane2Obj.exitPlateInput.text)
+                                form.lane2Obj.exitPlateInput.visible = false
+                                form.lane2Obj.exitPlateInput.text = ""
+                            }
+                        }
+
+                        Connections {
+                            target: form.lane2Obj.entrancePlateMouseArea
+                            function onClicked() {
+                                form.lane2Obj.entrancePlateInput.visible = true
+                                form.lane2Obj.entrancePlateInput.forceActiveFocus()
+                            }
+                        }
+                        Connections {
+                            target: form.lane2Obj.entrancePlateInput
+                            function onAccepted() {
+                                app.updateManualPlate(1, form.lane2Obj.entrancePlateInput.text)
+                                form.lane2Obj.entrancePlateInput.visible = false
+                                form.lane2Obj.entrancePlateInput.text = ""
+                            }
+                        }
             }
         }
         // Trang Tìm kiếm
@@ -295,6 +347,15 @@ Item {
                paymentDialog.open()
            }
        }
+
+    // Logic for the new Header Search Button
+    Connections {
+        target: form.btnSearch
+        function onClicked() {
+            // Switch StackLayout to Index 1 (Search Page)
+            contentStack.currentIndex = 1
+        }
+    }
 
     // Preview source bindings for lanes (bind to alias properties on form)
     // During exit review, only the exit lane should show entrance snapshots

@@ -20,6 +20,11 @@ Rectangle {
     property alias outputVideo: outputVideo
     property alias inputPreview: inputPreview
     property alias outputPreview: outputPreview
+    // [NEW] Expose interaction elements to Logic (MainWindow)
+    property alias exitPlateMouseArea: maExitPlate
+    property alias exitPlateInput: tfExitPlate
+    property alias entrancePlateMouseArea: maEntPlate
+    property alias entrancePlateInput: tfEntPlate
 
     ColumnLayout {
         anchors.fill: parent
@@ -181,11 +186,25 @@ Rectangle {
                                 text: "BIỂN SỐ:"
                                 font.bold: true
                                 Layout.preferredWidth: 90
+                            MouseArea {
+                                id: maExitPlate
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                }
+                            }
+                            TextField {
+                                id: tfExitPlate
+                                visible: false // Hidden by default
+                                Layout.fillWidth: true
+                                placeholderText: "Nhập biển số..."
+                                font.pixelSize: 14
+                                height: 30
                             }
                             Text {
                                 text: app.exitPlate || ""
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                                visible: !tfExitPlate.visible
                             }
                         }
                     }
@@ -277,11 +296,25 @@ Rectangle {
                                 text: "BIỂN SỐ:"
                                 font.bold: true
                                 Layout.preferredWidth: 90
+                            MouseArea {
+                                id: maEntPlate
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                }
+                            }
+                            TextField {
+                                id: tfEntPlate
+                                visible: false // Hidden by default
+                                Layout.fillWidth: true
+                                placeholderText: "Nhập biển số..."
+                                font.pixelSize: 14
+                                height: 30
                             }
                             Text {
                                 text: app.entrancePlate || ""
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
+                                visible: !tfEntPlate.visible
                             }
                         }
                     }
