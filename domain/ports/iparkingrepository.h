@@ -41,7 +41,7 @@ public:
                                                   QString *checkoutTimeOut,
                                                   const QByteArray &image1,
                                                   const QByteArray &image2,
-                                                  const QString &paymentMethod) = 0; // ADD paymentMethod
+                                                  const QString &paymentMethod) = 0;
     // Xóa các bản ghi đã đóng (checkout_time NOT NULL) cho RFID
     virtual bool deleteClosedSessions(const QString &rfid) = 0;
     // Lấy full thông tin phiên mở (kèm ảnh) để hiển thị
@@ -133,6 +133,27 @@ public:
 
     // Lấy pricing_id cho vehicle_type + ticket_type
     virtual int getPricingId(const QString &vehicleType, const QString &ticketType) = 0;
+
+    // === RFID Cards Management (Added to match DatabaseManager) ===
+    virtual bool upsertRfidCard(const QString &rfid,
+                                const QString &vehicleType,
+                                const QString &ticketType,
+                                const QString &status,
+                                const QString &description = QString(),
+                                const QString &ownerName = QString(), // <--- NEW
+                                const QString &plate = QString(),
+                                const QString &ownerPhone = QString()) = 0;    // <--- NEW
+
+    virtual bool assignRfidCard(const QString &rfid, int userId) = 0;
+    virtual bool unassignRfidCard(const QString &rfid) = 0;
+    virtual QList<QVariantMap> listRfidCards(const QString &status = QString(),
+                                             const QString &vehicleType = QString(),
+                                             const QString &ticketType = QString(),
+                                             int limit = 500,
+                                             int offset = 0) = 0;
+    virtual bool setRfidCardStatus(const QString &rfid, const QString &status) = 0;
+    virtual QVariantMap getRfidCard(const QString &rfid) = 0;
+    virtual bool deleteRfidCard(const QString &rfid) = 0;
 };
 
 #endif // IPARKINGREPOSITORY_H

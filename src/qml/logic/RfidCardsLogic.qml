@@ -16,6 +16,10 @@ Item {
     property Item cbTicket
     property Item cbStatus
     property Item tfDesc
+    property Item tfName
+    property Item tfPlate
+    property Item tfPhone
+    property Item tfDisc
     property alias listModel: listModel
 
     // Inputs from UI
@@ -42,6 +46,10 @@ Item {
 
     function save() {
         console.log('[RfidCardsLogic] save() entered')
+        var debugName = (tfName ? tfName.text : "NULL_TF")
+        var debugPlate = (tfPlate ? tfPlate.text : "NULL_TF")
+        console.log(">>> DEBUG CHECK: Name to save:", debugName)
+        console.log(">>> DEBUG CHECK: Plate to save:", debugPlate)
         const r = rRepo()
         if (!r || !r.upsertRfidCard) { if (notify) notify('Repo RFID chưa sẵn sàng'); return }
         const rfid = (tfRfid?tfRfid.text:scannedRfid) || scannedRfid
@@ -51,11 +59,16 @@ Item {
         const ttMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
         const stMap = ['available','assigned','lost','damaged']
         const tt = ttMap[cbTicket.currentIndex]
-        const st = stMap[cbStatus.currentIndex]
+        let st = stMap[cbStatus.currentIndex]
+        const nameVal = (tfName ? tfName.text : "")
+        const plateVal = (tfPlate ? tfPlate.text : "")
+        const phoneVal = (tfPhone ? tfPhone.text : "") // <--- Get text
         let existed = false
+        let currentDbStatus = ""
         if (r.getRfidCard) {
             const ex = r.getRfidCard(rfid)
             existed = !!(ex && ex.rfid)
+            if (ex) currentDbStatus = ex.status
             if (ex && ex.status === 'assigned' && ex.vehicle_type !== vt) {
                 if (notify) notify('Không thể đổi loại xe cho thẻ đã được gán')
                     return 
@@ -65,7 +78,18 @@ Item {
                     return
             }
         }
-        const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '')
+        // --- NEW LOGIC: Force Available for Subscription Types ---
+                const isSubscriptionType = (tt === 'monthly' || tt === 'quarterly' || tt === 'yearly')
+
+                // If attempting to mark as 'assigned' in UI, but it's a subscription type
+                // and it wasn't ALREADY assigned in DB, force it back to 'available'.
+                if (isSubscriptionType && st === 'assigned') {
+                    if (currentDbStatus !== 'assigned') {
+                        st = 'available'
+                        if (notify) notify('Thẻ vé tháng/quý/năm sẽ tự động chuyển "Assigned" khi bạn tạo Đăng Ký (Subscription). Đã lưu là "Available".')
+                    }
+                }
+        const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '', nameVal, plateVal, phoneVal)
         console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
         if (notify) notify(ok ? (existed ? 'Đã cập nhật thẻ' : 'Đã tạo thẻ mới') : 'Không thể lưu thẻ')
         if (ok) {
@@ -93,9 +117,9 @@ Item {
         const ok = r.deleteRfidCard(rfid)
         console.log('[RfidCardsLogic] delete result', ok)
         if (notify) notify(ok ? 'Đã xóa thẻ' : 'Không thể xóa thẻ')
-        if (ok) { 
-            tfRfid.text=''; tfDesc.text=''; scannedRfid=''; 
-            refresh(); 
+        if (ok) {
+            tfRfid.text=''; tfDesc.text=''; scannedRfid='';
+            refresh();
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
     }
@@ -129,6 +153,9 @@ Item {
         const statusMap = ['available','assigned','lost','damaged']
         const stIdx = statusMap.indexOf(card.status)
         if (cbStatus && stIdx >= 0) cbStatus.currentIndex = stIdx
+        if (tfName) tfName.text = card.owner_name || ''
+        if (tfPlate) tfPlate.text = card.plate || ''
+        if (tfPhone) tfPhone.text = card.owner_phone || ''
         if (tfDesc) tfDesc.text = card.description || ''
         if (notify && lastNotifiedExistingRfid !== card.rfid) {
             notify('Thẻ đã tồn tại'+ (card.status ? (' ('+card.status+')') : ''))
@@ -154,6 +181,9 @@ Item {
             scannedRfid = row.rfid || ''
             lastNotifiedExistingRfid = scannedRfid
             if (tfRfid) tfRfid.text = row.rfid || ''
+            if (tfName) tfName.text = row.owner_name || ''
+            if (tfPlate) tfPlate.text = row.plate || ''
+            if (tfPhone) tfPhone.text = row.owner_phone || ''
             if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 0 : 1)
             const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
             const tIdx = ticketMap.indexOf(row.ticket_type || '')

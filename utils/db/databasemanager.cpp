@@ -416,6 +416,33 @@ bool DatabaseManager::ensureSchema()
         }
     }
 
+    {
+        QSqlQuery checkCols(DB_Connection);
+        // Get list of existing columns in rfid_cards
+        checkCols.exec("PRAGMA table_info(rfid_cards)");
+        QSet<QString> existingCols;
+        while (checkCols.next()) {
+            // Column name is at index 1 in PRAGMA result
+            existingCols.insert(checkCols.value(1).toString());
+        }
+
+        // Add owner_name if missing
+        if (!existingCols.contains("owner_name")) {
+            qDebug() << "Migrating rfid_cards table: adding owner_name column";
+            QSqlQuery(DB_Connection).exec("ALTER TABLE rfid_cards ADD COLUMN owner_name TEXT");
+        }
+
+        // Add plate if missing
+        if (!existingCols.contains("plate")) {
+            qDebug() << "Migrating rfid_cards table: adding plate column";
+            QSqlQuery(DB_Connection).exec("ALTER TABLE rfid_cards ADD COLUMN plate TEXT");
+        }
+        if (!existingCols.contains("owner_phone")) {
+            qDebug() << "Migrating rfid_cards table: adding owner_phone column";
+            QSqlQuery(DB_Connection).exec("ALTER TABLE rfid_cards ADD COLUMN owner_phone TEXT");
+        }
+    }
+
     // Seed default pricing if table is empty
     ensureDefaultPricing();
 
@@ -574,48 +601,125 @@ bool DatabaseManager::upsertRfidCard(const QString &rfid,
                                      const QString &vehicleType,
                                      const QString &ticketType,
                                      const QString &status,
-                                     const QString &description)
+                                     const QString &description,
+                                     const QString &ownerName,
+                                     const QString &plate,
+                                     const QString &ownerPhone)
 {
     if (rfid.trimmed().isEmpty())
         return false;
-    const QString vt = normalizeVehicle(vehicleType);
-    QSqlQuery q(DB_Connection);
-    // Try update first
-    q.prepare(R"(
-        UPDATE rfid_cards
-        SET vehicle_type=:vt, ticket_type=:tt, status=:st, description=:desc
-        WHERE rfid=:rfid
-    )");
-    q.bindValue(":vt", vt);
-    q.bindValue(":tt", ticketType);
-    q.bindValue(":st", status);
-    q.bindValue(":desc", description);
-    q.bindValue(":rfid", rfid);
-    if (!q.exec())
-    {
-        qWarning() << "upsertRfidCard update:" << q.lastError().text();
-        return false;
-    }
-    if (q.numRowsAffected() > 0)
-        return true;
 
-    // Insert
-    QSqlQuery qi(DB_Connection);
-    qi.prepare(R"(
-        INSERT INTO rfid_cards (rfid, vehicle_type, ticket_type, user_phone, status, created_at, assigned_at, description)
-        VALUES (:rfid, :vt, :tt, NULL, :st, :created, NULL, :desc)
-    )");
-    qi.bindValue(":rfid", rfid);
-    qi.bindValue(":vt", vt);
-    qi.bindValue(":tt", ticketType);
-    qi.bindValue(":st", status.isEmpty() ? QStringLiteral("available") : status);
-    qi.bindValue(":created", nowIso8601());
-    qi.bindValue(":desc", description);
-    if (!qi.exec())
-    {
-        qWarning() << "upsertRfidCard insert:" << qi.lastError().text();
+    // Normalize data
+    const QString vt = normalizeVehicle(vehicleType);
+    const QString tt = normalizeTicketType(ticketType);
+    // Determine initial status. If creating new and linking user, we might set assigned later.
+    bool isSubscriptionType = (tt == "monthly" || tt == "quarterly" || tt == "yearly");
+    QString st = status.isEmpty() ? QStringLiteral("available") : status;
+
+    // Start a transaction to ensure atomicity (all steps succeed or none)
+    DB_Connection.transaction();
+
+    // --- STEP 1: Upsert the Card in rfid_cards ---
+    // IMPORTANT: We intentionally pass NULL for user_phone here.
+    // We must establish the Card's existence first so the 'users' table trigger passes.
+
+    QSqlQuery check(DB_Connection);
+    check.prepare("SELECT 1 FROM rfid_cards WHERE rfid=:rfid");
+    check.bindValue(":rfid", rfid);
+    bool cardExists = (check.exec() && check.next());
+    QString currentDbStatus = cardExists ? check.value(0).toString() : "available";
+
+    if (isSubscriptionType && currentDbStatus != "assigned") {
+        st = "available";
+    }
+    bool cardSaveOk = false;
+
+    if (cardExists) {
+        // Update existing card (excluding user_phone FK for now)
+        QSqlQuery q(DB_Connection);
+        q.prepare(R"(
+            UPDATE rfid_cards
+            SET vehicle_type=:vt, ticket_type=:tt, status=:st, description=:desc,
+                owner_name=:name, plate=:plate, owner_phone=:phone
+            WHERE rfid=:rfid
+        )");
+        q.bindValue(":vt", vt);
+        q.bindValue(":tt", ticketType);
+        q.bindValue(":st", st);
+        q.bindValue(":desc", description);
+        q.bindValue(":name", ownerName);
+        q.bindValue(":plate", plate);
+        q.bindValue(":phone", ownerPhone);
+        q.bindValue(":rfid", rfid);
+        cardSaveOk = q.exec();
+        if (!cardSaveOk) qWarning() << "upsertRfidCard Step 1 (Update) error:" << q.lastError().text();
+    } else {
+        // Insert new card
+        QSqlQuery qi(DB_Connection);
+        // Note: user_phone is set to NULL here explicitly
+        qi.prepare(R"(
+            INSERT INTO rfid_cards (rfid, vehicle_type, ticket_type, user_phone, status, created_at, assigned_at, description, owner_name, plate, owner_phone)
+            VALUES (:rfid, :vt, :tt, NULL, :st, :created, NULL, :desc, :name, :plate, :phone)
+        )");
+        qi.bindValue(":rfid", rfid);
+        qi.bindValue(":vt", vt);
+        qi.bindValue(":tt", ticketType);
+        qi.bindValue(":st", st);
+        qi.bindValue(":created", nowIso8601());
+        qi.bindValue(":desc", description);
+        qi.bindValue(":name", ownerName);
+        qi.bindValue(":plate", plate);
+        qi.bindValue(":phone", ownerPhone);
+        cardSaveOk = qi.exec();
+        if (!cardSaveOk) qWarning() << "upsertRfidCard Step 1 (Insert) error:" << qi.lastError().text();
+    }
+
+    if (!cardSaveOk) {
+        DB_Connection.rollback();
         return false;
     }
+
+    // --- STEP 2: Sync User ---
+    // Now that the card exists in DB, the trigger 'trg_users_rfid_fk_ins' will allow creating a user with this RFID.
+    bool userSynced = false;
+    if (!ownerName.isEmpty() || !ownerPhone.isEmpty()) {
+        int uid = upsertUser(ownerName, ownerPhone, rfid, plate, vehicleType);
+        if (uid == -1) {
+            qWarning() << "Failed to sync User from RFID Card form. Transaction rolled back.";
+            DB_Connection.rollback();
+            return false; // Fail completely if user data provided but invalid (e.g. duplicate phone)
+        }
+        userSynced = true;
+    }
+
+    // --- STEP 3: Link user_phone to Card ---
+    // Now that the User exists in DB, we can update the Foreign Key 'user_phone' in rfid_cards.
+    bool shouldLinkUser = userSynced && !ownerPhone.isEmpty();
+
+    if (isSubscriptionType && currentDbStatus != "assigned") {
+        // BLOCKER: Do not link user yet. Wait for Subscription.
+        shouldLinkUser = false;
+    }
+
+    if (shouldLinkUser) {
+        QSqlQuery link(DB_Connection);
+        link.prepare(R"(
+            UPDATE rfid_cards
+            SET user_phone=:phone, status='assigned', assigned_at=COALESCE(assigned_at, :now)
+            WHERE rfid=:rfid
+        )");
+        link.bindValue(":phone", ownerPhone);
+        link.bindValue(":now", nowIso8601());
+        link.bindValue(":rfid", rfid);
+
+        if (!link.exec()) {
+            qWarning() << "upsertRfidCard Step 3 (Link User) error:" << link.lastError().text();
+            DB_Connection.rollback();
+            return false;
+        }
+    }
+
+    DB_Connection.commit();
     return true;
 }
 
@@ -698,7 +802,7 @@ QList<QVariantMap> DatabaseManager::listRfidCards(const QString &status,
                                                   int offset)
 {
     QList<QVariantMap> out;
-    QString sql = "SELECT id, rfid, vehicle_type, ticket_type, user_phone, status, created_at, assigned_at, description FROM rfid_cards WHERE 1=1";
+    QString sql = "SELECT id, rfid, vehicle_type, ticket_type, user_phone, status, created_at, assigned_at, description, owner_name, plate, owner_phone FROM rfid_cards WHERE 1=1";
     if (!status.isEmpty())
         sql += " AND status = :st";
     if (!vehicleType.isEmpty())
@@ -730,6 +834,9 @@ QList<QVariantMap> DatabaseManager::listRfidCards(const QString &status,
             m.insert("created_at", q.value("created_at"));
             m.insert("assigned_at", q.value("assigned_at"));
             m.insert("description", q.value("description"));
+            m.insert("owner_name", q.value("owner_name"));
+            m.insert("plate", q.value("plate"));
+            m.insert("owner_phone", q.value("owner_phone"));
             out.append(m);
         }
     }
@@ -882,7 +989,7 @@ QVariantMap DatabaseManager::getRfidCard(const QString &rfid)
     if (rfid.trimmed().isEmpty())
         return m;
     QSqlQuery q(DB_Connection);
-    q.prepare("SELECT id, rfid, vehicle_type, ticket_type, user_phone, status, created_at, assigned_at, description FROM rfid_cards WHERE rfid=:rfid LIMIT 1");
+    q.prepare("SELECT id, rfid, vehicle_type, ticket_type, user_phone, status, created_at, assigned_at, description, owner_name, plate, owner_phone FROM rfid_cards WHERE rfid=:rfid LIMIT 1");
     q.bindValue(":rfid", rfid);
     if (q.exec() && q.next())
     {
@@ -895,6 +1002,9 @@ QVariantMap DatabaseManager::getRfidCard(const QString &rfid)
         m.insert("created_at", q.value("created_at"));
         m.insert("assigned_at", q.value("assigned_at"));
         m.insert("description", q.value("description"));
+        m.insert("owner_name", q.value("owner_name"));
+        m.insert("plate", q.value("plate"));
+        m.insert("owner_phone", q.value("owner_phone"));
     }
     return m;
 }
@@ -1816,20 +1926,36 @@ int DatabaseManager::upsertUser(const QString &fullName,
     QSqlQuery q(DB_Connection);
     // Tìm theo RFID trước, nếu không có thì theo plate
     int userId = -1;
-    q.prepare("SELECT id FROM users WHERE (rfid = :rfid AND rfid IS NOT NULL AND rfid <> '') OR (plate = :plate AND plate IS NOT NULL AND plate <> '') LIMIT 1");
-    q.bindValue(":rfid", rfid);
-    q.bindValue(":plate", plate);
+    QString sql = "SELECT id, full_name, phone, vehicle_type FROM users WHERE 1=0";
+    if (!phone.isEmpty() && phone != "N/A") sql += " OR phone = :phone"; // Ignore N/A for lookup
+    if (!rfid.isEmpty()) sql += " OR rfid = :rfid";
+    if (!plate.isEmpty()) sql += " OR plate = :plate";
+    sql += " LIMIT 1";
+
+    q.prepare(sql);
+    if (!phone.isEmpty()) q.bindValue(":phone", phone);
+    if (!rfid.isEmpty()) q.bindValue(":rfid", rfid);
+    if (!plate.isEmpty()) q.bindValue(":plate", plate);
     if (q.exec() && q.next())
     {
         userId = q.value(0).toInt();
+        QString dbName = q.value(1).toString();
+        QString dbPhone = q.value(2).toString();
+        QString dbVt = q.value(3).toString();
+
+        // MERGE LOGIC: Use new value if present, otherwise keep DB value
+        // Also treat "N/A" as empty so we don't overwrite valid phones with "N/A"
+        QString uName = fullName.isEmpty() ? dbName : fullName;
+        QString uPhone = (phone.isEmpty() || phone == "N/A") ? dbPhone : phone;
+        QString uVt = vehicleType.isEmpty() ? dbVt : vehicleType;
         // Cập nhật thông tin cơ bản nếu trống
         QSqlQuery upd(DB_Connection);
-        upd.prepare("UPDATE users SET full_name = COALESCE(NULLIF(:name,''), full_name), phone = COALESCE(NULLIF(:phone,''), phone), rfid = COALESCE(NULLIF(:rfid,''), rfid), plate = COALESCE(NULLIF(:plate,''), plate), vehicle_type = COALESCE(NULLIF(:vt,''), vehicle_type) WHERE id = :id");
-        upd.bindValue(":name", fullName);
-        upd.bindValue(":phone", phone);
-        upd.bindValue(":rfid", rfid);
-        upd.bindValue(":plate", plate);
-        upd.bindValue(":vt", vehicleType);
+        upd.prepare("UPDATE users SET full_name=:n, phone=:p, rfid=:r, plate=:pl, vehicle_type=:vt, status='active' WHERE id=:id");
+        upd.bindValue(":n", uName);
+        upd.bindValue(":p", uPhone);
+        upd.bindValue(":r", rfid);
+        upd.bindValue(":pl", plate);
+        upd.bindValue(":vt", uVt);
         upd.bindValue(":id", userId);
         if (!upd.exec())
         {
@@ -1873,7 +1999,7 @@ int DatabaseManager::createSubscription(int userId,
                                         const QString &status,
                                         const QString &paymentmethod)
 {
-    // Guard: prevent duplicate active subscriptions for the same user + RFID/plate overlapping the same period
+    // 1. Duplicate Check (Existing Logic) ...
     {
         QSqlQuery chk(DB_Connection);
         chk.prepare(R"(
@@ -1889,14 +2015,15 @@ int DatabaseManager::createSubscription(int userId,
         chk.bindValue(":pl", plate);
         chk.bindValue(":ns", startDate);
         chk.bindValue(":ne", endDate);
-        if (chk.exec() && chk.next())
-        {
-            qWarning() << "createSubscription: duplicate active subscription exists for user" << userId << "rfid/plate" << rfid << plate;
-            // Return a negative code distinct from SQL error to indicate duplicate
+        if (chk.exec() && chk.next()) {
+            qWarning() << "createSubscription: duplicate active subscription";
             return -2;
         }
     }
 
+    DB_Connection.transaction(); // Start Transaction
+
+    // 2. Insert Subscription
     QSqlQuery q(DB_Connection);
     q.prepare(R"(
         INSERT INTO subscriptions (user_id, pricing_id, plate, rfid, plan_type, start_date, end_date, payment_mode, price, status, payment_method)
@@ -1913,12 +2040,48 @@ int DatabaseManager::createSubscription(int userId,
     q.bindValue(":pr", price);
     q.bindValue(":st", status);
     q.bindValue(":pmeth", paymentmethod);
-    if (!q.exec())
-    {
-        qWarning() << "createSubscription:" << q.lastError().text();
+
+    if (!q.exec()) {
+        qWarning() << "createSubscription error:" << q.lastError().text();
+        DB_Connection.rollback();
         return -1;
     }
-    return q.lastInsertId().toInt();
+    int newSubId = q.lastInsertId().toInt();
+
+    // 3. --- NEW LOGIC: Auto-Assign RFID Card ---
+    // If an RFID was provided, find the user's phone and link the card
+    if (!rfid.isEmpty()) {
+        // Fetch phone for this user
+        QString userPhone;
+        QSqlQuery qu(DB_Connection);
+        qu.prepare("SELECT phone FROM users WHERE id=:uid");
+        qu.bindValue(":uid", userId);
+        if (qu.exec() && qu.next()) {
+            userPhone = qu.value(0).toString();
+        }
+
+        if (!userPhone.isEmpty()) {
+            QSqlQuery qCard(DB_Connection);
+            // Update card to assigned + link user_phone
+            qCard.prepare(R"(
+                UPDATE rfid_cards
+                SET status='assigned', user_phone=:phone, assigned_at=:now
+                WHERE rfid=:rfid
+            )");
+            qCard.bindValue(":phone", userPhone);
+            qCard.bindValue(":now", nowIso8601());
+            qCard.bindValue(":rfid", rfid);
+
+            if (!qCard.exec()) {
+                qWarning() << "createSubscription: Failed to auto-assign card" << rfid;
+                // We don't rollback here necessarily, but good to log.
+                // Depending on strictness, you could rollback.
+            }
+        }
+    }
+
+    DB_Connection.commit();
+    return newSubId;
 }
 
 bool DatabaseManager::updateSubscription(int id,

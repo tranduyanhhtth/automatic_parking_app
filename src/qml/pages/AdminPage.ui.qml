@@ -80,6 +80,9 @@ Item {
 	property alias rfidTicketCombo: cbTicket
 	property alias rfidStatusCombo: cbStatus
 	property alias rfidDescField: tfDesc
+	property alias rfidNameField: tfRfidName
+	property alias rfidPlateField: tfRfidPlate
+	property alias rfidPhoneField: tfRfidPhone
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
 	property bool triggerUpdateUser: false
@@ -164,6 +167,25 @@ Item {
 		id: revenueLogic
 		adminPage: adminPage
 		notify: notifyLogic.push
+	}
+	Binding {
+			target: rfidLogic
+			property: "tfName"
+			value: tfRfidName
+			when: rfidLogic !== null
+	}
+
+	Binding {
+		target: rfidLogic
+		property: "tfPlate"
+		value: tfRfidPlate
+		when: rfidLogic !== null
+	}
+	Binding {
+		target: rfidLogic
+		property: "tfPhone" // <--- Bind property
+		value: adminPage.rfidPhoneField // Bind to alias
+		when: rfidLogic !== null
 	}
 	// File save dialogs for exports
 	FileDialog {
@@ -265,6 +287,9 @@ Item {
 						if (rfidVehicleCombo) rfidVehicleCombo.currentIndex = 0
 						if (rfidTicketCombo) rfidTicketCombo.currentIndex = 0
 						if (rfidDescField) rfidDescField.text = ""
+						if (tfRfidName) tfRfidName.text = ""
+						if (tfRfidPlate) tfRfidPlate.text = ""
+						if (tfRfidPhone) tfRfidPhone.text = ""
 						pendingSelectRfidIndex = -1 // Clear list selection
 						// --- Users Tab (Index 3) ---
 						if (userName) userName.text = ""
@@ -763,7 +788,7 @@ Item {
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
-								spacing: 8
+								spacing: 12
 								// RfidCardsLogic {
 								// 	id: rfidLogic
 								// 	adminPage: adminPage
@@ -816,9 +841,40 @@ Item {
 										Layout.preferredHeight: 0
 										visible: false
 										enabled: false
-										model: ["available"]
+										model: ["available", "assigned", "lost", "damaged"]
 										currentIndex: 0
 									}
+									Item {Layout.fillWidth: true}
+								}
+								RowLayout{
+									Layout.fillWidth: true
+									spacing: 10
+
+									TextField{
+										id: tfRfidName
+										Layout.preferredWidth: 180
+										placeholderText: "Họ và tên"
+										color: "white"
+										placeholderTextColor: "#ccc"
+										background: Rectangle{color: "#222"; radius: 8; border.color: "#555" }
+									}
+									TextField{
+										id: tfRfidPhone
+										Layout.preferredWidth: 140
+										placeholderText: "SĐT"
+										color: "white"
+										placeholderTextColor: "#ccc"
+										background: Rectangle { color: '#222'; radius: 8; border.color: '#555' }
+									}
+									TextField{
+										id: tfRfidPlate
+										Layout.preferredWidth: 140
+										placeholderText: "Biển số"
+										color: "white"
+										placeholderTextColor: "#ccc"
+										background: Rectangle { color: '#222'; radius: 8; border.color: '#555' }
+									}
+
 									TextField {
 										id: tfDesc
 										Layout.fillWidth: true
@@ -912,12 +968,14 @@ Item {
 											Text {
 												text: "Họ tên"
 												color: "white"
-												Layout.preferredWidth: 160
+												Layout.preferredWidth: 140
+												font.bold: true
 											}
 											Text {
 												text: "Biển số"
 												color: "white"
 												Layout.preferredWidth: 120
+												font.bold: true
 											}
 											Text {
 												text: "RFID"
@@ -970,11 +1028,12 @@ Item {
 												RowLayout {
 													anchors.fill: parent
 													spacing: 8
+
 													Text {
 														// Check if full_name exists, otherwise show empty string
-														text: (typeof full_name === "undefined" || full_name === null) ? "" : full_name
+														text: (typeof owner_name === "undefined" || owner_name === null) ? "" : owner_name
 														color: "white"
-														Layout.preferredWidth: 160
+														Layout.preferredWidth: 140
 														elide: Text.ElideRight
 													}
 													Text {
@@ -1000,7 +1059,7 @@ Item {
 														Layout.preferredWidth: 140
 													}
 													Text {
-														text: (user_phone===undefined||user_phone===null)?'':(''+user_phone)
+														text: (typeof owner_phone === "undefined" || owner_phone === null) ? "" : owner_phone
 														color: "white"
 														Layout.preferredWidth: 120
 													}

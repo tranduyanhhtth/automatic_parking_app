@@ -158,7 +158,10 @@ public:
                                     const QString &vehicleType,
                                     const QString &ticketType,
                                     const QString &status,
-                                    const QString &description = QString());
+                                    const QString &description = QString(),
+                                    const QString &ownerName = QString(),
+                                    const QString &plate = QString(),
+                                    const QString &ownerPhone = QString());
     Q_INVOKABLE bool assignRfidCard(const QString &rfid, int userId);
     Q_INVOKABLE bool unassignRfidCard(const QString &rfid);
     Q_INVOKABLE QList<QVariantMap> listRfidCards(const QString &status = QString(),
