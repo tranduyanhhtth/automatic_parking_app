@@ -227,14 +227,14 @@ Item {
                     ToolButton {
                         id: btnAdmin
                         text: "🧑‍💼"
-                        font.pixelSize: 24
+                        font.pixelSize: 40
                         Accessible.name: "Admin"
                         Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                     }
                     ToolButton{
                         id: btnSearch
                         text: "🔍"
-                        font.pixelSize: 24
+                        font.pixelSize: 40
                         Accessible.name: "Search"
                         Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                     }
@@ -242,7 +242,7 @@ Item {
                     ToolButton {
                         id: btnSettings
                         text: "⚙"
-                        font.pixelSize: 20
+                        font.pixelSize: 40
                         Accessible.name: "Settings"
                         Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                     }

@@ -126,8 +126,9 @@ Item {
 	property bool triggerRevenueFilter: false
 	property bool triggerOpenImage: false
 	// Triggers for exporting files
-	property bool triggerExportCsv: false
-	property bool triggerExportPdf: false
+	// property bool triggerExportCsv: false
+	// property bool triggerExportPdf: false
+	property bool triggerExportExcel: false
 	// Expose inner ComboBoxes to logic via aliases
 	property alias revFromYear: revFromDatePopup.fromYear
 	property alias revFromMonth: revFromDatePopup.fromMonth
@@ -190,9 +191,9 @@ Item {
 	// File save dialogs for exports
 	FileDialog {
 		id: revenueSaveDialog
-		title: "Chọn nơi lưu CSV Doanh thu"
-		nameFilters: ["CSV files (*.csv)", "All files (*.*)"]
-		onAccepted: adminPage.triggerExportCsv = !adminPage.triggerExportCsv
+		title: "Chọn nơi lưu file Excel"
+		nameFilters: ["Excel files (*.xlsx)", "All files (*.*)"] // Changed filter
+		onAccepted: adminPage.triggerExportExcel = !adminPage.triggerExportExcel
 	}
 
 	FileDialog {
@@ -2421,30 +2422,16 @@ Item {
 										width: 110
 										height: 28
 										radius: 8
-										color: "#2b7"
+										color: "#2b7" // Green color suitable for Excel
 										Text {
 											anchors.centerIn: parent
-											text: "Xuất CSV"
+											text: "Xuất Excel"
 											color: "white"
 										}
 										MouseArea {
 											anchors.fill: parent
-											onClicked: adminPage.triggerExportCsv = !adminPage.triggerExportCsv
-										}
-									}
-									Rectangle {
-										width: 110
-										height: 28
-										radius: 8
-										color: "#2b7"
-										Text {
-											anchors.centerIn: parent
-											text: "Xuất PDF"
-											color: "white"
-										}
-										MouseArea {
-											anchors.fill: parent
-											onClicked: adminPage.triggerExportPdf = !adminPage.triggerExportPdf
+											// Toggle the new Excel trigger
+											onClicked: adminPage.triggerExportExcel = !adminPage.triggerExportExcel
 										}
 									}
 								}

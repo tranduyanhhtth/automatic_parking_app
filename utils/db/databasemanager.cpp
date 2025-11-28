@@ -3519,3 +3519,77 @@ bool DatabaseManager::upsertPricingRow(const QString &vehicleType,
     }
     return true;
 }
+bool DatabaseManager::exportRevenueToExcel(const QString &filePath,
+                                           const QVariantList &rows,
+                                           const QString &fromDate,
+                                           const QString &toDate,
+                                           qint64 totalRevenue,
+                                           int totalSession,
+                                           int totalSubscription)
+{
+    QString outPath = filePath;
+
+    // Clean up file path (remove file:/// prefix if present)
+    if (outPath.startsWith("file:")) {
+        QUrl u(outPath);
+        if (u.isLocalFile())
+            outPath = u.toLocalFile();
+    }
+
+    // Fallback if path is empty
+    if (outPath.trimmed().isEmpty()) {
+        const QString desktop = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        const QString ts = QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss");
+        outPath = desktop + "/doanh_thu_" + ts + ".csv";
+    }
+
+    QFile f(outPath);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) {
+        qWarning() << "Failed to open file for Excel export:" << outPath;
+        return false;
+    }
+
+    QTextStream os(&f);
+
+    // CRITICAL: Write Byte Order Mark (BOM) for UTF-8.
+    // This forces Excel to recognize Vietnamese characters correctly.
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    os.setEncoding(QStringConverter::Utf8);
+    os.setGenerateByteOrderMark(true);
+#else
+    os.setCodec("UTF-8");
+    os << QChar(0xFEFF); // Manually write BOM for Qt5
+#endif
+
+    // --- CHANGE STARTS HERE ---
+
+    // Use QStringLiteral(...) instead of u"..." to print text, not addresses
+    os << QStringLiteral("BÁO CÁO DOANH THU\n");
+    os << QStringLiteral("Từ ngày:,") << fromDate << "\n";
+    os << QStringLiteral("Đến ngày:,") << toDate << "\n";
+    os << "\n";
+
+    // Table Headers
+    os << QStringLiteral("Ngày,Tổng lượt xe,Tổng vé tháng,Doanh thu (VNĐ)\n");
+
+    // Data Rows
+    for (const QVariant &vr : rows) {
+        const QVariantMap m = vr.toMap();
+
+        // Ensure we handle quotes in CSV if necessary, though dates/numbers are usually safe
+        os << m.value("d").toString() << ",";
+        os << m.value("session_count").toInt() << ",";
+        os << m.value("subscription_count").toInt() << ",";
+
+        // Format large numbers (optional, simple raw number is safest for Excel math)
+        os << m.value("total_amount").toLongLong() << "\n";
+    }
+
+    // Summary Footer
+    os << "\n";
+    os << u"TỔNG CỘNG," << totalSession << "," << totalSubscription << "," << totalRevenue << "\n";
+
+    f.close();
+    qDebug() << "Exported Excel(CSV) to:" << outPath;
+    return true;
+}

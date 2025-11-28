@@ -9,6 +9,7 @@ Item {
     property double totalRevenue: 0
     property int totalSession: 0
     property int totalSubscription: 0
+    property bool triggerExportExcel: false
     // Preset triggers
     property bool triggerPreset7: false
     property bool triggerPreset30: false
@@ -70,41 +71,91 @@ Item {
             _debouncedRefresh();
         }
 
-        function onTriggerExportCsvChanged() {
-            if (!adminPage || !adminPage.triggerExportCsv) return;
-            generateCsvData(); 
-            if (generatedCsvData === "") {
-                adminPage.triggerExportCsv = false; // Reset the trigger
-                return;
-            }
-            if (notify) notify("Đã tạo dữ liệu, vui lòng chọn nơi lưu file.");
+        function onTriggerExportExcelChanged() {
+                    if (!adminPage || !adminPage.triggerExportExcel) return;
 
-            if (adminPage.fileSaveDialog) {
-                try { adminPage.fileSaveDialog.selectedFile = "bao_cao_doanh_thu.csv"; } catch(e) {}
-                adminPage.fileSaveDialog.open(); 
-            }
+                    // 1. Check if there is data
+                    if (revenueModel.count === 0) {
+                        if (notify) notify("Không có dữ liệu để xuất.");
+                        adminPage.triggerExportExcel = false;
+                        return;
+                    }
 
-            adminPage.triggerExportCsv = false; 
-        }
+                    // --- CHANGED: REMOVED DIALOG OPENING ---
+                    // Instead of opening adminPage.fileSaveDialog.open(), we call export directly.
+                    // We pass an empty string "" so C++ knows to use the default Desktop path.
+                    revenueLogic.exportDataForExcel("");
 
-        function onTriggerExportPdfChanged() {
-            if (!adminPage || !adminPage.triggerExportPdf) return;
-            exportDataForPdf(); 
-
-            adminPage.triggerExportPdf = false;
-        }
+                    // --- CHANGED: Reset trigger manually ---
+                    // Since we aren't waiting for a dialog to close, we must reset this now.
+                    adminPage.triggerExportExcel = false;
+                }
     }
 
     Connections {
-        target: (adminPage && adminPage.fileSaveDialog) ? adminPage.fileSaveDialog : null
-        function onAccepted() {
-            try {
-                var dlg = adminPage.fileSaveDialog;
-                var p = (dlg && dlg.selectedFile) ? dlg.selectedFile : ((dlg && dlg.selectedFiles && dlg.selectedFiles.length>0) ? dlg.selectedFiles[0] : (dlg ? dlg.file : ""));
-                revenueLogic.saveCsvToFile(p)
-            } catch(e) { revenueLogic.saveCsvToFile("") }
+            target: (adminPage && adminPage.fileSaveDialog) ? adminPage.fileSaveDialog : null
+            function onAccepted() {
+                try {
+                    var dlg = adminPage.fileSaveDialog;
+                    var p = (dlg && dlg.selectedFile) ? dlg.selectedFile : ((dlg && dlg.selectedFiles && dlg.selectedFiles.length>0) ? dlg.selectedFiles[0] : (dlg ? dlg.file : ""));
+
+                    // --- CHANGE 3: Call the Excel export function ---
+                    revenueLogic.exportDataForExcel(p);
+                } catch(e) {
+                    if (notify) notify("Lỗi khi chọn file.");
+                }
+            }
         }
-    }
+
+        // --- CHANGE 4: Add Logic to prepare data and call C++ ---
+    function exportDataForExcel(filePath) {
+            // --- CHANGED: ALLOW EMPTY PATH ---
+            // OLD: if (!filePath) return;
+            // NEW: We allow empty filePath because C++ handles it.
+
+            let cleanPath = "";
+            if (filePath) {
+                cleanPath = filePath.toString();
+                if (cleanPath.startsWith("file:///")) {
+                    cleanPath = cleanPath.slice(8);
+                }
+            }
+
+            let dataForExcel = [];
+            let calcTotalRevenue = 0;
+            let calcTotalSession = 0;
+            let calcTotalSubscription = 0;
+
+            // Prepare data list from the Model
+            for (let i = 0; i < revenueModel.count; i++) {
+                const item = revenueModel.get(i);
+                let cleanRow = {
+                    "d": item.d + "",
+                    "session_count": parseInt(item.session_count || 0),
+                    "subscription_count": parseInt(item.subscription_count || 0),
+                    "total_amount": parseInt(item.total_amount || 0)
+                };
+                dataForExcel.push(cleanRow);
+
+                calcTotalRevenue += cleanRow.total_amount;
+                calcTotalSession += cleanRow.session_count;
+                calcTotalSubscription += cleanRow.subscription_count;
+            }
+
+            // Call C++ Backend
+            if (typeof repo !== 'undefined' && repo.exportRevenueToExcel) {
+                const fromDate = (adminPage.revFrom && adminPage.revFrom.text) ? adminPage.revFrom.text : defaultFrom();
+                const toDate = (adminPage.revTo && adminPage.revTo.text) ? adminPage.revTo.text : todayIso();
+
+                // Pass cleanPath (which might be empty string)
+                repo.exportRevenueToExcel(cleanPath, dataForExcel, fromDate, toDate, calcTotalRevenue, calcTotalSession, calcTotalSubscription);
+
+                // Update notification to let user know where it went
+                if (notify) notify("Đã xuất file Excel ra màn hình Desktop.");
+            } else {
+                if (notify) notify("Lỗi: Backend chưa hỗ trợ exportRevenueToExcel.");
+            }
+        }
 
     function generateCsvData() {
         if (revenueModel.count === 0) {

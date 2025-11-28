@@ -212,6 +212,13 @@ public:
                                         int totalSession,
                                         int totalSubscription,
                                         const QString &filePath = QString());
+    Q_INVOKABLE bool exportRevenueToExcel(const QString &filePath,
+                                          const QVariantList &rows,
+                                          const QString &fromDate,
+                                          const QString &toDate,
+                                          qint64 totalRevenue,
+                                          int totalSession,
+                                          int totalSubscription);
     // Employee Management
     Q_INVOKABLE QList<QVariantMap> listEmployees();
     Q_INVOKABLE int addEmployee(const QString &fullName, const QString &staffId, const QString &role, const QString &note);
