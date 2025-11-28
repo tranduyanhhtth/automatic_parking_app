@@ -79,10 +79,11 @@ Item {
 	property alias rfidVehicleCombo: cbVehicle
 	property alias rfidTicketCombo: cbTicket
 	property alias rfidStatusCombo: cbStatus
-	property alias rfidDescField: tfDesc
+	// property alias rfidDescField: tfDesc
 	property alias rfidNameField: tfRfidName
 	property alias rfidPlateField: tfRfidPlate
 	property alias rfidPhoneField: tfRfidPhone
+	property alias rfidCardNumberField: tfRfidCardNumber
 	// Trigger cho thao tác user
 	property bool triggerAddUser: false
 	property bool triggerUpdateUser: false
@@ -168,6 +169,12 @@ Item {
 		id: revenueLogic
 		adminPage: adminPage
 		notify: notifyLogic.push
+	}
+	Binding {
+		target: rfidLogic
+		property: "tfCardNumber"
+		value: adminPage.rfidCardNumberField
+		when: rfidLogic !== null
 	}
 	Binding {
 			target: rfidLogic
@@ -809,6 +816,18 @@ Item {
 									Layout.fillWidth: true
 									spacing: 8
 									TextField {
+										id: tfRfidCardNumber
+										Layout.preferredWidth: 140
+										placeholderText: "Số thẻ"
+										color: "white"
+										placeholderTextColor: "#ccc"
+										background: Rectangle {
+											color: '#222'
+											radius: 8
+											border.color: '#555'
+										}
+									}
+									TextField {
 										id: tfRfid
 										Layout.preferredWidth: 200
 										placeholderText: "Quét/nhập RFID"
@@ -882,16 +901,19 @@ Item {
 										background: Rectangle { color: '#222'; radius: 8; border.color: '#555' }
 									}
 
-									TextField {
-										id: tfDesc
-										Layout.fillWidth: true
-										placeholderText: "Mô tả"
-										color: "white"
-										placeholderTextColor: "white"
-										background: Rectangle {
-											color: '#222'
-											radius: 8
-											border.color: '#555'
+									Rectangle {
+										width: 110
+										height: 28
+										radius: 8
+										color: "#555" // Grey color for reset
+										Text {
+											anchors.centerIn: parent
+											text: "Đặt lại bộ lọc" // Reset Filter
+											color: "white"
+										}
+										MouseArea {
+											anchors.fill: parent
+											onClicked: rfidLogic.resetFilters()
 										}
 									}
 									Rectangle {
@@ -972,6 +994,37 @@ Item {
 										RowLayout {
 											Layout.fillWidth: true
 											spacing: 8
+
+											MouseArea {
+												Layout.preferredWidth: 120
+												Layout.preferredHeight: 30
+												cursorShape: Qt.PointingHandCursor
+												onClicked: rfidLogic.handleSort("card_number")
+
+												RowLayout {
+													anchors.fill: parent
+													spacing: 8
+													Text {
+														text: "Số thẻ"
+														color: "white"
+														font.bold: true
+													}
+													Column {
+														spacing: -4
+														Text {
+															text: "▲"
+															font.pixelSize: 10
+															color: (rfidLogic && rfidLogic.sortColumn === "card_number" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+														}
+														Text {
+															text: "▼"
+															font.pixelSize: 10
+															color: (rfidLogic && rfidLogic.sortColumn === "card_number" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+														}
+													}
+												}
+											}
+
 											// 1. Column: Họ tên
 												MouseArea {
 													Layout.preferredWidth: 140
@@ -1198,12 +1251,6 @@ Item {
 													Layout.preferredWidth: 160
 													font.bold: true
 												}
-												Text {
-													text: "Mô tả"
-													color: "white"
-													Layout.fillWidth: true
-													font.bold: true
-												}
 											}
 										ListView {
 											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 2) && !adminPage.loginVisible
@@ -1220,6 +1267,13 @@ Item {
 												RowLayout {
 													anchors.fill: parent
 													spacing: 8
+
+													Text {
+														text: (typeof card_number === "undefined" || card_number === null) ? "" : card_number
+														color: "white"
+														Layout.preferredWidth: 120
+														elide: Text.ElideRight
+													}
 
 													Text {
 														// Check if full_name exists, otherwise show empty string
@@ -1266,13 +1320,9 @@ Item {
 														color: "white"
 														Layout.preferredWidth: 160
 													}
-													Text {
-														text: (description
-															   || '')
-														color: "#ddd"
-														Layout.fillWidth: true
-														wrapMode: Text.Wrap
-													}
+													Item {
+																Layout.fillWidth: true
+															}
 												}
 												MouseArea {
 													anchors.fill: parent

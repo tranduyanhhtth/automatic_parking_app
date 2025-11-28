@@ -154,14 +154,15 @@ public:
     Q_INVOKABLE void upsertPricingRowsAsync(const QString &jsonText);
 
     // RFID cards management (exposed to QML) -- moved to public to ensure meta-object visibility
-    Q_INVOKABLE bool upsertRfidCard(const QString &rfid,
+    Q_INVOKABLE int upsertRfidCard(const QString &rfid,
                                     const QString &vehicleType,
                                     const QString &ticketType,
                                     const QString &status,
                                     const QString &description = QString(),
                                     const QString &ownerName = QString(),
                                     const QString &plate = QString(),
-                                    const QString &ownerPhone = QString());
+                                    const QString &ownerPhone = QString(),
+                                    const QString &cardNumber = QString());
     Q_INVOKABLE bool assignRfidCard(const QString &rfid, int userId);
     Q_INVOKABLE bool unassignRfidCard(const QString &rfid);
     Q_INVOKABLE QList<QVariantMap> listRfidCards(const QString &status = QString(),

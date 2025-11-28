@@ -135,14 +135,15 @@ public:
     virtual int getPricingId(const QString &vehicleType, const QString &ticketType) = 0;
 
     // === RFID Cards Management (Added to match DatabaseManager) ===
-    virtual bool upsertRfidCard(const QString &rfid,
+    virtual int upsertRfidCard(const QString &rfid,
                                 const QString &vehicleType,
                                 const QString &ticketType,
                                 const QString &status,
                                 const QString &description = QString(),
-                                const QString &ownerName = QString(), // <--- NEW
+                                const QString &ownerName = QString(),
                                 const QString &plate = QString(),
-                                const QString &ownerPhone = QString()) = 0;    // <--- NEW
+                                const QString &ownerPhone = QString(),
+                                const QString &cardNumber = QString()) = 0;
 
     virtual bool assignRfidCard(const QString &rfid, int userId) = 0;
     virtual bool unassignRfidCard(const QString &rfid) = 0;

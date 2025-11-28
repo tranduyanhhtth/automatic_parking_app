@@ -20,6 +20,7 @@ Item {
     property Item tfPlate
     property Item tfPhone
     property Item tfDisc
+    property Item tfCardNumber
     property alias listModel: listModel
 
     property var masterList: []
@@ -60,6 +61,7 @@ Item {
             listModel.clear()
 
             // Get search terms
+            var sCardNum = (tfCardNumber && tfCardNumber.text) ? tfCardNumber.text.toLowerCase().trim() : ""
             var sRfid  = (tfRfid  && tfRfid.text)  ? tfRfid.text.toLowerCase().trim()  : ""
             var sName  = (tfName  && tfName.text)  ? tfName.text.toLowerCase().trim()  : ""
             var sPlate = (tfPlate && tfPlate.text) ? tfPlate.text.toLowerCase().trim() : ""
@@ -79,12 +81,14 @@ Item {
 
             for (var i = 0; i < masterList.length; ++i) {
                 var item = masterList[i]
+                var iCardNum = (item.card_number || "").toLowerCase()
                 var iRfid  = (item.rfid || "").toLowerCase()
                 var iName  = (item.owner_name || "").toLowerCase()
                 var iPlate = (item.plate || "").toLowerCase()
                 var iPhone = (item.owner_phone || "").toLowerCase()
 
                 var match = true
+                if (sCardNum.length > 0 && iCardNum.indexOf(sCardNum) === -1) match = false
                 if (sRfid.length > 0  && iRfid.indexOf(sRfid) === -1)   match = false
                 if (sName.length > 0  && iName.indexOf(sName) === -1)   match = false
                 if (sPlate.length > 0 && iPlate.indexOf(sPlate) === -1) match = false
@@ -137,6 +141,19 @@ Item {
             filterList() // Re-apply filter and sort
         }
 
+    function resetFilters() {
+        if (tfCardNumber) tfCardNumber.text = ""
+        if (tfRfid) tfRfid.text = ""
+        if (tfName) tfName.text = ""
+        if (tfPlate) tfPlate.text = ""
+        if (tfPhone) tfPhone.text = ""
+        if (tfDesc) tfDesc.text = ""
+        if (cbVehicle) cbVehicle.currentIndex = 0
+        if (cbTicket) cbTicket.currentIndex = 0
+        scannedRfid = ""
+        filterList()
+    }
+
     function save() {
         console.log('[RfidCardsLogic] save() entered')
         var debugName = (tfName ? tfName.text : "NULL_TF")
@@ -163,7 +180,9 @@ Item {
         let st = ['available','assigned','lost','damaged'][cbStatus.currentIndex]
         const nameVal = (tfName ? tfName.text : "")
         const plateVal = (tfPlate ? tfPlate.text : "")
-        const phoneVal = (tfPhone ? tfPhone.text : "") // <--- Get text
+        const phoneVal = (tfPhone ? tfPhone.text : "")
+        const descVal = (tfDesc ? tfDesc.text : "")
+        const cardNumVal = (tfCardNumber ? tfCardNumber.text : "")
         let existed = false
         let currentDbStatus = ""
         if (r.getRfidCard) {
@@ -190,12 +209,18 @@ Item {
                         if (notify) notify('Thẻ vé tháng/quý/năm sẽ tự động chuyển "Assigned" khi bạn tạo Đăng Ký (Subscription). Đã lưu là "Available".')
                     }
                 }
-        const ok = r.upsertRfidCard(rfid, vt, tt, st, tfDesc.text || '', nameVal, plateVal, phoneVal)
-        console.log('[RfidCardsLogic] upsert result existed?', existed, 'ok', ok)
+        const result = r.upsertRfidCard(rfid, vt, tt, st, descVal, nameVal, plateVal, phoneVal, cardNumVal)
+        console.log('[RfidCardsLogic] upsert result:', result)
+        if (result === -2) {
+        if (notify) notify('Số thẻ đã tồn tại, vui lòng nhập số thẻ khác')
+            return
+        }
+        const ok = (result === 1)
         if (notify) notify(ok ? (existed ? 'Đã cập nhật thẻ' : 'Đã tạo thẻ mới') : 'Không thể lưu thẻ')
         if (ok) {
             lastNotifiedExistingRfid = rfid
-            refresh(); prefill(rfid)
+            refresh(); /*prefill(rfid)*/
+            resetFilters();
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
     }
@@ -219,8 +244,9 @@ Item {
         console.log('[RfidCardsLogic] delete result', ok)
         if (notify) notify(ok ? 'Đã xóa thẻ' : 'Không thể xóa thẻ')
         if (ok) {
-            tfRfid.text=''; tfDesc.text=''; scannedRfid='';
+            //tfRfid.text=''; tfDesc.text=''; scannedRfid='';
             refresh();
+            resetFilters();
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
     }
@@ -257,7 +283,7 @@ Item {
             const statusMap = ['available','assigned','lost','damaged']
             const stIdx = statusMap.indexOf(card.status)
             if (cbStatus && stIdx >= 0) cbStatus.currentIndex = stIdx
-
+            if (tfCardNumber) tfCardNumber.text = card.card_number || ''
             if (tfName) tfName.text = card.owner_name || ''
             if (tfPlate) tfPlate.text = card.plate || ''
             if (tfPhone) tfPhone.text = card.owner_phone || ''
@@ -278,13 +304,13 @@ Item {
 
                 if (idx === -1) {
                     isProgrammaticUpdate = true
+                    if (tfCardNumber) tfCardNumber.text = ""
                     if (tfRfid) tfRfid.text = ""
                     if (tfName) tfName.text = ""
                     if (tfPlate) tfPlate.text = ""
                     if (tfPhone) tfPhone.text = ""
-                    if (tfDesc) tfDesc.text = ""
-                    if (cbVehicle) cbVehicle.currentIndex = 0
-                    if (cbTicket) cbTicket.currentIndex = 0
+                    // if (cbVehicle) cbVehicle.currentIndex = 0
+                    // if (cbTicket) cbTicket.currentIndex = 0
                     isProgrammaticUpdate = false
                     scannedRfid = ""
                     // Reset list to full view (optional, ensures all rows are visible)
@@ -293,7 +319,7 @@ Item {
                 }
 
                 if (!listModel || typeof listModel.count === 'undefined') return
-                if (idx < 0 || idx >= listModel.count) return // [cite: 79]
+                if (idx < 0 || idx >= listModel.count) return
 
                 const row = listModel.get(idx)
                 if (!row) return
@@ -301,13 +327,14 @@ Item {
                 // [ADD THIS] Lock the filter before filling text
                 isProgrammaticUpdate = true
 
-                scannedRfid = row.rfid || '' // [cite: 79]
+                scannedRfid = row.rfid || ''
                 lastNotifiedExistingRfid = scannedRfid // [cite: 80]
 
-                if (tfRfid) tfRfid.text = row.rfid || '' // [cite: 80]
-                if (tfName) tfName.text = row.owner_name || '' // [cite: 81]
-                if (tfPlate) tfPlate.text = row.plate || '' // [cite: 82]
-                if (tfPhone) tfPhone.text = row.owner_phone || '' // [cite: 83]
+                if (tfCardNumber) tfCardNumber.text = row.card_number || ''
+                if (tfRfid) tfRfid.text = row.rfid || ''
+                if (tfName) tfName.text = row.owner_name || ''
+                if (tfPlate) tfPlate.text = row.plate || ''
+                if (tfPhone) tfPhone.text = row.owner_phone || ''
 
                 if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 1 : 2)
                 const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
@@ -331,6 +358,14 @@ Item {
     }
 
     // 3. LISTEN TO ALL TEXT FIELDS FOR SEARCH
+
+    Connections {
+        target: tfCardNumber
+        function onTextChanged() {
+            if (isProgrammaticUpdate) return
+            filterList()
+        }
+    }
 
     Connections {
             target: cbVehicle
