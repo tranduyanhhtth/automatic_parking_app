@@ -65,6 +65,15 @@ Item {
             var sPlate = (tfPlate && tfPlate.text) ? tfPlate.text.toLowerCase().trim() : ""
             var sPhone = (tfPhone && tfPhone.text) ? tfPhone.text.toLowerCase().trim() : ""
 
+            // Get ComboBox indices
+            var idxVehicle = cbVehicle ? cbVehicle.currentIndex : 0
+            var idxTicket  = cbTicket ? cbTicket.currentIndex : 0
+
+            // Define Mappings for filtering (Matches the order in UI model minus "All")
+            // UI Index 1 ("Xe máy") -> 'bike'
+            // UI Index 2 ("Ô tô")   -> 'car'
+            var ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
+
             // 1. Filter into a temporary array first
             var tempArray = []
 
@@ -81,28 +90,39 @@ Item {
                 if (sPlate.length > 0 && iPlate.indexOf(sPlate) === -1) match = false
                 if (sPhone.length > 0 && iPhone.indexOf(sPhone) === -1) match = false
 
+                // --- NEW: Vehicle Filter ---
+                // Index 0 is "All", so we only filter if index > 0
+                if (idxVehicle === 1 && item.vehicle_type !== 'bike') match = false
+                if (idxVehicle === 2 && item.vehicle_type !== 'car') match = false
+
+                // --- NEW: Ticket Filter ---
+                if (idxTicket > 0) {
+                    // map index 1 to array index 0
+                    var reqTicket = ticketMap[idxTicket - 1]
+                    if (item.ticket_type !== reqTicket) match = false
+                }
+
                 if (match) {
                     tempArray.push(item)
                 }
             }
 
-            // 2. Sort the temporary array if a sort column is selected
-            if (sortColumn !== "") {
-                tempArray.sort(function(a, b) {
+            // 2. Sort the temporary array
+                if (sortColumn !== "") {
+                    tempArray.sort(function(a, b) {
                     var valA = (a[sortColumn] || "").toString().toLowerCase()
                     var valB = (b[sortColumn] || "").toString().toLowerCase()
-
                     if (valA < valB) return sortDirection === "asc" ? -1 : 1
                     if (valA > valB) return sortDirection === "asc" ? 1 : -1
                     return 0
-                })
-            }
+                    })
+                }
 
-            // 3. Add to ListModel
-            for (var j = 0; j < tempArray.length; ++j) {
-                listModel.append(tempArray[j])
+                    // 3. Add to ListModel
+                for (var j = 0; j < tempArray.length; ++j) {
+                    listModel.append(tempArray[j])
+                }
             }
-        }
 
         // --- ADD THIS NEW FUNCTION ---
         function handleSort(columnName) {
@@ -128,11 +148,19 @@ Item {
         const rfid = (tfRfid?tfRfid.text:scannedRfid) || scannedRfid
         if (!rfid || !rfid.length) { if (notify) notify('Chưa có RFID'); return }
         if(!cbVehicle||!cbTicket||!cbStatus){ if(notify) notify('Thiếu control'); return }
-        const vt = cbVehicle.currentIndex === 0 ? 'bike' : 'car'
+        if (cbVehicle.currentIndex === 0) {
+                    if (notify) notify('Vui lòng chọn Loại xe cụ thể (không chọn Tất cả)')
+                    return
+                }
+                if (cbTicket.currentIndex === 0) {
+                    if (notify) notify('Vui lòng chọn Loại vé cụ thể (không chọn Tất cả)')
+                    return
+                }
+        const vt = cbVehicle.currentIndex === 1 ? 'bike' : 'car'
         const ttMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
         const stMap = ['available','assigned','lost','damaged']
-        const tt = ttMap[cbTicket.currentIndex]
-        let st = stMap[cbStatus.currentIndex]
+        const tt = ttMap[cbTicket.currentIndex - 1]
+        let st = ['available','assigned','lost','damaged'][cbStatus.currentIndex]
         const nameVal = (tfName ? tfName.text : "")
         const plateVal = (tfPlate ? tfPlate.text : "")
         const phoneVal = (tfPhone ? tfPhone.text : "") // <--- Get text
@@ -214,23 +242,17 @@ Item {
     }
 
     function prefill(rfid) {
-            // ... (Existing prefill logic) ...
             const r = rRepo()
             if (!rfid || !r || !r.getRfidCard) return
             const card = r.getRfidCard(rfid)
-            // Only prefill if we found an exact match
             if (!card || !card.rfid) return
+            isProgrammaticUpdate = true
 
-            // NOTE: We do NOT force tfRfid.text = card.rfid here because
-            // the user might be typing "D100" to search. If we auto-complete
-            // to "D10019" instantly, it interrupts typing.
-            // However, we update the other fields to show detail.
-
-            if (cbVehicle) cbVehicle.currentIndex = card.vehicle_type === 'bike' ? 0 : 1
+            if (cbVehicle) cbVehicle.currentIndex = card.vehicle_type === 'bike' ? 1 : 2
 
             const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
             const idx = ticketMap.indexOf(card.ticket_type)
-            if (cbTicket && idx >= 0) cbTicket.currentIndex = idx
+            if (cbTicket && idx >= 0) cbTicket.currentIndex = idx + 1
 
             const statusMap = ['available','assigned','lost','damaged']
             const stIdx = statusMap.indexOf(card.status)
@@ -242,10 +264,9 @@ Item {
             if (tfDesc) tfDesc.text = card.description || ''
 
             if (notify && lastNotifiedExistingRfid !== card.rfid) {
-                // Optional: suppress "Thẻ đã tồn tại" notification while simply searching/typing
-                // notify('Thẻ đã tồn tại'+ (card.status ? (' ('+card.status+')') : ''))
                 lastNotifiedExistingRfid = card.rfid
             }
+            isProgrammaticUpdate = false
         }
 
     Connections {
@@ -255,17 +276,16 @@ Item {
                 const idx = adminPage.pendingSelectRfidIndex
                 if (idx === undefined || idx === null) return
 
-                // [ADD THIS] Handle Deselection (Clicking white space)
                 if (idx === -1) {
-                    // Clear all fields
                     isProgrammaticUpdate = true
                     if (tfRfid) tfRfid.text = ""
-                    isProgrammaticUpdate = false
-
                     if (tfName) tfName.text = ""
                     if (tfPlate) tfPlate.text = ""
                     if (tfPhone) tfPhone.text = ""
                     if (tfDesc) tfDesc.text = ""
+                    if (cbVehicle) cbVehicle.currentIndex = 0
+                    if (cbTicket) cbTicket.currentIndex = 0
+                    isProgrammaticUpdate = false
                     scannedRfid = ""
                     // Reset list to full view (optional, ensures all rows are visible)
                     filterList()
@@ -289,12 +309,10 @@ Item {
                 if (tfPlate) tfPlate.text = row.plate || '' // [cite: 82]
                 if (tfPhone) tfPhone.text = row.owner_phone || '' // [cite: 83]
 
-                if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 0 : 1) // [cite: 84]
-
-
+                if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 1 : 2)
                 const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
                 const tIdx = ticketMap.indexOf(row.ticket_type || '')
-                if (cbTicket && tIdx >= 0) cbTicket.currentIndex = tIdx
+                if (cbTicket && tIdx >= 0) cbTicket.currentIndex = tIdx + 1
 
                 const statusMap = ['available','assigned','lost','damaged']
                 const sIdx = statusMap.indexOf(row.status || '')
@@ -313,6 +331,23 @@ Item {
     }
 
     // 3. LISTEN TO ALL TEXT FIELDS FOR SEARCH
+
+    Connections {
+            target: cbVehicle
+            function onCurrentIndexChanged() {
+                if (isProgrammaticUpdate) return
+                filterList()
+            }
+        }
+
+        Connections {
+            target: cbTicket
+            function onCurrentIndexChanged() {
+                if (isProgrammaticUpdate) return
+                filterList()
+            }
+        }
+
     Connections {
             target: tfRfid
             function onTextChanged() {

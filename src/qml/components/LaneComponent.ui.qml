@@ -6,8 +6,8 @@ import QtMultimedia
 Rectangle {
     id: root
     color: "transparent"
-    border.width: 1
-    border.color: "#aaa"
+    border.width: 2
+    border.color: isEntrance ? "#2E7D32" : "#C62828"
     radius: 4
 
     property string laneTitle: "CỔNG VÀO"
@@ -95,8 +95,8 @@ Rectangle {
         Rectangle {
             Layout.fillWidth: true
             height: 40
-            color: "white"
-            border.color: "gray"
+            color: isEntrance ? "#2E7D32" : "#C62828"
+            border.color: isEntrance ? "#2E7D32" : "#C62828"
             border.width: 1
             radius: 4
             Text {
@@ -104,6 +104,7 @@ Rectangle {
                 text: laneTitle
                 font.bold: true
                 font.pixelSize: 24
+                color: "white"
             }
         }
 
@@ -126,7 +127,7 @@ Rectangle {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
+                    Layout.fillHeight: true
                     color: "#ddd"
                     border.color: "#999"
                     border.width: 2
@@ -146,7 +147,7 @@ Rectangle {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
+                    Layout.fillHeight: true
                     color: "black"
                     Image {
                         id: inputPreview
@@ -173,7 +174,7 @@ Rectangle {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
+                    Layout.fillHeight: true
                     color: "#ddd"
                     border.color: "#999"
                     border.width: 2
@@ -193,7 +194,7 @@ Rectangle {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 200
+                    Layout.fillHeight: true
                     color: "black"
                     Image {
                         id: outputPreview

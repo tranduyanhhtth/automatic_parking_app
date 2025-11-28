@@ -824,7 +824,9 @@ Item {
 										id: cbVehicle
 										Layout.preferredWidth: 180
 										Layout.preferredHeight: 24
-										model: ["Xe máy", "Ô tô"]
+										// OLD: model: ["Xe máy", "Ô tô"]
+										// NEW: Add "Tất cả" at index 0
+										model: ["Tất cả", "Xe máy", "Ô tô"]
 										background: Rectangle {
 											radius: 8
 											color: "#111"
@@ -834,7 +836,7 @@ Item {
 										id: cbTicket
 										Layout.preferredWidth: 180
 										Layout.preferredHeight: 24
-										model: ["Giờ", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm", "Tháng", "Quý", "Năm"]
+										model: ["Tất cả","Giờ", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm", "Tháng", "Quý", "Năm"]
 										background: Rectangle {
 											radius: 8
 											color: "#111"
