@@ -17,6 +17,12 @@ Item {
     // Date picker visibility flags (UI-only)
     property bool fromPickerVisible: false
     property bool toPickerVisible: false
+    // --- NEW: Trigger and Data for Image Viewer ---
+    property bool triggerViewImage: false
+    property string viewImg1: ""
+    property string viewImg2: ""
+    property string viewOutImg1: ""
+    property string viewOutImg2: ""
     // Expose inputs/outputs via aliases
     property alias tfQuery: tfQuery
     property alias cbStatus: cbStatus
@@ -41,6 +47,7 @@ Item {
     property alias toYear: toDatePopup.toYear
     property alias toMonth: toDatePopup.toMonth
     property alias toDay: toDatePopup.toDay
+    property alias imageViewer: imageViewerPopup
 
     // Full-page content pane
     ColumnLayout {
@@ -323,6 +330,13 @@ Item {
                             Layout.preferredWidth: 80
                         }
                         Text {
+                            text: "Ảnh"
+                            color: "white"
+                            font.bold: true
+                            horizontalAlignment: Text.AlignHCenter
+                            Layout.preferredWidth: 60
+                        }
+                        Text {
                             text: "TT"
                             color: "white"
                             font.bold: true
@@ -400,6 +414,33 @@ Item {
                                 text: fee
                                 color: "#ddd"
                                 Layout.preferredWidth: 80
+                            }
+                            Rectangle {
+                                Layout.preferredWidth: 60
+                                Layout.fillHeight: true
+                                color: "transparent"
+                                ColumnLayout {
+                                    anchors.centerIn: parent
+                                    spacing: 2
+                                    Text {
+                                        text: "🖼️" // The Icon
+                                        font.pixelSize: 18
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
+                                    Text {
+                                        text: "ảnh" // The Text
+                                        color: "#4ab" // Light blue to indicate clickable
+                                        font.pixelSize: 11
+                                        font.underline: true
+                                        Layout.alignment: Qt.AlignHCenter
+                                    }
+                                }
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        cursorShape: Qt.PointingHandCursor
+                                        onPressed: searchPage.selectedRowId = idText // Save ID
+                                        onClicked: searchPage.triggerViewImage = !searchPage.triggerViewImage // Trigger Logic
+                                }
                             }
                             Text {
                                 text: status
@@ -479,6 +520,84 @@ Item {
     SessionDetailDialog {
         id: sessionDetail
     }
+
+    Popup {
+            id: imageViewerPopup
+            anchors.centerIn: parent
+            width: 850
+            height: 600
+            modal: true
+            focus: true
+            closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
+
+            background: Rectangle {
+                color: "#1a1a1a"
+                border.color: "#444"
+                radius: 8
+            }
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 20
+                spacing: 10
+
+                Text {
+                    text: "Hình ảnh phiên xe (ID: " + searchPage.selectedRowId + ")"
+                    color: "white"
+                    font.pixelSize: 20
+                    font.bold: true
+                    Layout.alignment: Qt.AlignHCenter
+                }
+
+                // Grid of 4 images
+                GridLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    columns: 2
+                    columnSpacing: 10
+                    rowSpacing: 10
+
+                    // Helper component for uniform images
+                    component ParkingImage : Image {
+                        fillMode: Image.PreserveAspectFit
+                        Layout.fillWidth: true
+                        Layout.fillHeight: true
+                        sourceSize.width: 400
+                        autoTransform: true
+                        Rectangle {
+                            anchors.fill: parent
+                            color: "transparent"
+                            border.color: "#555"
+                            border.width: 1
+                            visible: parent.status === Image.Null || parent.status === Image.Error
+                            Text { anchors.centerIn: parent; text: "No Image"; color: "#777" }
+                        }
+                        Text {
+                            anchors.bottom: parent.bottom
+                            anchors.left: parent.left
+                            anchors.margins: 5
+                            text: parent.label
+                            color: "yellow"
+                            style: Text.Outline; styleColor: "black"
+                            font.bold: true
+                        }
+                        property string label: ""
+                    }
+
+                    ParkingImage { source: searchPage.viewImg1; label: "Vào (Trước)" }
+                    ParkingImage { source: searchPage.viewImg2; label: "Vào (Sau/Toàn cảnh)" }
+                    ParkingImage { source: searchPage.viewOutImg1; label: "Ra (Trước)" }
+                    ParkingImage { source: searchPage.viewOutImg2; label: "Ra (Sau/Toàn cảnh)" }
+                }
+
+                Button {
+                    text: "Đóng"
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: 100
+                    onClicked: imageViewerPopup.close()
+                }
+            }
+        }
 
     // Simple Date Picker Popup for From date
     Popup {
