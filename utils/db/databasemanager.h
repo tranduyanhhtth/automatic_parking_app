@@ -208,7 +208,7 @@ public:
     Q_INVOKABLE bool exportRevenueToPdf(const QVariantList &rows,
                                         const QString &fromDate,
                                         const QString &toDate,
-                                        int totalRevenue,
+                                        qint64 totalRevenue,
                                         int totalSession,
                                         int totalSubscription,
                                         const QString &filePath = QString());

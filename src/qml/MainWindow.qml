@@ -3,6 +3,7 @@ import QtQuick.Controls
 import QtMultimedia
 import QtQml
 import QtQuick.Layouts
+import QtQuick.Dialogs
 import "./components"
 import "./dialogs"
 import "./logic"
@@ -51,6 +52,20 @@ Item {
             e.accepted = true
         }
     }
+
+    FileDialog {
+            id: logoFileDialog
+            title: "Select Company Logo"
+            nameFilters: ["Image files (*.png *.jpg *.jpeg *.svg)"]
+            onAccepted: {
+                // Update the source in the form
+                // 'selectedFile' usually returns a URL (file:///...)
+                app.logoSource = selectedFile
+
+                // Optional: You can save this URL to your 'app' settings here
+                // app.saveLogoSetting(selectedFile)
+            }
+        }
 
     // Khu vực nội dung chính (Content Pane) bên phải
     StackLayout {
@@ -192,17 +207,30 @@ Item {
     // Login Dialog removed in favor of Admin full-screen overlay
 
     // Wiring cho Drawer và thao tác tiêu đề
+    // Connections {
+    //     target: form
+    //     function onTriggerOpenTitleMenuChanged() {
+    //         if (navDrawer.opened) {
+    //             navDrawer.opened = false
+    //             contentStack.currentIndex = 0
+    //         } else {
+    //             navDrawer.opened = true
+    //         }
+    //     }
+    // }
     Connections {
-        target: form
-        function onTriggerOpenTitleMenuChanged() {
-            if (navDrawer.opened) {
-                navDrawer.opened = false
-                contentStack.currentIndex = 0
-            } else {
-                navDrawer.opened = true
+            target: form.btnChangeLogo
+            function onTriggered() {
+                logoFileDialog.open()
             }
         }
-    }
+    Connections {
+            target: form.logoMouseArea
+            function onClicked(mouse) {
+                // Open the menu programmatically here
+                form.logoContextMenu.popup()
+            }
+        }
     Connections {
         target: navDrawer
         function onTriggerSearchChanged() {
@@ -249,20 +277,52 @@ Item {
         }
     }
     Connections {
+        target: form.btnAdmin
+        function onClicked() {
+            contentStack.currentIndex = 2
+            adminPage.loginVisible = !root.isAuthenticated
+        }
+    }
+    Connections {
         target: searchPage
         function onTriggerCloseChanged() {
             if (searchPage.triggerClose) contentStack.currentIndex = 0
         }
     }
     Connections {
-        target: adminPage
-        function onTriggerCloseChanged() {
-            if (adminPage.triggerClose) {
-                contentStack.currentIndex = 0
-                adminPage.triggerClose = false
+            target: adminPage
+            function onTriggerCloseChanged() {
+                if (adminPage.triggerClose) {
+                    contentStack.currentIndex = 0
+                    adminPage.triggerClose = false
+                }
             }
+
+            // --- ADD THIS FUNCTION ---
+            function onTriggerLogoutAndCloseChanged() {
+                if (adminPage.triggerLogoutAndClose) {
+                    // 1. Revoke authentication so the check in onTriggerAdminChanged fails next time
+                    root.isAuthenticated = false
+
+                    // 2. Force the login overlay to be visible for the next visit
+                    adminPage.loginVisible = true
+
+                    adminPage.loginUserField.text = ""
+                    adminPage.loginPassField.text = ""
+                    adminPage.loginErrorLabel.text = "" // Optional: Clear old error messages
+
+                    // 3. Reset the tab bar to the default view (optional but recommended)
+                    if (adminPage.tabBar) adminPage.tabBar.currentIndex = 0
+
+                    // 4. Navigate back to Home
+                    contentStack.currentIndex = 0
+
+                    // 5. Reset the trigger
+                    adminPage.triggerLogoutAndClose = false
+                }
+            }
+            // -------------------------
         }
-    }
 
     // Logic components
     CameraLogic {
@@ -323,6 +383,13 @@ Item {
 
         // Start streams with RTSP options
         cameraLogic.startStreams()
+        form.tfHeaderTitle.text = app.headerTitle
+        form.tfCompanyName.text = app.companyName
+        form.tfAddress.text = app.companyAddress
+        form.tfPhone.text = app.companyPhone
+        form.tfEmail.text = app.companyEmail
+        // Set logo if it exists (requires 'qrc' or 'file' prefix handled in C++ or UI)
+        if (app.logoSource !== "") form.logoSource = app.logoSource
     }
 
     // Bridge functions that were removed from UI files
@@ -337,14 +404,53 @@ Item {
         }
     }
 
+    // 2. UI Interaction Logic (UI -> C++)
     Connections {
-           target: app // This connects to your ParkingController instance
+                target: form.tfHeaderTitle
+                function onEditingFinished() { app.headerTitle = form.tfHeaderTitle.text }
+                // NEW: Remove focus when Enter is pressed
+                function onAccepted() { form.tfHeaderTitle.focus = false }
+            }
+            Connections {
+                target: form.tfCompanyName
+                function onEditingFinished() { app.companyName = form.tfCompanyName.text }
+                // NEW: Remove focus when Enter is pressed
+                function onAccepted() { form.tfCompanyName.focus = false }
+            }
+            Connections {
+                target: form.tfAddress
+                function onEditingFinished() { app.companyAddress = form.tfAddress.text }
+                // NEW: Remove focus when Enter is pressed
+                function onAccepted() { form.tfAddress.focus = false }
+            }
+            Connections {
+                target: form.tfPhone
+                function onEditingFinished() { app.companyPhone = form.tfPhone.text }
+                // NEW: Remove focus when Enter is pressed
+                function onAccepted() { form.tfPhone.focus = false }
+            }
+            Connections {
+                target: form.tfEmail
+                function onEditingFinished() { app.companyEmail = form.tfEmail.text }
+                // NEW: Remove focus when Enter is pressed
+                function onAccepted() { form.tfEmail.focus = false }
+            }
 
-           function onCheckoutRequiresPayment(rfid, plate, fee) {
-               paymentDialog.rfid = rfid
-               paymentDialog.plate = plate
-               paymentDialog.fee = fee
-               paymentDialog.open()
+        // Ensure Logo updates visually when C++ property changes (e.g. on load)
+        Connections {
+            target: app
+            function onLogoSourceChanged() {
+                 form.logoSource = app.logoSource
+            }
+        }
+
+    Connections {
+        target: app // This connects to your ParkingController instance
+        function onCheckoutRequiresPayment(rfid, plate, fee) {
+        paymentDialog.rfid = rfid
+        paymentDialog.plate = plate
+        paymentDialog.fee = fee
+        paymentDialog.open()
            }
        }
 
@@ -356,6 +462,7 @@ Item {
             contentStack.currentIndex = 1
         }
     }
+
 
     // Preview source bindings for lanes (bind to alias properties on form)
     // During exit review, only the exit lane should show entrance snapshots

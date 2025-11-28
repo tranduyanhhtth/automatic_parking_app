@@ -12,7 +12,8 @@ Rectangle {
 
     property string laneTitle: "CỔNG VÀO"
     property bool isEntrance: true
-    // Designer-safe: expose preview sources as properties set from logic outside
+
+    // External properties
     property url inputPreviewSource: ""
     property url outputPreviewSource: ""
     property string moneyMessage: ""
@@ -20,11 +21,71 @@ Rectangle {
     property alias outputVideo: outputVideo
     property alias inputPreview: inputPreview
     property alias outputPreview: outputPreview
-    // [NEW] Expose interaction elements to Logic (MainWindow)
+
+    // Interaction elements
     property alias exitPlateMouseArea: maExitPlate
     property alias exitPlateInput: tfExitPlate
     property alias entrancePlateMouseArea: maEntPlate
     property alias entrancePlateInput: tfEntPlate
+
+    // --- [NEW] Local Session State ---
+    property string displayCardId: ""
+    property string displayPlate: ""
+    property string displayTimeIn: ""
+    property string displayTimeOut: ""
+    property string displayCardType: ""
+
+    // 1. Function to CLEAR this lane immediately
+    function clearSession() {
+        displayCardId = ""
+        displayPlate = ""
+        displayTimeIn = ""
+        displayTimeOut = ""
+        displayCardType = ""
+        // Timer removed so we don't need to stop it
+    }
+
+    // 2. Function to REFRESH this lane with new data
+    function refreshSession() {
+        if (root.isEntrance) {
+            root.displayCardId = app.entranceCardId || ""
+            root.displayPlate = app.entrancePlate || ""
+            root.displayTimeIn = app.entranceTimeIn || ""
+            root.displayCardType = app.entranceCardType || ""
+            root.displayTimeOut = ""
+        } else {
+            root.displayCardId = app.exitCardId || ""
+            root.displayPlate = app.exitPlate || ""
+            root.displayTimeIn = app.exitTimeIn || ""
+            root.displayTimeOut = app.exitTimeOut || ""
+            root.displayCardType = ""
+        }
+    }
+
+    Connections {
+        target: app
+
+        function onEntranceCardIdChanged() {
+            if (root.isEntrance) {
+                root.refreshSession()
+            }
+
+        }
+
+        function onExitCardIdChanged() {
+            if (!root.isEntrance) {
+                root.refreshSession()
+            }
+        }
+
+        // Apply the same logic to Plate changes
+        function onEntrancePlateChanged() {
+            if (root.isEntrance) root.refreshSession()
+        }
+        function onExitPlateChanged() {
+            if (!root.isEntrance) root.refreshSession()
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
@@ -33,7 +94,7 @@ Rectangle {
 
         Rectangle {
             Layout.fillWidth: true
-            height: 60
+            height: 40
             color: "white"
             border.color: "gray"
             border.width: 1
@@ -65,7 +126,7 @@ Rectangle {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 260
+                    Layout.preferredHeight: 200
                     color: "#ddd"
                     border.color: "#999"
                     border.width: 2
@@ -79,21 +140,22 @@ Rectangle {
                             text: "Camera Vào"
                             color: "black"
                             font.pixelSize: 14
-                            visible: !inputVideo.videoSink
-                                     || inputVideo.videoSink.videoSize.width === 0
+                            visible: !inputVideo.videoSink || inputVideo.videoSink.videoSize.width === 0
                         }
                     }
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 260
+                    Layout.preferredHeight: 200
                     color: "black"
                     Image {
                         id: inputPreview
                         anchors.fill: parent
                         fillMode: Image.PreserveAspectFit
                         cache: false
+                        // UPDATED: Show image if source exists (since we removed timer)
                         source: root.inputPreviewSource
+                        visible: root.inputPreviewSource != ""
                     }
                 }
             }
@@ -111,7 +173,7 @@ Rectangle {
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 260
+                    Layout.preferredHeight: 200
                     color: "#ddd"
                     border.color: "#999"
                     border.width: 2
@@ -125,27 +187,28 @@ Rectangle {
                             text: "Camera Ra"
                             color: "black"
                             font.pixelSize: 14
-                            visible: !outputVideo.videoSink
-                                     || outputVideo.videoSink.videoSize.width === 0
+                            visible: !outputVideo.videoSink || outputVideo.videoSink.videoSize.width === 0
                         }
                     }
                 }
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 260
+                    Layout.preferredHeight: 200
                     color: "black"
                     Image {
                         id: outputPreview
                         anchors.fill: parent
                         fillMode: Image.PreserveAspectFit
                         cache: false
+                        // UPDATED: Show image if source exists
                         source: root.outputPreviewSource
+                        visible: root.outputPreviewSource != ""
                     }
                 }
             }
         }
 
-        // Info panels switch by mode
+        // Info panels - EXIT MODE
         ColumnLayout {
             visible: !isEntrance
             spacing: 6
@@ -171,7 +234,7 @@ Rectangle {
                                 Layout.preferredWidth: 90
                             }
                             Text {
-                                text: app.exitCardId || ""
+                                text: root.displayCardId
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -186,22 +249,22 @@ Rectangle {
                                 text: "BIỂN SỐ:"
                                 font.bold: true
                                 Layout.preferredWidth: 90
-                            MouseArea {
-                                id: maExitPlate
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
+                                MouseArea {
+                                    id: maExitPlate
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
                                 }
                             }
                             TextField {
                                 id: tfExitPlate
-                                visible: false // Hidden by default
+                                visible: false
                                 Layout.fillWidth: true
                                 placeholderText: "Nhập biển số..."
                                 font.pixelSize: 14
                                 height: 30
                             }
                             Text {
-                                text: app.exitPlate || ""
+                                text: root.displayPlate
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                                 visible: !tfExitPlate.visible
@@ -230,7 +293,7 @@ Rectangle {
                                 Layout.preferredWidth: 120
                             }
                             Text {
-                                text: app.exitTimeIn || ""
+                                text: root.displayTimeIn
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -247,7 +310,7 @@ Rectangle {
                                 Layout.preferredWidth: 120
                             }
                             Text {
-                                text: app.exitTimeOut || ""
+                                text: root.displayTimeOut
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -256,6 +319,8 @@ Rectangle {
                 }
             }
         }
+
+        // Info panels - ENTRANCE MODE
         ColumnLayout {
             visible: isEntrance
             spacing: 6
@@ -281,7 +346,7 @@ Rectangle {
                                 Layout.preferredWidth: 90
                             }
                             Text {
-                                text: app.entranceCardId || ""
+                                text: root.displayCardId
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -296,22 +361,22 @@ Rectangle {
                                 text: "BIỂN SỐ:"
                                 font.bold: true
                                 Layout.preferredWidth: 90
-                            MouseArea {
-                                id: maEntPlate
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
+                                MouseArea {
+                                    id: maEntPlate
+                                    anchors.fill: parent
+                                    cursorShape: Qt.PointingHandCursor
                                 }
                             }
                             TextField {
                                 id: tfEntPlate
-                                visible: false // Hidden by default
+                                visible: false
                                 Layout.fillWidth: true
                                 placeholderText: "Nhập biển số..."
                                 font.pixelSize: 14
                                 height: 30
                             }
                             Text {
-                                text: app.entrancePlate || ""
+                                text: root.displayPlate
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                                 visible: !tfEntPlate.visible
@@ -340,7 +405,7 @@ Rectangle {
                                 Layout.preferredWidth: 120
                             }
                             Text {
-                                text: app.entranceTimeIn || ""
+                                text: root.displayTimeIn
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -357,7 +422,7 @@ Rectangle {
                                 Layout.preferredWidth: 90
                             }
                             Text {
-                                text: app.entranceCardType
+                                text: root.displayCardType
                                 elide: Text.ElideRight
                                 Layout.fillWidth: true
                             }
@@ -366,6 +431,8 @@ Rectangle {
                 }
             }
         }
+
+        // Money Message Panel
         Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: moneyMessage.length > 0 ? 48 : 0

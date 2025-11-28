@@ -268,6 +268,10 @@ Item {
 						}
 						TabButton {
 							text: "Người dùng"
+							visible: false   // Makes it invisible
+							enabled: false   // Prevents clicking
+							width: 0         // Ensures it takes up no space in the bar
+							height: 0
 						}
 						TabButton {
 							text: "Đăng kí"
@@ -965,54 +969,239 @@ Item {
 										RowLayout {
 											Layout.fillWidth: true
 											spacing: 8
-											Text {
-												text: "Họ tên"
-												color: "white"
-												Layout.preferredWidth: 140
-												font.bold: true
+											// 1. Column: Họ tên
+												MouseArea {
+													Layout.preferredWidth: 140
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													// Calls the logic function directly (Allowed in .ui.qml)
+													onClicked: rfidLogic.handleSort("owner_name")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "Họ tên"
+															color: "white"
+															font.bold: true
+														}
+														// Sort Indicators
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																// Bind color to logic state using Ternary Operator
+																color: (rfidLogic && rfidLogic.sortColumn === "owner_name" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "owner_name" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												// 2. Column: Biển số
+												MouseArea {
+													Layout.preferredWidth: 120
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													onClicked: rfidLogic.handleSort("plate")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "Biển số"
+															color: "white"
+															font.bold: true
+														}
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "plate" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "plate" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												// 3. Column: RFID
+												MouseArea {
+													Layout.preferredWidth: 160
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													onClicked: rfidLogic.handleSort("rfid")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "RFID"
+															color: "white"
+															font.bold: true
+														}
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "rfid" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "rfid" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												// 4. Column: Loại xe
+												MouseArea {
+													Layout.preferredWidth: 100
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													onClicked: rfidLogic.handleSort("vehicle_type")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "Loại xe"
+															color: "white"
+															font.bold: true
+														}
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "vehicle_type" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "vehicle_type" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												// 5. Column: Loại vé
+												MouseArea {
+													Layout.preferredWidth: 140
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													onClicked: rfidLogic.handleSort("ticket_type")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "Loại vé"
+															color: "white"
+															font.bold: true
+														}
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "ticket_type" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "ticket_type" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												// 6. Column: Số điện thoại
+												MouseArea {
+													Layout.preferredWidth: 120
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													onClicked: rfidLogic.handleSort("owner_phone")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "Số điện thoại"
+															color: "white"
+															font.bold: true
+														}
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "owner_phone" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "owner_phone" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												// 7. Column: Trạng thái
+												MouseArea {
+													Layout.preferredWidth: 120
+													Layout.preferredHeight: 30
+													cursorShape: Qt.PointingHandCursor
+													onClicked: rfidLogic.handleSort("status")
+
+													RowLayout {
+														anchors.fill: parent
+														spacing: 4
+														Text {
+															text: "Trạng thái"
+															color: "white"
+															font.bold: true
+														}
+														Column {
+															spacing: -4
+															Text {
+																text: "▲"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "status" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
+															}
+															Text {
+																text: "▼"
+																font.pixelSize: 10
+																color: (rfidLogic && rfidLogic.sortColumn === "status" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
+															}
+														}
+													}
+												}
+
+												Text {
+													text: "Gán lúc"
+													color: "white"
+													Layout.preferredWidth: 160
+													font.bold: true
+												}
+												Text {
+													text: "Mô tả"
+													color: "white"
+													Layout.fillWidth: true
+													font.bold: true
+												}
 											}
-											Text {
-												text: "Biển số"
-												color: "white"
-												Layout.preferredWidth: 120
-												font.bold: true
-											}
-											Text {
-												text: "RFID"
-												color: "white"
-												Layout.preferredWidth: 160
-											}
-											Text {
-												text: "Loại xe"
-												color: "white"
-												Layout.preferredWidth: 100
-											}
-											Text {
-												text: "Loại vé"
-												color: "white"
-												Layout.preferredWidth: 140
-											}
-											Text {
-												text: "Số điện thoại"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Trạng thái"
-												color: "white"
-												Layout.preferredWidth: 120
-											}
-											Text {
-												text: "Gán lúc"
-												color: "white"
-												Layout.preferredWidth: 160
-											}
-											Text {
-												text: "Mô tả"
-												color: "white"
-												Layout.fillWidth: true
-											}
-										}
 										ListView {
 											visible: (adminPage.tabBar && adminPage.tabBar.currentIndex === 2) && !adminPage.loginVisible
 											Layout.fillWidth: true

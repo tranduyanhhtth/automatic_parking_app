@@ -6,7 +6,7 @@ Item {
     property var notify
     ListModel { id: revenueModel }
     property alias listModel: revenueModel
-    property int totalRevenue: 0
+    property double totalRevenue: 0
     property int totalSession: 0
     property int totalSubscription: 0
     // Preset triggers
@@ -14,7 +14,6 @@ Item {
     property bool triggerPreset30: false
     property bool triggerPreset90: false
     property bool triggerSeedDemo: false
-
     property string generatedCsvData: ""
 
     function todayIso(){ const d=new Date(); function p(n){return n<10?'0'+n:n} return d.getFullYear()+"-"+p(d.getMonth()+1)+"-"+p(d.getDate()) }
@@ -147,14 +146,33 @@ Item {
         }
 
         let dataForPdf = [];
+        let calcTotalRevenue = 0;
+        let calcTotalSession = 0;
+        let calcTotalSubscription = 0;
         for (let i = 0; i < revenueModel.count; i++) {
-            dataForPdf.push(revenueModel.get(i));
-        }
+                    const item = revenueModel.get(i);
 
+                    // --- FIX START: Create a clean JS object explicitly ---
+                    // We force the values into the correct types to ensure C++ reads them correctly.
+                    let cleanRow = {
+                        "d": item.d + "", // Force string
+                        "session_count": parseInt(item.session_count || 0),
+                        "subscription_count": parseInt(item.subscription_count || 0),
+                        "total_amount": parseInt(item.total_amount || 0)
+                    };
+
+                    dataForPdf.push(cleanRow);
+                    // --- FIX END ---
+
+                    // Calculate totals safely
+                    calcTotalRevenue += cleanRow.total_amount;
+                    calcTotalSession += cleanRow.session_count;
+                    calcTotalSubscription += cleanRow.subscription_count;
+                }
         if (typeof repo !== 'undefined' && repo.exportRevenueToPdf) {
             const fromDate = adminPage.revFrom.text || defaultFrom();
             const toDate = adminPage.revTo.text || todayIso();
-            repo.exportRevenueToPdf(dataForPdf, fromDate, toDate, totalRevenue, totalSession, totalSubscription);
+            repo.exportRevenueToPdf(dataForPdf, fromDate, toDate, calcTotalRevenue, calcTotalSession, calcTotalSubscription);
             if (notify) notify("Đang xử lý file PDF...");
         } else {
             if (notify) notify("Lỗi: Chức năng xuất PDF không tồn tại.");

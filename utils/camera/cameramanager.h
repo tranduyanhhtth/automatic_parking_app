@@ -8,6 +8,7 @@
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QTimer>
+#include <QMutex>
 
 class GStreamerPlayer;
 class VideoFrameProducer;
@@ -25,6 +26,7 @@ public:
 
     QVideoSink *inputVideoSink() const { return m_inputSink; }
     QVideoSink *outputVideoSink() const { return m_outputSink; }
+    QMutex m_frameMutex;
     QString inputSnapshotDataUrl() const { return m_inputSnapshotDataUrl; }
     QString outputSnapshotDataUrl() const { return m_outputSnapshotDataUrl; }
 

@@ -13,6 +13,7 @@
 #include <QMetaObject>
 #include <QLocale>
 #include <QStringList>
+#include <QSettings>
 
 ParkingController::ParkingController(ICameraSnapshotProvider *cam1,
                                      ICameraSnapshotProvider *cam2,
@@ -38,11 +39,13 @@ ParkingController::ParkingController(ICameraSnapshotProvider *cam1,
     m_feeUpdateTimer.start();
     setLaneMoneyMessage(0, defaultLaneMessage(0));
     setLaneMoneyMessage(1, defaultLaneMessage(1));
+    loadSettings();
     if (m_readerEntrance)
         connect(m_readerEntrance, &ICardReader::rfidScanned, this, &ParkingController::onEntranceRfidScanned);
     if (m_readerExit)
         connect(m_readerExit, &ICardReader::rfidScanned, this, &ParkingController::onExitRfidScanned);
 }
+
 
 void ParkingController::onEntranceRfidScanned(const QString &rfid)
 {
@@ -79,7 +82,7 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
     const QVariantMap card = getCard(normRfid);
     if (card.isEmpty())
     {
-        m_message = QStringLiteral("Thẻ chưa đăng ký trong hệ thống");
+        m_message = QStringLiteral("Thẻ chưa có trong bãi đỗ xe. Vui lòng chuyển đổi chế độ VÀO/RA");
         emit messageChanged();
         emit showToast(m_message);
         return;
@@ -208,6 +211,73 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
             setLaneMoneyMessage(laneIdx, QString());
         }
     }
+}
+
+void ParkingController::loadSettings()
+{
+    QSettings settings("AIThings", "SmartParkingSystem");
+
+    m_headerTitle = settings.value("headerTitle", "Contact us").toString();
+    m_companyName = settings.value("companyName", "AITHINGS TECHNOLOGY CO., LTD").toString();
+    m_companyAddress = settings.value("companyAddress", "Address: 4th floor, Minori Office Building, 67A Truong Dinh, Hanoi").toString();
+    m_companyPhone = settings.value("companyPhone", "📞 +84 38 815 6494").toString();
+    m_companyEmail = settings.value("companyEmail", "📧 info@aithings.vn").toString();
+
+    // Default logo path if none saved (adjust path as needed or leave empty)
+    m_logoSource = settings.value("logoSource", "qrc:/assets/logo_icon.jpg").toString();
+}
+
+void ParkingController::saveSettings()
+{
+    QSettings settings("AIThings", "SmartParkingSystem");
+    settings.setValue("headerTitle", m_headerTitle);
+    settings.setValue("companyName", m_companyName);
+    settings.setValue("companyAddress", m_companyAddress);
+    settings.setValue("companyPhone", m_companyPhone);
+    settings.setValue("companyEmail", m_companyEmail);
+    settings.setValue("logoSource", m_logoSource);
+}
+
+void ParkingController::setHeaderTitle(const QString &val) {
+    if (m_headerTitle == val) return;
+    m_headerTitle = val;
+    saveSettings();
+    emit headerInfoChanged();
+}
+
+void ParkingController::setCompanyName(const QString &val) {
+    if (m_companyName == val) return;
+    m_companyName = val;
+    saveSettings();
+    emit headerInfoChanged();
+}
+
+void ParkingController::setCompanyAddress(const QString &val) {
+    if (m_companyAddress == val) return;
+    m_companyAddress = val;
+    saveSettings();
+    emit headerInfoChanged();
+}
+
+void ParkingController::setCompanyPhone(const QString &val) {
+    if (m_companyPhone == val) return;
+    m_companyPhone = val;
+    saveSettings();
+    emit headerInfoChanged();
+}
+
+void ParkingController::setCompanyEmail(const QString &val) {
+    if (m_companyEmail == val) return;
+    m_companyEmail = val;
+    saveSettings();
+    emit headerInfoChanged();
+}
+
+void ParkingController::setLogoSource(const QString &val) {
+    if (m_logoSource == val) return;
+    m_logoSource = val;
+    saveSettings();
+    emit logoSourceChanged();
 }
 
 // [NEW] Implementation - 18/11

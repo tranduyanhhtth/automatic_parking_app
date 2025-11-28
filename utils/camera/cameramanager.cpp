@@ -4,6 +4,7 @@
 #include <QImage>
 #include <QBuffer>
 #include <QDateTime>
+#include <QMutexLocker>
 #include "utils/gstreamer/gstreamerplayer.h"
 #include "utils/gstreamer/videoframeproducer.h"
 #include <QUrl>
@@ -68,12 +69,14 @@ CameraManager::CameraManager(QObject *parent)
     connect(m_inputSink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame)
             {
         if (!frame.isValid()) return;
+        QMutexLocker lock(&m_frameMutex);
         m_lastInputFrame = frame;
         m_lastInputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_inputStalled) { m_inputStalled = false; } });
     connect(m_outputSink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame)
             {
         if (!frame.isValid()) return;
+        QMutexLocker lock(&m_frameMutex);
         m_lastOutputFrame = frame;
         m_lastOutputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_outputStalled) { m_outputStalled = false; } });
@@ -108,6 +111,7 @@ void CameraManager::setInputVideoSink(QVideoSink *sink)
     m_inputSinkConn = connect(m_inputSink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame)
                               {
         if (!frame.isValid()) return;
+        QMutexLocker lock(&m_frameMutex);
         m_lastInputFrame = frame;
         m_lastInputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_inputStalled) { m_inputStalled = false; } });
@@ -126,6 +130,7 @@ void CameraManager::setOutputVideoSink(QVideoSink *sink)
     m_outputSinkConn = connect(m_outputSink, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame &frame)
                                {
         if (!frame.isValid()) return;
+        QMutexLocker lock(&m_frameMutex);
         m_lastOutputFrame = frame;
         m_lastOutputMs = QDateTime::currentMSecsSinceEpoch();
         if (m_outputStalled) { m_outputStalled = false; } });
@@ -154,11 +159,18 @@ QString CameraManager::makeDataUrl(const QByteArray &jpegBytes)
 
 QByteArray CameraManager::captureInputSnapshot(int quality)
 {
-    if (!m_lastInputFrame.isValid())
-        return {};
-    QImage img = QVideoFrame(m_lastInputFrame).toImage();
-    if (img.isNull())
-        return {};
+    QImage img;
+    {
+        QMutexLocker lock(&m_frameMutex);
+
+        if (!m_lastInputFrame.isValid()) return {};
+
+
+        img = m_lastInputFrame.toImage();
+    }
+
+    if (img.isNull()) return {};
+
     auto bytes = encodeJpeg(img, quality);
     m_inputSnapshotDataUrl = makeDataUrl(bytes);
     emit inputSnapshotChanged();
@@ -167,11 +179,14 @@ QByteArray CameraManager::captureInputSnapshot(int quality)
 
 QByteArray CameraManager::captureOutputSnapshot(int quality)
 {
-    if (!m_lastOutputFrame.isValid())
-        return {};
-    QImage img = QVideoFrame(m_lastOutputFrame).toImage();
-    if (img.isNull())
-        return {};
+    QImage img;
+    {
+        QMutexLocker lock(&m_frameMutex); // <--- LOCK
+        if (!m_lastOutputFrame.isValid()) return {};
+        img = m_lastOutputFrame.toImage();
+    }
+
+    if (img.isNull()) return {};
     auto bytes = encodeJpeg(img, quality);
     m_outputSnapshotDataUrl = makeDataUrl(bytes);
     emit outputSnapshotChanged();

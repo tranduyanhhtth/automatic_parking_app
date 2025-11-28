@@ -69,6 +69,20 @@ public:
                                ICardReader *exitReader,
                                QObject *parent = nullptr);
 
+    Q_PROPERTY(QString headerTitle READ headerTitle WRITE setHeaderTitle NOTIFY headerInfoChanged)
+    Q_PROPERTY(QString companyName READ companyName WRITE setCompanyName NOTIFY headerInfoChanged)
+    Q_PROPERTY(QString companyAddress READ companyAddress WRITE setCompanyAddress NOTIFY headerInfoChanged)
+    Q_PROPERTY(QString companyPhone READ companyPhone WRITE setCompanyPhone NOTIFY headerInfoChanged)
+    Q_PROPERTY(QString companyEmail READ companyEmail WRITE setCompanyEmail NOTIFY headerInfoChanged)
+    Q_PROPERTY(QString logoSource READ logoSource WRITE setLogoSource NOTIFY logoSourceChanged)
+
+    QString headerTitle() const { return m_headerTitle; }
+    QString companyName() const { return m_companyName; }
+    QString companyAddress() const { return m_companyAddress; }
+    QString companyPhone() const { return m_companyPhone; }
+    QString companyEmail() const { return m_companyEmail; }
+    QString logoSource() const { return m_logoSource; }
+
     QString plate() const { return m_plate; }
     QString message() const { return m_message; }
     QString lastRfid() const { return m_lastRfid; }
@@ -220,7 +234,14 @@ public:
     QString entrancePreviewImage1DataUrl() const { return m_entranceImg1; }
     QString entrancePreviewImage2DataUrl() const { return m_entranceImg2; }
 
+
 public slots:
+    void setHeaderTitle(const QString &val);
+    void setCompanyName(const QString &val);
+    void setCompanyAddress(const QString &val);
+    void setCompanyPhone(const QString &val);
+    void setCompanyEmail(const QString &val);
+    void setLogoSource(const QString &val);
     // Tải ảnh phiên vào để bác bảo vệ so sánh
     Q_INVOKABLE void loadExitReview(const QString &rfid);
     // Nút Mở: cổng vào -> mở ngay; cổng ra -> đóng phiên theo RFID hiện tại rồi mở
@@ -294,6 +315,8 @@ signals:
     void exitReviewChanged();
     void entrancePreviewChanged();
     void showToast(const QString &message);
+    void headerInfoChanged();
+    void logoSourceChanged();
     // Debug logging hook for UI HID LOG overlay
     void debugLog(const QString &message);
     void dualModeChanged();
@@ -313,6 +336,13 @@ private:
     IOcr *m_ocr{nullptr};
     ICardReader *m_readerEntrance{nullptr};
     ICardReader *m_readerExit{nullptr};
+
+    QString m_headerTitle;
+    QString m_companyName;
+    QString m_companyAddress;
+    QString m_companyPhone;
+    QString m_companyEmail;
+    QString m_logoSource;
 
     QString m_plate;
     QString m_message;
@@ -372,6 +402,8 @@ private:
     void processEntranceRfid(const QString &normRfid, int laneIdx);
     void processExitRfid(const QString &normRfid, int laneIdx);
     // Helper cho QML
+    void saveSettings();
+    void loadSettings();
 public:
     QString entrancePlate() const { return m_entrancePlate; }
     QString entranceTimeIn() const { return m_entranceTimeIn; }

@@ -29,7 +29,7 @@
 DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
 {
     DB_Connection = QSqlDatabase::addDatabase("QSQLITE");
-    const QString dbPath = QCoreApplication::applicationDirPath() + "/../../database/parking.db";
+    const QString dbPath = QCoreApplication::applicationDirPath() + "/../../database/parking_lot.db";
     dbFilePath_ = dbPath;
     qDebug() << "[DB] Expected database path:" << dbPath;
     {
@@ -1381,7 +1381,7 @@ bool DatabaseManager::saveTextToFile(const QString &filePath, const QString &tex
 bool DatabaseManager::exportRevenueToPdf(const QVariantList &rows,
                                          const QString &fromDate,
                                          const QString &toDate,
-                                         int totalRevenue,
+                                         qint64 totalRevenue,
                                          int totalSession,
                                          int totalSubscription,
                                          const QString &filePath)
@@ -1444,14 +1444,22 @@ bool DatabaseManager::exportRevenueToPdf(const QVariantList &rows,
     for (const QVariant &vr : rows)
     {
         const QVariantMap m = vr.toMap();
+
+        // Use value(...).toString() / .toInt() / .toLongLong()
         const QString d = m.value("d").toString();
         const int sess = m.value("session_count").toInt();
         const int subs = m.value("subscription_count").toInt();
-        const int amount = m.value("total_amount").toInt();
+
+        // CHANGE THIS: .toInt() -> .toLongLong() (which is qint64)
+        const qint64 amount = m.value("total_amount").toLongLong();
+
         painter.drawText(QPointF(col1, y), d);
         painter.drawText(QPointF(col2, y), QString::number(sess));
         painter.drawText(QPointF(col3, y), QString::number(subs));
+
+        // Print the qint64 amount
         painter.drawText(QPointF(col4, y), QString::number(amount));
+
         y += 14;
         if (y > content.bottom() - 40)
         {

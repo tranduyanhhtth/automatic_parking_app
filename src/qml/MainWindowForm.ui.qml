@@ -9,7 +9,7 @@ Item {
     width: 1920
     height: 1080
 
-    // Expose properties for logic
+    // --- LOGIC PROPERTIES ---
     property alias inputVideoLane1: lane1.inputVideo
     property alias outputVideoLane1: lane1.outputVideo
     property alias inputPreviewLane1: lane1.inputPreview
@@ -18,29 +18,49 @@ Item {
     property alias outputVideoLane2: lane2.outputVideo
     property alias inputPreviewLane2: lane2.inputPreview
     property alias outputPreviewLane2: lane2.outputPreview
+
+    // --- HEADER INTERACTION ALIASES ---
     property alias btnSearch: btnSearch
     property alias btnSettings: btnSettings
+    property alias btnAdmin: btnAdmin
     property alias settingsMenu: settingsMenu
-    // Expose dialog wrapper components and their fields (avoid aliasing to inner alias properties)
+
+    // Logo Alias
+    property alias logoSource: imgHeaderLogo.source
+    property alias btnChangeLogo: miChangeLogo
+    property alias logoMouseArea: logoMouseArea
+    property alias logoContextMenu: logoContextMenu
+
+    // **NEW**: Header Text Field Aliases (Editable Info)
+    property alias tfHeaderTitle: tfHeaderTitle
+    property alias tfCompanyName: tfCompanyName
+    property alias tfAddress: tfAddress
+    property alias tfPhone: tfPhone
+    property alias tfEmail: tfEmail
+
+    // --- DIALOG ALIASES ---
     property alias cameraSettingsDialog: cameraSettingsDialog
     property alias barrierSettingsDialog: barrierSettingsDialog
     property alias adminDialog: adminDialog
     property alias searchDialog: searchDialog
+
     // Camera settings fields
     property alias tfCam1: cameraSettingsDialog.tfCam1
     property alias tfCam2: cameraSettingsDialog.tfCam2
     property alias tfCam3: cameraSettingsDialog.tfCam3
     property alias tfCam4: cameraSettingsDialog.tfCam4
+
     // Barrier settings fields
     property alias tfCom1: barrierSettingsDialog.tfCom1
     property alias cbBaud1: barrierSettingsDialog.cbBaud1
     property alias tfCom2: barrierSettingsDialog.tfCom2
     property alias cbBaud2: barrierSettingsDialog.cbBaud2
+
+    // Menu Items
     property alias miCamera: miCamera
     property alias miBarrier: miBarrier
     property alias miExit: miExit
-    property alias titleLabel: titleLabel
-    property alias titleMenu: titleMenu
+
     // Admin (pricing) fields
     property alias pricingGrace: adminDialog.tfGrace
     property alias pricingBaseMinutes: adminDialog.tfBaseMinutes
@@ -54,8 +74,8 @@ Item {
     property alias pricingSlotsModel: adminDialog.slotsModel
     property alias pricingVehicleCombo: adminDialog.cbVehicle
     property alias pricingTicketCombo: adminDialog.cbTicket
-    property alias miSearch: miSearch
-    property alias miAdmin: miAdmin
+
+    // Search fields
     property alias searchFromDatePicker: searchDialog.dpFrom
     property alias searchFromTimePicker: searchDialog.tpFrom
     property alias searchToDatePicker: searchDialog.dpTo
@@ -66,7 +86,7 @@ Item {
     property var searchResults: []
     property bool triggerOpenTitleMenu: false
 
-    // Expose preview source bindings for logic
+    // Preview source bindings
     property alias lane1InputPreviewSource: lane1.inputPreviewSource
     property alias lane1OutputPreviewSource: lane1.outputPreviewSource
     property alias lane2InputPreviewSource: lane2.inputPreviewSource
@@ -88,29 +108,128 @@ Item {
             anchors.fill: parent
             spacing: 2
 
-            // Header
+            // --- HEADER SECTION ---
             Rectangle {
                 Layout.fillWidth: true
-                height: 60
+                height: 135
                 color: "black"
+
                 RowLayout {
                     anchors.fill: parent
                     anchors.margins: 10
-                    spacing: 8
-                    Text {
-                        id: titleLabel
-                        text: "BÃI ĐỖ XE TỰ ĐỘNG"
-                        font.bold: true
-                        font.pixelSize: 28
-                        color: "white"
-                        Layout.alignment: Qt.AlignVCenter | Qt.AlignLeft
+                    spacing: 15
+
+                    // 1. The Logo Image (Top Left)
+                    Image {
+                        id: imgHeaderLogo
+                        // Default placeholder if empty, or binds to logoSource alias
+                        source: "C:/Projects/automatic_parking_app/src/assets/logo_icon.jpg"
+                        fillMode: Image.PreserveAspectFit
+                        Layout.preferredHeight: 90
+                        Layout.preferredWidth: 160
+
+                        // Interaction to change logo
                         MouseArea {
+                            id: logoMouseArea
                             anchors.fill: parent
-                            onClicked: (root.triggerOpenTitleMenu = !root.triggerOpenTitleMenu)
+                            acceptedButtons: Qt.RightButton | Qt.LeftButton // Allow Left click too if desired
+                            cursorShape: Qt.PointingHandCursor
+                        }
+
+                        Menu {
+                            id: logoContextMenu
+                            MenuItem {
+                                id: miChangeLogo
+                                text: "Change Logo Image..."
+                                icon.name: "document-open"
+                            }
                         }
                     }
+
+                    // 2. The Text Information (Now Editable TextFields)
+                    ColumnLayout {
+                        Layout.alignment: Qt.AlignVCenter
+                        spacing: 0 // Reduced spacing for compact text fields
+
+                        // Header Title ("Contact us")
+                        TextField {
+                            id: tfHeaderTitle
+                            text: "Contact us"
+                            color: "white"
+                            font.bold: true
+                            font.pixelSize: 16
+                            background: null // Transparent background
+                            selectByMouse: true
+                            leftPadding: 0
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        // Company Name
+                        TextField {
+                            id: tfCompanyName
+                            text: "AITHINGS TECHNOLOGY CO., LTD"
+                            color: "#cccccc"
+                            font.pixelSize: 14
+                            font.bold: true
+                            background: null
+                            selectByMouse: true
+                            leftPadding: 0
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        // Address
+                        TextField {
+                            id: tfAddress
+                            text: "Address: 4th floor, Minori Office Building, 67A Truong Dinh, Hanoi"
+                            color: "white"
+                            font.pixelSize: 12
+                            background: null
+                            selectByMouse: true
+                            leftPadding: 0
+                            Layout.maximumWidth: 600
+                            verticalAlignment: Text.AlignVCenter
+                        }
+
+                        // Contact Row (Phone and Email)
+                        RowLayout {
+                            spacing: 15
+
+                            TextField {
+                                id: tfPhone
+                                text: "📞 +84 38 815 6494"
+                                color: "white"
+                                font.pixelSize: 12
+                                background: null
+                                selectByMouse: true
+                                leftPadding: 0
+                                verticalAlignment: Text.AlignVCenter
+                            }
+
+                            TextField {
+                                id: tfEmail
+                                text: "📧 info@aithings.vn"
+                                color: "white"
+                                font.pixelSize: 12
+                                background: null
+                                selectByMouse: true
+                                leftPadding: 0
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                    }
+
+                    // Spacer
                     Item {
                         Layout.fillWidth: true
+                    }
+
+                    // --- TOOL BUTTONS (Right Side) ---
+                    ToolButton {
+                        id: btnAdmin
+                        text: "🧑‍💼"
+                        font.pixelSize: 24
+                        Accessible.name: "Admin"
+                        Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                     }
                     ToolButton{
                         id: btnSearch
@@ -127,39 +246,19 @@ Item {
                         Accessible.name: "Settings"
                         Layout.alignment: Qt.AlignVCenter | Qt.AlignRight
                     }
+
                     Menu {
                         id: settingsMenu
                         y: btnSettings.height
-                        MenuItem {
-                            id: miCamera
-                            text: "Cấu hình Camera"
-                        }
-                        MenuItem {
-                            id: miBarrier
-                            text: "Cấu hình Barrier"
-                        }
+                        MenuItem { id: miCamera; text: "Cấu hình Camera" }
+                        MenuItem { id: miBarrier; text: "Cấu hình Barrier" }
                         MenuSeparator {}
-                        MenuItem {
-                            id: miExit
-                            text: "Thoát ứng dụng"
-                        }
-                    }
-                    Menu {
-                        id: titleMenu
-                        y: titleLabel.height
-                        MenuItem {
-                            id: miSearch
-                            text: "Tìm kiếm phiên"
-                        }
-                        MenuItem {
-                            id: miAdmin
-                            text: "Quản trị hệ thống"
-                        }
+                        MenuItem { id: miExit; text: "Thoát ứng dụng" }
                     }
                 }
             }
 
-            // Main content
+            // --- MAIN CONTENT ---
             Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
@@ -199,16 +298,8 @@ Item {
     }
 
     // Dialogs
-    AdminDialog {
-        id: adminDialog
-    }
-    CameraSettingsDialog {
-        id: cameraSettingsDialog
-    }
-    BarrierSettingsDialog {
-        id: barrierSettingsDialog
-    }
-    SearchDialog {
-        id: searchDialog
-    }
+    AdminDialog { id: adminDialog }
+    CameraSettingsDialog { id: cameraSettingsDialog }
+    BarrierSettingsDialog { id: barrierSettingsDialog }
+    SearchDialog { id: searchDialog }
 }
