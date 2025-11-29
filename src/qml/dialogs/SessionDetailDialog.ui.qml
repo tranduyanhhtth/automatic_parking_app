@@ -40,19 +40,19 @@ Item {
                     spacing: 6
                     Text {
                         text: "Biển số: " + (sessionDetail.plate || "")
-                        color: "#000"
+                        color: "white"
                     }
                     Text {
                         text: "Vào: " + (sessionDetail.checkin || "")
-                        color: "#000"
+                        color: "white"
                     }
                     Text {
                         text: "Ra: " + (sessionDetail.checkout || "")
-                        color: "#000"
+                        color: "white"
                     }
                     Text {
                         text: "Phí: " + (sessionDetail.fee || 0)
-                        color: "#000"
+                        color: "white"
                     }
                 }
                 Item {
@@ -61,7 +61,7 @@ Item {
             }
             Label {
                 text: "Ảnh check-in"
-                color: "#000"
+                color: "white"
             }
             RowLayout {
                 Layout.fillWidth: true

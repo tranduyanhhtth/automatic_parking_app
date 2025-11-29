@@ -296,38 +296,6 @@ Item {
     }
 
     Connections {
-            target: searchPage
-            function onTriggerViewImageChanged() {
-                if (!searchPage.triggerViewImage) return;
-
-                var sid = searchPage.selectedRowId;
-                if (!sid || sid <= 0) return;
-
-                console.log("Viewing images for session:", sid);
-
-                // Fetch details from DatabaseManager (returns QVariantMap)
-                // C++ Signature: QVariantMap getSessionDetails(int id);
-                var det = repo.getSessionDetails(sid);
-
-                if (det) {
-                    // DatabaseManager returns keys: img1, img2, checkout_img1, checkout_img2
-                    searchPage.viewImg1 = det.img1 || "";
-                    searchPage.viewImg2 = det.img2 || "";
-                    searchPage.viewOutImg1 = det.checkout_img1 || "";
-                    searchPage.viewOutImg2 = det.checkout_img2 || "";
-                } else {
-                    searchPage.viewImg1 = "";
-                    searchPage.viewImg2 = "";
-                    searchPage.viewOutImg1 = "";
-                    searchPage.viewOutImg2 = "";
-                }
-
-                // Open the new popup
-                searchPage.imageViewer.open();
-            }
-        }
-
-    Connections {
         target: searchPage
         function onVisibleChanged() {
             if (searchPage.visible) {
