@@ -26,6 +26,21 @@
 #include <QPdfWriter>
 #endif
 
+
+static qint64 getWindowOverlap(const QDateTime &sessionStart, const QDateTime &sessionEnd,
+                               const QDateTime &windowStart, const QDateTime &windowEnd)
+{
+    // Use QDateTime comparisons to avoid QTime wrapping/addDays errors
+    if (sessionStart >= windowEnd || sessionEnd <= windowStart)
+        return 0;
+
+    QDateTime effectiveStart = (sessionStart < windowStart) ? windowStart : sessionStart;
+    QDateTime effectiveEnd = (sessionEnd > windowEnd) ? windowEnd : sessionEnd;
+
+    qint64 seconds = effectiveStart.secsTo(effectiveEnd);
+    return qMax<qint64>(0, seconds / 60);
+}
+
 DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
 {
     DB_Connection = QSqlDatabase::addDatabase("QSQLITE");
@@ -52,6 +67,58 @@ DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
         qDebug() << "Database Is Not Connected";
         qDebug() << "Error : " << DB_Connection.lastError();
     }
+    // ==========================================
+    // MANUAL TEST FOR HOURLY SPLIT LOGIC
+    // ==========================================
+    qDebug() << "\n--- STARTING PRICING TEST ---";
+
+    // 1. Setup Dummy Data (Car, 8:00 AM -> 2:00 PM)
+    QDateTime testIn(QDate::currentDate(), QTime(8, 0));
+    QDateTime testOut(QDate::currentDate(), QTime(14, 0));
+    int t_baseFee = 20000;
+    int t_durMin = 60;
+    int t_incFee = 20000;
+    int t_grace = 15;
+
+    qDebug() << "Vehicle: Car | Price: 20k/60min";
+    qDebug() << "In:" << testIn.toString("HH:mm") << "| Out:" << testOut.toString("HH:mm");
+
+    // 2. Run The Logic (Exact Copy of what we wrote in computeFeeForSession)
+    int testTotalFee = 0;
+    QDate t_checkInDate = testIn.date();
+    QDate t_checkOutDate = testOut.date();
+
+    for (QDate d = t_checkInDate; d <= t_checkOutDate; d = d.addDays(1)) {
+        // Define Windows
+        QDateTime morningStart(d, QTime(6, 0));
+        QDateTime morningEnd(d, QTime(12, 0));
+        QDateTime afternoonStart(d, QTime(13, 0));
+        QDateTime afternoonEnd(d, QTime(17, 30));
+
+        // A. Morning Calculation
+        qint64 mornMins = getWindowOverlap(testIn, testOut, morningStart, morningEnd);
+        int mornFee = 0;
+        if (mornMins > 0) {
+            mornFee = computeFeeFromPricing(t_baseFee, t_durMin, t_incFee, t_grace, 0,
+                                            morningStart, morningStart.addSecs(mornMins * 60));
+        }
+        qDebug() << "  > Morning Overlap:" << mornMins << "mins | Fee:" << mornFee;
+
+        // B. Afternoon Calculation
+        qint64 afterMins = getWindowOverlap(testIn, testOut, afternoonStart, afternoonEnd);
+        int afterFee = 0;
+        if (afterMins > 0) {
+            afterFee = computeFeeFromPricing(t_baseFee, t_durMin, t_incFee, t_grace, 0,
+                                             afternoonStart, afternoonStart.addSecs(afterMins * 60));
+        }
+        qDebug() << "  > Afternoon Overlap:" << afterMins << "mins | Fee:" << afterFee;
+
+        testTotalFee += (mornFee + afterFee);
+    }
+
+    qDebug() << "--- FINAL RESULT: " << testTotalFee << " VND ---";
+    qDebug() << "-------------------------------\n";
+    // ==========================================
 }
 
 bool DatabaseManager::initialize()
@@ -185,7 +252,7 @@ bool DatabaseManager::ensureSchema()
         CREATE TABLE IF NOT EXISTS pricing (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             vehicle_type TEXT NOT NULL CHECK (vehicle_type IN ('car','bike','truck')),
-            ticket_type TEXT NOT NULL CHECK (ticket_type IN ('hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly')),
+            ticket_type TEXT NOT NULL CHECK (ticket_type IN ('hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly','morning','afternoon','evening')),
             base_fee INTEGER NOT NULL,
             duration_minutes INTEGER,
             incremental_fee INTEGER,
@@ -284,7 +351,7 @@ bool DatabaseManager::ensureSchema()
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 rfid TEXT NOT NULL UNIQUE,
                 vehicle_type TEXT NOT NULL CHECK (vehicle_type IN ('car','bike')),
-                ticket_type TEXT NOT NULL CHECK (ticket_type IN ('hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly')),
+                ticket_type TEXT NOT NULL CHECK (ticket_type IN ('hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly','morning','afternoon','evening')),
                 user_phone TEXT,
                 status TEXT NOT NULL CHECK (status IN ('available','assigned','lost','damaged')),
                 created_at TEXT NOT NULL,
@@ -590,6 +657,12 @@ INSERT INTO pricing (vehicle_type, ticket_type, base_fee, duration_minutes, incr
 ('bike','monthly',200000,NULL,NULL,NULL,0,0,'Vé tháng xe máy',NULL,NULL),
 ('bike','quarterly',540000,NULL,NULL,NULL,10,0,'Vé quý xe máy',NULL,NULL),
 ('bike','yearly',1920000,NULL,NULL,NULL,20,0,'Vé năm xe máy',NULL,NULL),
+('bike','morning',3000,360,NULL,NULL,0,15,'Ca Sáng (06:00-12:00)','06:00','12:00'),
+('bike','afternoon',3000,300,NULL,NULL,0,15,'Ca Chiều (13:00-18:00)','13:00','18:00'),
+('bike','evening',5000,360,NULL,NULL,0,15,'Ca Tối (18:00-24:00)','18:00','24:00'),
+('car','morning',20000,360,NULL,NULL,0,15,'Ca Sáng (06:00-12:00)','06:00','12:00'),
+('car','afternoon',20000,300,NULL,NULL,0,15,'Ca Chiều (13:00-18:00)','13:00','18:00'),
+('car','evening',30000,360,NULL,NULL,0,15,'Ca Tối (18:00-24:00)','18:00','24:00'),
 ('car','hourly',20000,60,20000,240000,0,15,'Phí giờ ô tô',NULL,NULL),
 ('car','daily_day',150000,720,NULL,240000,0,15,'Vé ngày ban ngày ô tô','06:00','18:00'),
 ('car','daily_night',180000,720,NULL,300000,0,15,'Vé ngày ban đêm ô tô','18:00','06:00'),
@@ -3186,15 +3259,141 @@ int DatabaseManager::computeFeeForSession(int sessionId,
     q.bindValue(":id", sessionId);
     if (!q.exec() || !q.next())
         return -1;
-    const QString vt = q.value("vehicle_type").toString().isEmpty() ? QStringLiteral("car") : q.value("vehicle_type").toString();
-    const QString ttJoined = q.value("ticket_type").toString();
+
     const QDateTime tin = QDateTime::fromString(q.value("checkin_time").toString(), Qt::ISODate);
     const QDateTime tout = QDateTime::fromString(q.value("co").toString(), Qt::ISODate);
+    const QString vt = q.value("vehicle_type").toString().isEmpty() ? QStringLiteral("car") : q.value("vehicle_type").toString();
+    const QString ttJoined = q.value("ticket_type").toString();
+    if ((ttJoined == "morning" || ttJoined == "afternoon" || ttJoined == "evening") && !lostCard)
+    {
+        // Struct to hold dynamic rules for each shift
+        struct ShiftRule {
+            int price = 0;
+            int grace = 15;
+            QTime start;
+            QTime end;
+        };
+        QMap<QString, ShiftRule> shifts;
+
+        // 1. Fetch dynamic Price, Grace, Start, and End times from DB
+        QSqlQuery pQuery(DB_Connection);
+        pQuery.prepare("SELECT ticket_type, base_fee, grace_period, start_time, end_time FROM pricing WHERE vehicle_type = :vt AND ticket_type IN ('morning', 'afternoon', 'evening')");
+        pQuery.bindValue(":vt", vt);
+
+        if (pQuery.exec()) {
+            while(pQuery.next()) {
+                QString t = pQuery.value("ticket_type").toString();
+                ShiftRule r;
+                r.price = pQuery.value("base_fee").toInt();
+                r.grace = pQuery.value("grace_period").toInt();
+                // Default to hardcoded fallback ONLY if DB is empty/null
+                QString sStr = pQuery.value("start_time").toString();
+                QString eStr = pQuery.value("end_time").toString();
+
+                // Fallbacks matching your UI
+                if (t == "morning") {
+                    r.start = sStr.isEmpty() ? QTime(6,0) : QTime::fromString(sStr, "HH:mm");
+                    r.end   = eStr.isEmpty() ? QTime(12,0) : QTime::fromString(eStr, "HH:mm");
+                } else if (t == "afternoon") {
+                    r.start = sStr.isEmpty() ? QTime(13,0) : QTime::fromString(sStr, "HH:mm");
+                    r.end   = eStr.isEmpty() ? QTime(18,0) : QTime::fromString(eStr, "HH:mm");
+                } else if (t == "evening") {
+                    r.start = sStr.isEmpty() ? QTime(18,0) : QTime::fromString(sStr, "HH:mm");
+                    r.end   = eStr.isEmpty() ? QTime(23,59,59) : QTime::fromString(eStr, "HH:mm");
+                    // Fix: If evening ends at "00:00" or "24:00", treat as end of day
+                    if (!r.end.isValid() || r.end == QTime(0,0)) r.end = QTime(23,59,59);
+                }
+                shifts.insert(t, r);
+            }
+        }
+
+        int totalShiftFee = 0;
+        QDate startDate = tin.date();
+        QDate endDate = tout.date();
+
+        // 2. Iterate Days
+        for (QDate d = startDate; d <= endDate; d = d.addDays(1)) {
+            // Check Morning
+            if (shifts.contains("morning")) {
+                ShiftRule r = shifts["morning"];
+                QDateTime mStart(d, r.start);
+                QDateTime mEnd(d, r.end);
+                if (getWindowOverlap(tin, tout, mStart, mEnd) > r.grace)
+                    totalShiftFee += r.price;
+            }
+
+            // Check Afternoon
+            if (shifts.contains("afternoon")) {
+                ShiftRule r = shifts["afternoon"];
+                QDateTime aStart(d, r.start);
+                QDateTime aEnd(d, r.end);
+                if (getWindowOverlap(tin, tout, aStart, aEnd) > r.grace)
+                    totalShiftFee += r.price;
+            }
+
+            // Check Evening
+            if (shifts.contains("evening")) {
+                ShiftRule r = shifts["evening"];
+                QDateTime eStart(d, r.start);
+                QDateTime eEnd(d, r.end);
+                // Handle overnight evening edge case if needed, but usually strictly within day for shifts
+                if (getWindowOverlap(tin, tout, eStart, eEnd) > r.grace)
+                    totalShiftFee += r.price;
+            }
+        }
+
+        return totalShiftFee;
+    }
+    if (ttJoined == "hourly" && !lostCard)
+    {
+        // Get Pricing Config from DB
+        int baseFee = q.value("base_fee").toInt();
+        int durMin = q.value("duration_minutes").isNull() ? 60 : q.value("duration_minutes").toInt();
+        int incFee = q.value("incremental_fee").isNull() ? baseFee : q.value("incremental_fee").toInt();
+        int grace = q.value("grace_period").isNull() ? 0 : q.value("grace_period").toInt();
+
+        // Use QDateTime for date math
+        QDate checkInDate = tin.date();
+        QDate checkOutDate = tout.date();
+
+        int totalSplitFee = 0;
+
+        // Iterate days
+        for (QDate d = checkInDate; d <= checkOutDate; d = d.addDays(1)) {
+            // Define Windows using QDateTime
+            QDateTime morningStart(d, QTime(6, 0));
+            QDateTime morningEnd(d, QTime(12, 0));
+
+            QDateTime afternoonStart(d, QTime(13, 0));
+            QDateTime afternoonEnd(d, QTime(17, 30));
+
+            // 1. Calculate Morning Fee
+            qint64 mornMins = getWindowOverlap(tin, tout, morningStart, morningEnd);
+            if (mornMins > 0) {
+                totalSplitFee += computeFeeFromPricing(baseFee, durMin, incFee, grace, 0,
+                                                       morningStart, morningStart.addSecs(mornMins * 60));
+            }
+
+            // 2. Calculate Afternoon Fee
+            qint64 afterMins = getWindowOverlap(tin, tout, afternoonStart, afternoonEnd);
+            if (afterMins > 0) {
+                totalSplitFee += computeFeeFromPricing(baseFee, durMin, incFee, grace, 0,
+                                                       afternoonStart, afternoonStart.addSecs(afterMins * 60));
+            }
+        }
+
+        if (totalSplitFee > 0) {
+            return totalSplitFee;
+        }
+    }
+
+    // --- NOTE: 'tin' and 'tout' definitions were removed from here to avoid redefinition error ---
+
     if (lostCard)
         return 100000; // simple rule for now
 
     int fee = -1;
-    int baseMin = 0; // minimum base to apply when duration > grace and computed fee == 0
+    int baseMin = 0;
     int graceAll = 0;
 
     // Prefer JSON description when valid

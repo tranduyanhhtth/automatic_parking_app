@@ -28,6 +28,9 @@ Item {
         id: model
         // Bike (Xe máy)
     ListElement { vehicle_type: "bike"; ticket_type: "hourly";      ticket_label: "Vé giờ (lượt)";       description: "Mỗi giờ đầu tiên (tối đa 60 phút/lượt); quá giờ tính thêm lượt mới.";               price_hint: "5.000 - 8.000/lượt"; price_value: ""; grace_hint: "phút"; grace_value: "15" }
+    ListElement { vehicle_type: "bike"; ticket_type: "morning";     ticket_label: "Ca Sáng";             description: "Khung giờ 06:00 - 12:00. Cộng dồn nếu qua ca khác.";                                 price_hint: "10.000";            price_value: ""; grace_hint: "phút"; grace_value: "15" }
+    ListElement { vehicle_type: "bike"; ticket_type: "afternoon";   ticket_label: "Ca Chiều";            description: "Khung giờ 13:00 - 18:00. Cộng dồn nếu qua ca khác.";                                 price_hint: "10.000";            price_value: ""; grace_hint: "phút"; grace_value: "15" }
+    ListElement { vehicle_type: "bike"; ticket_type: "evening";     ticket_label: "Ca Tối";              description: "Khung giờ 18:00 - 24:00. Cộng dồn nếu qua ca khác.";                                 price_hint: "15.000";            price_value: ""; grace_hint: "phút"; grace_value: "15" }
     ListElement { vehicle_type: "bike"; ticket_type: "daily_day";   ticket_label: "Vé ngày (ban ngày)";  description: "Từ 6h-18h, tối đa 12 giờ; vượt quá tính thêm ngày.";                                 price_hint: "20.000 - 30.000/ngày"; price_value: ""; grace_hint: "phút"; grace_value: "15" }
     ListElement { vehicle_type: "bike"; ticket_type: "daily_night"; ticket_label: "Vé ngày (ban đêm)";  description: "Từ 18h-6h, tối đa 12 giờ; qua đêm tính bằng 6 lượt.";                                price_hint: "25.000 - 40.000/ngày"; price_value: ""; grace_hint: "phút"; grace_value: "15" }
     ListElement { vehicle_type: "bike"; ticket_type: "overnight";   ticket_label: "Vé qua đêm";         description: "Từ 18h hôm trước đến 6h hôm sau (tính 6 lượt).";                                   price_hint: "30.000 - 48.000/đêm"; price_value: ""; grace_hint: "phút"; grace_value: "0" }
@@ -36,6 +39,9 @@ Item {
     ListElement { vehicle_type: "bike"; ticket_type: "yearly";      ticket_label: "Vé năm";              description: "Đăng ký 12 tháng, giảm 20% so với tháng lẻ.";                                           price_hint: "1.920.000 - 2.880.000/năm"; price_value: ""; grace_hint: "-"; grace_value: "0" }
         // Car (<9 seats)
     ListElement { vehicle_type: "car"; ticket_type: "hourly";      ticket_label: "Vé giờ (lượt)";       description: "Mỗi giờ đầu tiên (tối đa 60 phút/lượt); quá giờ tính thêm lượt mới.";               price_hint: "20.000 - 30.000/lượt"; price_value: ""; grace_hint: "phút"; grace_value: "15" }
+    ListElement { vehicle_type: "car"; ticket_type: "morning";     ticket_label: "Ca Sáng";             description: "Khung giờ 06:00 - 12:00. Cộng dồn nếu qua ca khác.";                                price_hint: "50.000";               price_value: ""; grace_hint: "phút"; grace_value: "15" }
+    ListElement { vehicle_type: "car"; ticket_type: "afternoon";   ticket_label: "Ca Chiều";            description: "Khung giờ 13:00 - 18:00. Cộng dồn nếu qua ca khác.";                                price_hint: "50.000";               price_value: ""; grace_hint: "phút"; grace_value: "15" }
+    ListElement { vehicle_type: "car"; ticket_type: "evening";     ticket_label: "Ca Tối";              description: "Khung giờ 18:00 - 24:00. Cộng dồn nếu qua ca khác.";                                price_hint: "70.000";               price_value: ""; grace_hint: "phút"; grace_value: "15" }
     ListElement { vehicle_type: "car"; ticket_type: "daily_day";   ticket_label: "Vé ngày (ban ngày)";  description: "Từ 6h-18h, tối đa 12 giờ; vượt quá tính thêm ngày (theo block 4 giờ).";               price_hint: "150.000 - 240.000/ngày"; price_value: ""; grace_hint: "phút"; grace_value: "15" }
     ListElement { vehicle_type: "car"; ticket_type: "daily_night"; ticket_label: "Vé ngày (ban đêm)";  description: "Từ 18h-6h, tối đa 12 giờ; qua đêm tính bằng 6 lượt.";                                price_hint: "180.000 - 300.000/ngày"; price_value: ""; grace_hint: "phút"; grace_value: "15" }
     ListElement { vehicle_type: "car"; ticket_type: "overnight";   ticket_label: "Vé qua đêm";         description: "Từ 18h hôm trước đến 6h hôm sau (tính 6 lượt).";                                     price_hint: "120.000 - 180.000/đêm"; price_value: ""; grace_hint: "phút"; grace_value: "0" }
@@ -152,18 +158,27 @@ Item {
     function mapDurationMinutes(ticket) {
         if (ticket === "hourly") return 60;
         if (ticket === "daily_day" || ticket === "daily_night") return 12 * 60;
+        if (ticket === "morning") return 360;   // 6 hours
+        if (ticket === "afternoon") return 300; // 5 hours
+        if (ticket === "evening") return 360;   // 6 hours
         return null;
     }
 
     function mapStartTime(ticket) {
         if (ticket === "daily_day") return "06:00";
         if (ticket === "daily_night") return "18:00";
+        if (ticket === "morning") return "06:00";
+        if (ticket === "afternoon") return "13:00";
+        if (ticket === "evening") return "18:00";
         return null;
     }
 
     function mapEndTime(ticket) {
         if (ticket === "daily_day") return "18:00";
         if (ticket === "daily_night") return "06:00";
+        if (ticket === "morning") return "12:00";
+        if (ticket === "afternoon") return "18:00";
+        if (ticket === "evening") return "24:00";
         return null;
     }
 
@@ -247,7 +262,7 @@ Item {
             requestSave = false
         }
     }
-    
+
     // Wrapper function for AdminPage.ui.qml to avoid JavaScript if statements
     function onPriceFieldChanged(ticketType, value) {
         if (editMode) {

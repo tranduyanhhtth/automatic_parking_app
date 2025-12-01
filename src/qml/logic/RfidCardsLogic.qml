@@ -74,7 +74,7 @@ Item {
             // Define Mappings for filtering (Matches the order in UI model minus "All")
             // UI Index 1 ("Xe máy") -> 'bike'
             // UI Index 2 ("Ô tô")   -> 'car'
-            var ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
+            var ticketMap = ['hourly', 'morning', 'afternoon', 'evening', 'daily_day', 'daily_night', 'overnight', 'monthly', 'quarterly', 'yearly']
 
             // 1. Filter into a temporary array first
             var tempArray = []

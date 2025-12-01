@@ -726,6 +726,7 @@ Item {
 													color: "white"
 													Layout.preferredWidth: 180
 													elide: Text.ElideRight
+													font.pixelSize: 13
 												}
 												Text {
 													id: desc
@@ -733,6 +734,7 @@ Item {
 													color: "#dddddd"
 													Layout.fillWidth: true
 													wrapMode: Text.Wrap
+													lineHeight: 1.2
 												}
 												TextField {
 													id: tfPriceValue
@@ -855,7 +857,7 @@ Item {
 										id: cbTicket
 										Layout.preferredWidth: 180
 										Layout.preferredHeight: 24
-										model: ["Tất cả","Giờ", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm", "Tháng", "Quý", "Năm"]
+										model: ["Tất cả","Giờ", "Ca Sáng", "Ca Chiều", "Ca Tối", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm",  "Tháng", "Quý", "Năm"]
 										background: Rectangle {
 											radius: 8
 											color: "#111"
