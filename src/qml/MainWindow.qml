@@ -272,7 +272,7 @@ Item {
                 item.rfidLogic.cbVehicle = adminPage.rfidVehicleCombo
                 item.rfidLogic.cbTicket = adminPage.rfidTicketCombo
                 item.rfidLogic.cbStatus = adminPage.rfidStatusCombo
-                item.rfidLogic.tfDesc = adminPage.rfidDescField
+                //item.rfidLogic.tfDesc = adminPage.rfidDescField
             }
         }
     }

@@ -43,7 +43,6 @@ Item {
 	property alias userVehicleType: userVehicleType
 	property alias userNote: userNote
 	// Subscriptions new user text field alias
-	property alias subUserText: subUserText
 	//employee fields
 	property alias tfEmployeeName: tfEmployeeName
 	property alias tfEmployeeStaffId: tfEmployeeStaffId
@@ -51,16 +50,17 @@ Item {
 	property alias taEmployeeNote: taEmployeeNote
 	property alias cbEmployeeRole: cbEmployeeRole
 	// Subscriptions form control aliases for logic access
-	property alias subPlate: subPlate
-	property alias subRfid: subRfid
-	property alias subPlan: subPlan
-	property alias subStart: subStart
-	property alias subEnd: subEnd
-	property alias subPayment: subPayment
-	property alias subPrice: subPrice
-	property alias subFilter: subFilter
-	property alias subPaymentMethod: subPaymentMethod
-	property alias subPlatePick: subPlatePick
+	property alias subUserText: tfRfidName
+	property alias subPlate: tfRfidPlate
+	property alias subRfid: tfRfid
+	property alias subPlan: tfSubPlan
+	property alias subStart: tfSubStart
+	property alias subEnd: tfSubEnd
+	property alias subPayment: cbSubPayment
+	property alias subPrice: tfSubPrice
+	property alias subFilter: dummySubFilter
+	property alias subPaymentMethod: cbSubPaymentMethod
+	property alias subPlatePick: dummyPlatePick
 	// Revenue summary aliases (labels in Revenue section)
 	property alias revSummaryTotal: revSummaryTotal
 	property alias revSummaryBreakdown: revSummaryBreakdown
@@ -141,6 +141,10 @@ Item {
 	property alias fileSaveDialog: revenueSaveDialog
 	property alias subsFileSaveDialog: subsSaveDialog
 	property alias imageOpenDialog: imageOpenDialog
+
+	ComboBox { id: dummySubFilter; visible: false }
+
+	ComboBox { id: dummyPlatePick; visible: false }
 
 	// Logic instances
 	ToastComponent {
@@ -283,6 +287,10 @@ Item {
 						}
 						TabButton {
 							text: "Đăng kí"
+							visible: false
+							enabled: false
+							width: 0
+							height: 0
 						}
 						TabButton{
 							text: "Quản lý nhân viên"
@@ -802,24 +810,13 @@ Item {
 							ColumnLayout {
 								anchors.fill: parent
 								anchors.margins: 10
-								spacing: 12
-								// RfidCardsLogic {
-								// 	id: rfidLogic
-								// 	adminPage: adminPage
-								// 	tfRfid: tfRfid
-								// 	cbVehicle: cbVehicle
-								// 	cbTicket: cbTicket
-								// 	cbStatus: cbStatus
-								// 	tfDesc: tfDesc
-								// 	repoRef: repo
-								// 	notify: notifyLogic.push
-								// }
+								spacing: 8
 								RowLayout {
 									Layout.fillWidth: true
 									spacing: 8
 									TextField {
 										id: tfRfidCardNumber
-										Layout.preferredWidth: 140
+										Layout.preferredWidth: 120
 										placeholderText: "Số thẻ"
 										color: "white"
 										placeholderTextColor: "#ccc"
@@ -831,7 +828,7 @@ Item {
 									}
 									TextField {
 										id: tfRfid
-										Layout.preferredWidth: 200
+										Layout.preferredWidth: 180
 										placeholderText: "Quét/nhập RFID"
 										color: "white"
 										placeholderTextColor: "white"
@@ -843,7 +840,7 @@ Item {
 									}
 									ComboBox {
 										id: cbVehicle
-										Layout.preferredWidth: 180
+										Layout.preferredWidth: 140
 										Layout.preferredHeight: 24
 										// OLD: model: ["Xe máy", "Ô tô"]
 										// NEW: Add "Tất cả" at index 0
@@ -855,7 +852,7 @@ Item {
 									}
 									ComboBox {
 										id: cbTicket
-										Layout.preferredWidth: 180
+										Layout.preferredWidth: 160
 										Layout.preferredHeight: 24
 										model: ["Tất cả","Giờ", "Ca Sáng", "Ca Chiều", "Ca Tối", "Ngày (ban ngày)", "Ngày (ban đêm)", "Qua đêm",  "Tháng", "Quý", "Năm"]
 										background: Rectangle {
@@ -985,6 +982,75 @@ Item {
 								}
 								Rectangle {
 									Layout.fillWidth: true
+									Layout.preferredHeight: 75
+									color: "#333"
+									radius: 8
+									visible: cbTicket.currentIndex >= 8 // Indexes 8,9,10 are Monthly/Quarterly/Yearly
+									ColumnLayout {
+										anchors.fill: parent
+										anchors.margins: 8
+										spacing: 4
+										Text { text: "Thông tin Gia hạn / Đăng ký Vé Tháng"; color: "#4ec9b0"; font.bold: true; font.pixelSize: 12 }
+										RowLayout {
+											Layout.fillWidth: true
+											spacing: 8
+											TextField {
+												id: tfSubPlan
+												placeholderText: "Loại"
+												readOnly: true
+												Layout.preferredWidth: 80
+												color: "white"
+												background: Rectangle { color: "#555"; radius: 6 }
+											}
+											TextField {
+												id: tfSubStart
+												placeholderText: "Ngày BĐ (YYYY-MM-DD)"
+												Layout.preferredWidth: 160
+												color: "white"
+												background: Rectangle { color: "#222"; radius: 6; border.color: "#666" }
+											}
+											Text { text: "→"; color: "white" }
+											TextField {
+												id: tfSubEnd
+												placeholderText: "Ngày KT (YYYY-MM-DD)"
+												Layout.preferredWidth: 160
+												color: "white"
+												background: Rectangle { color: "#222"; radius: 6; border.color: "#666" }
+											}
+											TextField {
+												id: tfSubPrice
+												placeholderText: "Giá tiền"
+												Layout.preferredWidth: 120
+												color: "white"
+												readOnly: false
+												background: Rectangle { color: "#222"; radius: 6; border.color: "#666" }
+											}
+											ComboBox {
+												id: cbSubPayment
+												model: ["Trả trước", "Trả sau"]
+												Layout.preferredWidth: 100
+											}
+											ComboBox {
+												id: cbSubPaymentMethod
+												model: ["Tiền mặt", "Chuyển khoản"]
+												Layout.preferredWidth: 110
+											}
+											// Subscription Actions
+											Rectangle {
+												width: 90; height: 28; radius: 6; color: "#2196f3" // Blue
+												Text { anchors.centerIn: parent; text: "Đăng ký"; color: "white" }
+												MouseArea { anchors.fill: parent; onClicked: adminPage.triggerSubCreate = !adminPage.triggerSubCreate }
+											}
+											Rectangle {
+												width: 90; height: 28; radius: 6; color: "#ff9800" // Orange
+												Text { anchors.centerIn: parent; text: "Gia hạn"; color: "white" }
+												MouseArea { anchors.fill: parent; onClicked: adminPage.triggerSubExtend = !adminPage.triggerSubExtend }
+											}
+										}
+									}
+								}
+								Rectangle {
+									Layout.fillWidth: true
 									Layout.fillHeight: true
 									color: "#222"
 									border.color: "#333"
@@ -1001,7 +1067,7 @@ Item {
 												Layout.preferredWidth: 120
 												Layout.preferredHeight: 30
 												cursorShape: Qt.PointingHandCursor
-												onClicked: rfidLogic.handleSort("card_number")
+												//onClicked: rfidLogic.handleSort("card_number")
 
 												RowLayout {
 													anchors.fill: parent
@@ -1010,19 +1076,6 @@ Item {
 														text: "Số thẻ"
 														color: "white"
 														font.bold: true
-													}
-													Column {
-														spacing: -4
-														Text {
-															text: "▲"
-															font.pixelSize: 10
-															color: (rfidLogic && rfidLogic.sortColumn === "card_number" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-														}
-														Text {
-															text: "▼"
-															font.pixelSize: 10
-															color: (rfidLogic && rfidLogic.sortColumn === "card_number" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-														}
 													}
 												}
 											}
@@ -1033,7 +1086,7 @@ Item {
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
 													// Calls the logic function directly (Allowed in .ui.qml)
-													onClicked: rfidLogic.handleSort("owner_name")
+													//onClicked: rfidLogic.handleSort("owner_name")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1043,21 +1096,6 @@ Item {
 															color: "white"
 															font.bold: true
 														}
-														// Sort Indicators
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																// Bind color to logic state using Ternary Operator
-																color: (rfidLogic && rfidLogic.sortColumn === "owner_name" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "owner_name" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
-														}
 													}
 												}
 
@@ -1066,7 +1104,7 @@ Item {
 													Layout.preferredWidth: 120
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
-													onClicked: rfidLogic.handleSort("plate")
+													//onClicked: rfidLogic.handleSort("plate")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1076,19 +1114,6 @@ Item {
 															color: "white"
 															font.bold: true
 														}
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "plate" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "plate" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
-														}
 													}
 												}
 
@@ -1097,7 +1122,7 @@ Item {
 													Layout.preferredWidth: 160
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
-													onClicked: rfidLogic.handleSort("rfid")
+													//onClicked: rfidLogic.handleSort("rfid")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1107,19 +1132,6 @@ Item {
 															color: "white"
 															font.bold: true
 														}
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "rfid" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "rfid" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
-														}
 													}
 												}
 
@@ -1128,7 +1140,7 @@ Item {
 													Layout.preferredWidth: 100
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
-													onClicked: rfidLogic.handleSort("vehicle_type")
+													//onClicked: rfidLogic.handleSort("vehicle_type")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1138,19 +1150,6 @@ Item {
 															color: "white"
 															font.bold: true
 														}
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "vehicle_type" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "vehicle_type" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
-														}
 													}
 												}
 
@@ -1159,7 +1158,7 @@ Item {
 													Layout.preferredWidth: 140
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
-													onClicked: rfidLogic.handleSort("ticket_type")
+													//onClicked: rfidLogic.handleSort("ticket_type")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1169,19 +1168,6 @@ Item {
 															color: "white"
 															font.bold: true
 														}
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "ticket_type" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "ticket_type" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
-														}
 													}
 												}
 
@@ -1190,7 +1176,7 @@ Item {
 													Layout.preferredWidth: 120
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
-													onClicked: rfidLogic.handleSort("owner_phone")
+													//onClicked: rfidLogic.handleSort("owner_phone")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1200,19 +1186,6 @@ Item {
 															color: "white"
 															font.bold: true
 														}
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "owner_phone" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "owner_phone" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
-														}
 													}
 												}
 
@@ -1221,7 +1194,7 @@ Item {
 													Layout.preferredWidth: 120
 													Layout.preferredHeight: 30
 													cursorShape: Qt.PointingHandCursor
-													onClicked: rfidLogic.handleSort("status")
+													//onClicked: rfidLogic.handleSort("status")
 
 													RowLayout {
 														anchors.fill: parent
@@ -1230,19 +1203,6 @@ Item {
 															text: "Trạng thái"
 															color: "white"
 															font.bold: true
-														}
-														Column {
-															spacing: -4
-															Text {
-																text: "▲"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "status" && rfidLogic.sortDirection === "asc") ? "#4ec9b0" : "#555"
-															}
-															Text {
-																text: "▼"
-																font.pixelSize: 10
-																color: (rfidLogic && rfidLogic.sortColumn === "status" && rfidLogic.sortDirection === "desc") ? "#4ec9b0" : "#555"
-															}
 														}
 													}
 												}

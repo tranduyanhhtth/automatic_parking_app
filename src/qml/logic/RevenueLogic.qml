@@ -330,10 +330,6 @@ Item {
                 // Reset the trigger so it can be clicked again
                 adminPage.triggerOpenImage = false;
             }
-
-            function onTriggerExportPdfChanged() {
-                // ...
-            }
         }
 
     // Refresh upon async seeding done

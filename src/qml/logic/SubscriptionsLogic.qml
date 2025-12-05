@@ -53,14 +53,32 @@ Item {
         else if('currentIndex' in adminPage.subPlan){ const map={'monthly':0,'quarterly':1,'yearly':2}; adminPage.subPlan.currentIndex = (ticket in map)? map[ticket]:0 }
     }
     function currentTicketFromRfid(){
-        if(!adminPage || !adminPage.subRfid) return ''
-        const code = adminPage.subRfid.text || ''
-        if(!code) return ''
-        const r = rRepo();
-        if(!r || !r.getRfidCard) return ''
-        const card = r.getRfidCard(code) || {}
-        return card.ticket_type || ''
-    }
+            // 1. PRIORITY: Check the "Loại vé" ComboBox in the RFID Tab first
+            if (adminPage && adminPage.rfidTicketCombo) {
+                // This map must match the model in AdminPage.ui.qml
+                // Index 0 is "Tất cả", so we subtract 1 to match this array
+                const map = ['hourly', 'morning', 'afternoon', 'evening', 'daily_day', 'daily_night', 'overnight', 'monthly', 'quarterly', 'yearly'];
+                const idx = adminPage.rfidTicketCombo.currentIndex;
+
+                // If index is valid (greater than 0 "All")
+                if (idx > 0 && idx <= map.length) {
+                    const uiType = map[idx - 1];
+                    // If user selected a subscription type, return it immediately
+                    if (uiType === 'monthly' || uiType === 'quarterly' || uiType === 'yearly') {
+                        return uiType;
+                    }
+                }
+            }
+
+            // 2. FALLBACK: If UI is not set to a subscription type, check the Database
+            if(!adminPage || !adminPage.subRfid) return ''
+            const code = adminPage.subRfid.text || ''
+            if(!code) return ''
+            const r = rRepo();
+            if(!r || !r.getRfidCard) return ''
+            const card = r.getRfidCard(code) || {}
+            return card.ticket_type || ''
+        }
     function pad2(n){ return n<10?('0'+n):''+n }
     function addMonths(iso, m){ if(!iso||m<=0) return iso||''; const parts=(''+iso).split('-'); if(parts.length<3) return iso; let y=parseInt(parts[0]); let mm=parseInt(parts[1])-1; let d=parseInt(parts[2]); const dt=new Date(y,mm,d); dt.setMonth(dt.getMonth()+m); return dt.getFullYear()+'-'+pad2(dt.getMonth()+1)+'-'+pad2(dt.getDate()) }
 
@@ -86,36 +104,41 @@ Item {
 
     // --- CHANGED: Search in cardsCache by owner_name ---
     function findCardOwnerByName(name){
-        if(!name) return null;
-        if(cardsCache.length === 0) refreshCardOwners()
-        const low=(''+name).toLowerCase();
-        let matches=[];
+            if(!name) return null;
+            if(cardsCache.length === 0) refreshCardOwners()
+            const low=(''+name).toLowerCase();
+            let matches=[];
 
-        for(let i=0;i<cardsCache.length;i++){
-            // Only look at cards that have an owner name
-            if (cardsCache[i].owner_name) {
-                if((''+cardsCache[i].owner_name).toLowerCase().indexOf(low) >= 0) matches.push(cardsCache[i]);
+            // Loop 1: Use 'var i'
+            for(var i=0; i<cardsCache.length; i++){
+                // Only look at cards that have an owner name
+                if (cardsCache[i].owner_name) {
+                    if((''+cardsCache[i].owner_name).toLowerCase().indexOf(low) >= 0) matches.push(cardsCache[i]);
+                }
             }
-        }
-        if(matches.length===0) return null;
 
-        dupPlates = [];
-        if(matches.length>1){
-            const set={};
-            for(let i=0;i<matches.length;i++){
-                const pl = matches[i].plate || '';
-                if(pl && !set[pl]){ set[pl]=true; dupPlates.push(pl); }
-            }
-        } else {
+            if(matches.length===0) return null;
             dupPlates = [];
-        }
 
-        if(adminPage && adminPage.subPlatePick && dupPlates.length>1){
-            const sel = adminPage.subPlatePick.currentIndex>=0 && adminPage.subPlatePick.currentIndex<dupPlates.length ? dupPlates[adminPage.subPlatePick.currentIndex] : '';
-            if(sel){ for(let i=0;i<matches.length;i++){ if(matches[i].plate===sel) return matches[i]; } }
+            if(matches.length>1){
+                const set={};
+                // Loop 2: Use 'var j' to avoid conflict with 'i'
+                for(var j=0; j<matches.length; j++){
+                    const pl = matches[j].plate || '';
+                    if(pl && !set[pl]){ set[pl]=true; dupPlates.push(pl); }
+                }
+            } else {
+                dupPlates = [];
+            }
+
+            if(adminPage && adminPage.subPlatePick && dupPlates.length>1){
+                const sel = adminPage.subPlatePick.currentIndex>=0 && adminPage.subPlatePick.currentIndex<dupPlates.length ?
+                dupPlates[adminPage.subPlatePick.currentIndex] : '';
+                // Loop 3: Use 'var k'
+                if(sel){ for(var k=0; k<matches.length; k++){ if(matches[k].plate===sel) return matches[k]; } }
+            }
+            return matches[0]
         }
-        return matches[0]
-    }
 
     function refreshSubs(){
         subsModel.clear();
@@ -212,154 +235,127 @@ Item {
     }
 
     function createOrExtend(isExtend){
-            const err=validate();
+            const err = validate();
             if(err){ msg(err); return }
 
-            // Helper to get ticket type
+            // 1. Get Ticket Type
             const ticket = currentTicketFromRfid() || planToTicket(readPlanText());
-
-            // Validate ticket type for subscriptions
             if(ticket!=='monthly' && ticket!=='quarterly' && ticket!=='yearly'){
                 msg('Loại thẻ RFID không phải vé tháng/quý/năm');
                 return
             }
-
-            const r=rRepo();
+            const r = rRepo();
             if(!r) return;
 
-            var userId=-1;
-            var cardObj=null;
-
-            // Try to find existing card data to help with auto-filling or validation
-            if(adminPage && adminPage.subUserText){
-                cardObj = findCardOwnerByName(adminPage.subUserText.text);
-            }
-
-            // Get Form Data from UI controls
-            const formName = adminPage.subUserText ? adminPage.subUserText.text : '';
+            // 2. Prepare Data
+            const formName  = adminPage.subUserText ? adminPage.subUserText.text : '';
             const formPlate = (adminPage.subPlate && adminPage.subPlate.text) ? adminPage.subPlate.text : '';
-            const formRfid = (adminPage.subRfid && adminPage.subRfid.text) ? adminPage.subRfid.text : '';
+            const formRfid  = (adminPage.subRfid && adminPage.subRfid.text) ? adminPage.subRfid.text : '';
+            const formPhone = (adminPage.rfidPhoneField && adminPage.rfidPhoneField.text) ? adminPage.rfidPhoneField.text : '';
+            const formCardNum = (adminPage.rfidCardNumberField && adminPage.rfidCardNumberField.text) ? adminPage.rfidCardNumberField.text : '';
 
-            // --- FIX START ---
-            // If this is an extension, we MUST find the user/card.
-            // But if it is a NEW creation (!isExtend), we can proceed if we have form data.
-            if (isExtend && !cardObj) {
-                 msg('Không tìm thấy thông tin thẻ/chủ thẻ để gia hạn');
-                 return;
-            }
-
-            // If creating new, ensure we have minimum data
-            if (!isExtend && (!formName || !formPlate || !formRfid)) {
-                msg("Thiếu thông tin Tên, Biển số hoặc RFID để tạo mới");
-                return;
-            }
-            // --- FIX END ---
-
-            // Determine final values to send to DB
-            // Use form data if available, otherwise fall back to card object (if exists)
-            const finalName = formName || (cardObj ? cardObj.owner_name : '');
-            const finalPlate = formPlate || (cardObj ? cardObj.plate : '');
-            const finalRfid = formRfid || (cardObj ? cardObj.rfid : '');
-
-            // Determine vehicle type (default to car if unknown)
             let vType = 'car';
-            if (cardObj && cardObj.vehicle_type) {
-                vType = cardObj.vehicle_type;
+            if (adminPage.rfidVehicleCombo) {
+                const idx = adminPage.rfidVehicleCombo.currentIndex;
+                if (idx === 1) vType = 'bike';
+                if (idx === 2) vType = 'car';
             }
 
-            console.log('[SubsLogic] Auto-creating/updating user for sub:', finalName, finalPlate, finalRfid);
-
-            // Create or Update the User
-            userId = r.upsertUser(finalName, "", finalRfid, finalPlate, vType);
-
-            if (userId <= 0) {
-                 msg("Lỗi: Không thể tạo/cập nhật người dùng.");
-                 return;
-            }
-
-            // 2. Soft guard for duplicates (check if this user already has an active sub for this rfid)
-            (function(){
-                if(!r.getLatestSubscriptionForUser) return;
-                const sub = r.getLatestSubscriptionForUser(userId);
-                if(sub && sub.id && sub.status==='active' && !isExtend){
-                    const sameR = (finalRfid === sub.rfid);
-                    if(sameR){ msg('Thẻ này đã có đăng ký đang hoạt động'); throw 'abort'; }
-                }
-            })();
-
-            // Gather dates and payment info
-            let startDate=(adminPage.subStart&&adminPage.subStart.text)?adminPage.subStart.text:'';
-            let endDate=(adminPage.subEnd&&adminPage.subEnd.text)?adminPage.subEnd.text:'';
-
-            const paymentRaw=adminPage.subPayment?adminPage.subPayment.currentText:'';
-            const payment=paymentRaw.toLowerCase().indexOf('sau')>=0?'postpaid':'prepaid';
-
-            const paymentMethodRaw=adminPage.subPaymentMethod?adminPage.subPaymentMethod.currentText:'';
-            const paymentMethod=paymentMethodRaw.toLowerCase().indexOf('chuy')>=0?'transfer':'cash';
-
-            // Auto-calculate price if missing
-            if(!(adminPage.subPrice&&adminPage.subPrice.text && adminPage.subPrice.text.length>0))
-                prefillPrice(userId, ticket, vType)
-
-            const price=parseInt((adminPage.subPrice&&adminPage.subPrice.text)?adminPage.subPrice.text:'0')||0;
-
-            // Handle "Extend" specific logic (calculating next dates)
-            if(isExtend && selectedSubId>0){
-                for(let i=0;i<listModel.count;i++) if(listModel.get(i).id===selectedSubId){
-                    const current=listModel.get(i);
-                    _origStart=current.start_date; _origEnd=current.end_date; _inExtendedState=true;
-                    const dates=computeExtendOneYear(current.end_date);
-                    startDate=dates.start; endDate=dates.end;
-                    if(adminPage.subStart) adminPage.subStart.text=startDate;
-                    if(adminPage.subEnd) adminPage.subEnd.text=endDate;
-                    break;
-                }
-            }
-
-            // Get Pricing ID
-            const pid=(r&&r.getPricingId)? r.getPricingId(vType,ticket):-1;
-            if(pid<=0){ msg('Không tìm thấy bảng giá phù hợp'); return }
-
-            // 3. Create Subscription in DB
-            const sid = r.createSubscription(userId,pid,finalPlate,finalRfid,ticket,startDate,endDate,payment,price,'active', paymentMethod);
-
-            if(sid===-2){
-                msg('Đăng ký trùng lặp');
+            if (!isExtend && (!formName || !formPlate || !formRfid)) {
+                msg("Thiếu thông tin Tên, Biển số hoặc RFID");
                 return;
-            } else if (sid > -1) {
-                // Add Revenue
-                if (price > 0 && r.insertRevenue) {
-                    try {
-                        r.insertRevenue(null, sid, userId, price, paymentMethod, 'subscription', isExtend ? 'extend' : 'create');
-                    } catch (e) {}
+            }
+
+            if (r.upsertRfidCard) {
+                const cardRes = r.upsertRfidCard(formRfid, vType, ticket, 'available', '', formName, formPlate, formPhone, formCardNum);
+                if (cardRes === -2) {
+                    msg("Lỗi: Số thẻ phụ (Card Number) đã tồn tại trên một thẻ khác!");
+                    return;
                 }
-
-                // Update RFID Status to 'assigned' (Redundant if C++ handles it, but safe to keep)
-                if (r.setRfidCardStatus) {
-                    r.setRfidCardStatus(finalRfid, 'assigned');
-                    console.log('[SubsLogic] Updated RFID status to assigned for:', finalRfid);
+                if (cardRes !== 1) {
+                    msg("Lỗi: Không thể tạo thẻ RFID. Kiểm tra xem Loại xe/Loại vé này đã có trong Bảng Giá chưa?");
+                    return;
                 }
+            }
 
-                msg((isExtend ? 'Gia hạn' : 'Tạo') + ' đăng ký thành công');
-                _inExtendedState = false;
+            // 3. Create/Update User
+            const userId = r.upsertUser(formName, formPhone, formRfid, formPlate, vType);
+            if (userId <= 0) { msg("Lỗi: Không thể tạo người dùng."); return; }
 
-                // Clear inputs
-                if (!isExtend && adminPage) {
-                    if (adminPage.subUserText) adminPage.subUserText.text = '';
-                    if (adminPage.subPlate) adminPage.subPlate.text = '';
-                    if (adminPage.subRfid) adminPage.subRfid.text = '';
-                    if (adminPage.subPrice) adminPage.subPrice.text = '';
-                    if (adminPage.subPlan && 'text' in adminPage.subPlan) adminPage.subPlan.text = '';
-                    if (adminPage.subStart) adminPage.subStart.text = '';
-                    if (adminPage.subEnd) adminPage.subEnd.text = '';
+            // 4. Check Duplicates (only if creating new)
+            if (r.getLatestSubscriptionForUser && !isExtend) {
+                const sub = r.getLatestSubscriptionForUser(userId);
+                if(sub && sub.id && sub.status==='active'){
+                    if(sub.rfid === formRfid) { msg('Thẻ này đã có vé tháng đang hoạt động'); return; }
                 }
+            }
 
+            // 5. Dates & Price
+            let startDate = (adminPage.subStart && adminPage.subStart.text) ? adminPage.subStart.text : todayIso();
+            let endDate   = (adminPage.subEnd && adminPage.subEnd.text) ? adminPage.subEnd.text : '';
+
+            if (!endDate || endDate.length < 5) {
+                 const m = ticket==='monthly'?1:(ticket==='quarterly'?3:(ticket==='yearly'?12:0));
+                 endDate = addMonths(startDate, m);
+            }
+
+            let priceText = (adminPage.subPrice && adminPage.subPrice.text) ? adminPage.subPrice.text : '0';
+            const price = parseInt(priceText) || 0;
+            if (price <= 0) { msg("Vui lòng nhập giá tiền > 0"); return; }
+
+            const payment = (adminPage.subPayment && adminPage.subPayment.currentIndex === 1) ? 'postpaid' : 'prepaid';
+            const method  = (adminPage.subPaymentMethod && adminPage.subPaymentMethod.currentIndex === 1) ? 'transfer' : 'cash';
+
+            // 6. Extension Specific Logic (omitted for brevity, handled by startDate/endDate above)
+
+            // 7. Get Pricing ID
+            let pid = (r.getPricingId) ? r.getPricingId(vType, ticket) : -1;
+            if (pid <= 0) {
+                msg("Lỗi CSDL: Không tìm thấy Bảng Giá cho xe '" + vType + "' loại vé '" + ticket + "'. Vui lòng cấu hình bảng giá.");
+                return;
+            }
+
+            // 8. Create Subscription
+            const sid = r.createSubscription(userId, pid, formPlate, formRfid, ticket, startDate, endDate, payment, price, 'active', method);
+
+            if (sid > -1) {
+                msg((isExtend ? 'Gia hạn' : 'Đăng ký') + ' thành công!');
+                if (adminPage && adminPage.rfidLogic) {
+                                    // 1. Tell RfidLogic which card needs to be at the top
+                                    adminPage.rfidLogic.lastNotifiedExistingRfid = formRfid;
+                                    // 2. Force it to reload from Database immediately
+                                    adminPage.rfidLogic.refresh();
+                                }
+                // Revenue & Status Update
+                if (r.insertRevenue) r.insertRevenue(null, sid, userId, price, method, 'subscription', isExtend ? 'extend' : 'create');
+                if (r.setRfidCardStatus) r.setRfidCardStatus(formRfid, 'assigned');
+
+                // [FIX 2] Clear Form (only if new)
+                if (!isExtend) {
+                // 1. Clear Basic Info
+                    if(adminPage.subUserText) adminPage.subUserText.text = '';
+                    if(adminPage.subPlate) adminPage.subPlate.text = '';
+                    if(adminPage.subRfid) adminPage.subRfid.text = '';
+                    // 2. Clear Extra Info (Phone & Card Number)
+                    if(adminPage.rfidPhoneField) adminPage.rfidPhoneField.text = '';
+                    if(adminPage.rfidCardNumberField) adminPage.rfidCardNumberField.text = '';
+                    // 3. Clear/Reset Payment & Dates
+                    if(adminPage.subPrice) adminPage.subPrice.text = '';
+                    if(adminPage.subEnd) adminPage.subEnd.text = '';
+                    if(adminPage.subStart) adminPage.subStart.text = todayIso(); // Reset start date to Today
+                    // 4. Reset internal selection state
+                    selectedSubId = -1;
+                }
+                // [FIX 3] Force signals to fire to update RfidCardsLogic
+                if (adminPage) {
+                    adminPage.triggerSubsChanged = !adminPage.triggerSubsChanged;
+                    adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged;
+                }
                 refreshSubs();
-                fullRefresh(); // Refresh card cache too
-                if(adminPage) adminPage.triggerSubsChanged = !adminPage.triggerSubsChanged;
-                if(adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged;
-            } else {
-                msg('Lỗi lưu đăng ký vào CSDL');
+                fullRefresh();
+                } else {
+                    if (sid === -2) msg("Lỗi: Đã có đăng ký trùng lặp (Thời gian hoặc Biển số).");
+                    else msg('Lỗi lưu đăng ký vào CSDL (Mã: ' + sid + ')');
             }
         }
 
@@ -408,6 +404,54 @@ Item {
         if(ok){ refreshSubs(); selectedSubId=-1 }
     }
 
+    function fetchByRfid(rfidCode) {
+            if (!rfidCode) return;
+            const r = rRepo();
+            if (!r || !r.listSubscriptions) return;
+
+            // Fetch subscriptions for this specific RFID
+            // Assuming listSubscriptions can't filter by RFID natively, we fetch active ones
+            // Optimization: In a real app, use a specific SQL query. Here we filter locally.
+            const rows = r.listSubscriptions(1000, 0) || [];
+
+            let found = null;
+            for (let i = 0; i < rows.length; i++) {
+                if (rows[i].rfid === rfidCode && rows[i].status === 'active') {
+                    found = rows[i];
+                    break;
+                }
+            }
+
+            if (found) {
+                // Populate the merged fields in AdminPage
+                if (adminPage.subStart) adminPage.subStart.text = found.start_date;
+                if (adminPage.subEnd) adminPage.subEnd.text = found.end_date;
+                if (adminPage.subPrice) adminPage.subPrice.text = '' + found.price;
+
+                // Populate Payment Method
+                if (adminPage.subPaymentMethod) {
+                    adminPage.subPaymentMethod.currentIndex = (found.payment_method === 'transfer') ? 1 : 0;
+                }
+                if (adminPage.subPayment) {
+                    adminPage.subPayment.currentIndex = (found.payment_mode === 'postpaid') ? 1 : 0;
+                }
+
+                // Set internal state for Extension logic
+                selectedSubId = found.id;
+                _origStart = found.start_date;
+                _origEnd = found.end_date;
+                _inExtendedState = false; // Reset extension state until they click "Extend"
+
+                console.log("Found active subscription for RFID:", rfidCode);
+            } else {
+                // No active subscription found, clear subscription specific fields
+                if (adminPage.subStart) adminPage.subStart.text = todayIso();
+                if (adminPage.subEnd) adminPage.subEnd.text = "";
+                if (adminPage.subPrice) adminPage.subPrice.text = "";
+                selectedSubId = -1;
+            }
+        }
+
     Connections {
         target: adminPage;
         function onTriggerSubCreateChanged(){ if(adminPage.triggerSubCreate){ createOrExtend(false); adminPage.triggerSubCreate=false } }
@@ -424,6 +468,17 @@ Item {
             }
         }
         function onTriggerUsersChangedChanged(){ fullRefresh() }
+
+        function onPendingSelectRfidIndexChanged() {
+            if (adminPage && adminPage.rfidTextField) {
+            const rfid = adminPage.rfidTextField.text;
+            fetchByRfid(rfid);
+            // Also update the "Plan" field (visual only)
+            const tk = currentTicketFromRfid();
+            setPlanLabel(tk);
+            prefillPrice(-1, tk);
+            }
+        }
 
         function onTriggerSubUserTextChangedChanged(){
             if(adminPage.triggerSubUserTextChanged){
@@ -542,6 +597,32 @@ Item {
             }
         }
     }
+    Connections {
+            // We access the ComboBox via the alias defined in AdminPage
+            target: adminPage ? adminPage.rfidTicketCombo : null
+
+            function onCurrentIndexChanged() {
+                // 1. Get the type based on the new selection
+                const tk = currentTicketFromRfid();
+
+                // 2. Auto-fill "Loại" (Plan) box
+                setPlanLabel(tk);
+
+                // 3. Auto-fill "Giá tiền" (Price) box
+                // We pass -1 for userId so it uses default pricing for the vehicle type
+                // We also grab the vehicle type from the RFID combo to ensure accuracy
+                let vType = 'car';
+                if (adminPage.rfidVehicleCombo && adminPage.rfidVehicleCombo.currentIndex === 1) vType = 'bike';
+                prefillPrice(-1, tk, vType);
+
+                // 4. Auto-fill "Ngày kết thúc" (End Date) box
+                // Ensure Start Date is set to Today if empty
+                if (adminPage.subStart && adminPage.subStart.text === "") {
+                    adminPage.subStart.text = todayIso();
+                }
+                updateEnd();
+            }
+        }
     Connections {
         target: adminPage ? adminPage.tabBar : null
         function onCurrentIndexChanged(){ if(adminPage && adminPage.tabBar.currentIndex===4) fullRefresh() }

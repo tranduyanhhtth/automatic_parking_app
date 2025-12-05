@@ -151,7 +151,9 @@ Item {
         if (cbVehicle) cbVehicle.currentIndex = 0
         if (cbTicket) cbTicket.currentIndex = 0
         scannedRfid = ""
-        filterList()
+        if (!isProgrammaticUpdate) {
+            filterList()
+        }
     }
 
     function save() {
@@ -166,13 +168,13 @@ Item {
         if (!rfid || !rfid.length) { if (notify) notify('Chưa có RFID'); return }
         if(!cbVehicle||!cbTicket||!cbStatus){ if(notify) notify('Thiếu control'); return }
         if (cbVehicle.currentIndex === 0) {
-                    if (notify) notify('Vui lòng chọn Loại xe cụ thể (không chọn Tất cả)')
-                    return
-                }
-                if (cbTicket.currentIndex === 0) {
-                    if (notify) notify('Vui lòng chọn Loại vé cụ thể (không chọn Tất cả)')
-                    return
-                }
+            if (notify) notify('Vui lòng chọn Loại xe cụ thể (không chọn Tất cả)')
+            return
+        }
+        if (cbTicket.currentIndex === 0) {
+            if (notify) notify('Vui lòng chọn Loại vé cụ thể (không chọn Tất cả)')
+            return
+        }
         const vt = cbVehicle.currentIndex === 1 ? 'bike' : 'car'
         const ttMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
         const stMap = ['available','assigned','lost','damaged']
@@ -219,8 +221,10 @@ Item {
         if (notify) notify(ok ? (existed ? 'Đã cập nhật thẻ' : 'Đã tạo thẻ mới') : 'Không thể lưu thẻ')
         if (ok) {
             lastNotifiedExistingRfid = rfid
-            refresh(); /*prefill(rfid)*/
-            resetFilters();
+            isProgrammaticUpdate = true
+            resetFilters()
+            isProgrammaticUpdate = false
+            refresh();
             if (adminPage) adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged
         }
     }
@@ -276,7 +280,7 @@ Item {
 
             if (cbVehicle) cbVehicle.currentIndex = card.vehicle_type === 'bike' ? 1 : 2
 
-            const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
+            const ticketMap = ['hourly', 'morning', 'afternoon', 'evening', 'daily_day', 'daily_night', 'overnight', 'monthly', 'quarterly', 'yearly']
             const idx = ticketMap.indexOf(card.ticket_type)
             if (cbTicket && idx >= 0) cbTicket.currentIndex = idx + 1
 
@@ -337,7 +341,7 @@ Item {
                 if (tfPhone) tfPhone.text = row.owner_phone || ''
 
                 if (cbVehicle) cbVehicle.currentIndex = (row.vehicle_type === 'bike' ? 1 : 2)
-                const ticketMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
+                const ticketMap = ['hourly', 'morning', 'afternoon', 'evening', 'daily_day', 'daily_night', 'overnight', 'monthly', 'quarterly', 'yearly']
                 const tIdx = ticketMap.indexOf(row.ticket_type || '')
                 if (cbTicket && tIdx >= 0) cbTicket.currentIndex = tIdx + 1
 
@@ -447,6 +451,14 @@ Item {
             } 
         } 
     }
+
+    // [NEW] Listen for changes from Subscriptions/Users tabs to auto-refresh this list
+        Connections {
+            target: adminPage
+            function onTriggerUsersChangedChanged() {
+                refresh()
+            }
+        }
 
 
     onTriggerRefreshChanged: if (triggerRefresh) { refresh(); triggerRefresh = false }
