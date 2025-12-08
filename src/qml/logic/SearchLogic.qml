@@ -17,18 +17,27 @@ Item {
     }
 
     function updateDayModel(yearCombo, monthCombo, dayCombo) {
-        if (!yearCombo || !monthCombo || !dayCombo) return;
+            if (!yearCombo || !monthCombo || !dayCombo) return;
 
-        var year = 2000 + yearCombo.currentIndex;
-        var month = monthCombo.currentIndex + 1; // Convert 0-11 index to 1-12 month
-        var days = getDaysInMonth(year, month);
+            var year = 2000 + yearCombo.currentIndex;
+            var month = monthCombo.currentIndex + 1; // Convert 0-11 index to 1-12 month
+            var days = getDaysInMonth(year, month);
 
-        dayCombo.model = days;
+            // --- FIX: Save the current day before the model change resets it ---
+            var oldIndex = dayCombo.currentIndex;
 
-        if (dayCombo.currentIndex >= days) {
-            dayCombo.currentIndex = days - 1; // Reset to the last valid day
+            // Update the model (this usually resets currentIndex to 0)
+            dayCombo.model = days;
+
+            // --- FIX: Restore the day, clamping it if the new month is shorter ---
+            if (oldIndex >= days) {
+                // If previous day was 31st but new month only has 30 days
+                dayCombo.currentIndex = days - 1;
+            } else if (oldIndex >= 0) {
+                // Otherwise, keep the same day
+                dayCombo.currentIndex = oldIndex;
+            }
         }
-    }
 
     function formatDate(year, month, day) {
         let dt = new Date(year, month - 1, day);
