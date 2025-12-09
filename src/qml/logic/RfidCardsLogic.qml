@@ -176,7 +176,7 @@ Item {
             return
         }
         const vt = cbVehicle.currentIndex === 1 ? 'bike' : 'car'
-        const ttMap = ['hourly','daily_day','daily_night','overnight','monthly','quarterly','yearly']
+        const ttMap = ['hourly', 'morning', 'afternoon', 'evening', 'daily_day', 'daily_night', 'overnight', 'monthly', 'quarterly', 'yearly']
         const stMap = ['available','assigned','lost','damaged']
         const tt = ttMap[cbTicket.currentIndex - 1]
         let st = ['available','assigned','lost','damaged'][cbStatus.currentIndex]

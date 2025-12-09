@@ -157,20 +157,23 @@ QString CameraManager::makeDataUrl(const QByteArray &jpegBytes)
     return QString::fromLatin1("data:image/jpeg;base64,%1").arg(QString::fromLatin1(jpegBytes.toBase64()));
 }
 
+// ---------------------------------------------------------
+// SỬA ĐỔI 2: Viết lại hàm captureInputSnapshot và captureOutputSnapshot
+// Không dùng m_lastInputFrame.toImage() nữa
+// ---------------------------------------------------------
+
 QByteArray CameraManager::captureInputSnapshot(int quality)
 {
     QImage img;
     {
         QMutexLocker lock(&m_frameMutex);
 
-        if (!m_lastInputFrame.isValid()) return {};
-
-
-        img = m_lastInputFrame.toImage();
+        // FIX: Lấy trực tiếp từ cached image thay vì convert từ video frame
+        if (m_cachedInputImage.isNull()) return {};
+        img = m_cachedInputImage;
     }
 
-    if (img.isNull()) return {};
-
+    // Phần dưới giữ nguyên
     auto bytes = encodeJpeg(img, quality);
     m_inputSnapshotDataUrl = makeDataUrl(bytes);
     emit inputSnapshotChanged();
@@ -181,12 +184,14 @@ QByteArray CameraManager::captureOutputSnapshot(int quality)
 {
     QImage img;
     {
-        QMutexLocker lock(&m_frameMutex); // <--- LOCK
-        if (!m_lastOutputFrame.isValid()) return {};
-        img = m_lastOutputFrame.toImage();
+        QMutexLocker lock(&m_frameMutex);
+
+        // FIX: Lấy trực tiếp từ cached image
+        if (m_cachedOutputImage.isNull()) return {};
+        img = m_cachedOutputImage;
     }
 
-    if (img.isNull()) return {};
+    // Phần dưới giữ nguyên
     auto bytes = encodeJpeg(img, quality);
     m_outputSnapshotDataUrl = makeDataUrl(bytes);
     emit outputSnapshotChanged();
@@ -200,11 +205,19 @@ bool CameraManager::startInputStream(const QString &url)
         m_gstIn = new GStreamerPlayer(this);
         connect(m_gstIn, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
-            if (m_inProducer) {
-                m_inProducer->pushImage(img);
-            } else {
-                qWarning() << "[CAMERA] Input producer not available";
-            } });
+                    // Cập nhật Cache an toàn với Mutex
+                    {
+                        QMutexLocker lock(&m_frameMutex);
+                        // .copy() là cực kỳ quan trọng để tách rời dữ liệu khỏi luồng GStreamer
+                        m_cachedInputImage = img.copy();
+                    }
+
+                    if (m_inProducer) {
+                        m_inProducer->pushImage(img);
+                    } else {
+                        qWarning() << "[CAMERA] Input producer not available";
+                    }
+                });
     }
 
     const QString cleaned = sanitizeRtspUrl(url);
@@ -219,11 +232,18 @@ bool CameraManager::startOutputStream(const QString &url)
         m_gstOut = new GStreamerPlayer(this);
         connect(m_gstOut, &GStreamerPlayer::newFrame, this, [this](const QImage &img)
                 {
-            if (m_outProducer) {
-                m_outProducer->pushImage(img);
-            } else {
-                qWarning() << "[CAMERA] Output producer not available";
-            } });
+                    // Cập nhật Cache an toàn
+                    {
+                        QMutexLocker lock(&m_frameMutex);
+                        m_cachedOutputImage = img.copy();
+                    }
+
+                    if (m_outProducer) {
+                        m_outProducer->pushImage(img);
+                    } else {
+                        qWarning() << "[CAMERA] Output producer not available";
+                    }
+                });
     }
 
     const QString cleaned = sanitizeRtspUrl(url);

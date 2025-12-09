@@ -68,6 +68,10 @@ signals:
     void outputStreamStalled();
 
 private:
+    // Thêm 2 biến này để cache ảnh trực tiếp từ nguồn
+    QImage m_cachedInputImage;
+    QImage m_cachedOutputImage;
+
     QVideoSink *m_inputSink;
     QVideoSink *m_outputSink;
 
