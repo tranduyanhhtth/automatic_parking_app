@@ -24,19 +24,21 @@ Item {
     property alias btnSettings: btnSettings
     property alias btnAdmin: btnAdmin
     property alias settingsMenu: settingsMenu
+    property alias miEditInfo: miEditInfo
+    property alias editInfoDialog: editInfoDialog
 
     // Logo Alias
     property alias logoSource: imgHeaderLogo.source
-    property alias btnChangeLogo: miChangeLogo
-    property alias logoMouseArea: logoMouseArea
-    property alias logoContextMenu: logoContextMenu
+    // property alias btnChangeLogo: miChangeLogo
+    // property alias logoMouseArea: logoMouseArea
+    // property alias logoContextMenu: logoContextMenu
 
     // **NEW**: Header Text Field Aliases (Editable Info)
-    property alias tfHeaderTitle: tfHeaderTitle
-    property alias tfCompanyName: tfCompanyName
-    property alias tfAddress: tfAddress
-    property alias tfPhone: tfPhone
-    property alias tfEmail: tfEmail
+    property alias tfHeaderTitle: txtHeaderTitle
+    property alias tfCompanyName: txtCompanyName
+    property alias tfAddress: txtAddress
+    property alias tfPhone: txtPhone
+    property alias tfEmail: txtEmail
 
     // --- DIALOG ALIASES ---
     property alias cameraSettingsDialog: cameraSettingsDialog
@@ -127,94 +129,62 @@ Item {
                         fillMode: Image.PreserveAspectFit
                         Layout.preferredHeight: 90
                         Layout.preferredWidth: 160
-
-                        // Interaction to change logo
-                        MouseArea {
-                            id: logoMouseArea
-                            anchors.fill: parent
-                            acceptedButtons: Qt.RightButton | Qt.LeftButton // Allow Left click too if desired
-                            cursorShape: Qt.PointingHandCursor
-                        }
-
-                        Menu {
-                            id: logoContextMenu
-                            MenuItem {
-                                id: miChangeLogo
-                                text: "Change Logo Image..."
-                                icon.name: "document-open"
-                            }
-                        }
                     }
 
                     // 2. The Text Information (Now Editable TextFields)
                     ColumnLayout {
                         Layout.alignment: Qt.AlignVCenter
-                        spacing: 0 // Reduced spacing for compact text fields
+                        spacing: 2
 
                         // Header Title ("Contact us")
-                        TextField {
-                            id: tfHeaderTitle
+                        Text {
+                            id: txtHeaderTitle
                             text: "Contact us"
                             color: "white"
                             font.bold: true
                             font.pixelSize: 16
-                            background: null // Transparent background
-                            selectByMouse: true
-                            leftPadding: 0
                             verticalAlignment: Text.AlignVCenter
                         }
 
                         // Company Name
-                        TextField {
-                            id: tfCompanyName
-                            text: "AITHINGS TECHNOLOGY CO., LTD"
-                            color: "#cccccc"
-                            font.pixelSize: 14
-                            font.bold: true
-                            background: null
-                            selectByMouse: true
-                            leftPadding: 0
-                            verticalAlignment: Text.AlignVCenter
-                        }
+                        Text {
+                                                id: txtCompanyName
+                                                text: "AITHINGS TECHNOLOGY CO., LTD"
+                                                color: "#cccccc"
+                                                font.pixelSize: 14
+                                                font.bold: true
+                                                verticalAlignment: Text.AlignVCenter
+                                            }
 
                         // Address
-                        TextField {
-                            id: tfAddress
-                            text: "Address: 4th floor, Minori Office Building, 67A Truong Dinh, Hanoi"
-                            color: "white"
-                            font.pixelSize: 12
-                            background: null
-                            selectByMouse: true
-                            leftPadding: 0
-                            Layout.maximumWidth: 600
-                            verticalAlignment: Text.AlignVCenter
-                        }
+                        Text {
+                                                id: txtAddress
+                                                text: "Address: 4th floor, Minori Office Building, 67A Truong Dinh, Hanoi"
+                                                color: "white"
+                                                font.pixelSize: 12
+                                                verticalAlignment: Text.AlignVCenter
+                                                elide: Text.ElideRight
+                                                Layout.maximumWidth: 600
+                                            }
 
                         // Contact Row (Phone and Email)
                         RowLayout {
                             spacing: 15
 
-                            TextField {
-                                id: tfPhone
-                                text: "📞 +84 38 815 6494"
-                                color: "white"
-                                font.pixelSize: 12
-                                background: null
-                                selectByMouse: true
-                                leftPadding: 0
-                                verticalAlignment: Text.AlignVCenter
-                            }
-
-                            TextField {
-                                id: tfEmail
-                                text: "📧 info@aithings.vn"
-                                color: "white"
-                                font.pixelSize: 12
-                                background: null
-                                selectByMouse: true
-                                leftPadding: 0
-                                verticalAlignment: Text.AlignVCenter
-                            }
+                            Text {
+                                                        id: txtPhone
+                                                        text: "📞 +84 38 815 6494"
+                                                        color: "white"
+                                                        font.pixelSize: 12
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
+                                                    Text {
+                                                        id: txtEmail
+                                                        text: "📧 info@aithings.vn"
+                                                        color: "white"
+                                                        font.pixelSize: 12
+                                                        verticalAlignment: Text.AlignVCenter
+                                                    }
                         }
                     }
 
@@ -250,6 +220,12 @@ Item {
                     Menu {
                         id: settingsMenu
                         y: btnSettings.height
+                        MenuItem {
+                                                id: miEditInfo
+                                                text: "Chỉnh sửa thông tin"
+                                                icon.name: "document-edit"
+                                            }
+                                            MenuSeparator {}
                         MenuItem { id: miCamera; text: "Cấu hình Camera" }
                         MenuItem { id: miBarrier; text: "Cấu hình Barrier" }
                         MenuSeparator {}
@@ -302,4 +278,5 @@ Item {
     CameraSettingsDialog { id: cameraSettingsDialog }
     BarrierSettingsDialog { id: barrierSettingsDialog }
     SearchDialog { id: searchDialog }
+    EditCompanyInfoDialog { id: editInfoDialog }
 }

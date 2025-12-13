@@ -218,17 +218,54 @@ Item {
     //         }
     //     }
     // }
+    // Connections {
+    //         target: form.btnChangeLogo
+    //         function onTriggered() {
+    //             logoFileDialog.open()
+    //         }
+    //     }
+    // Connections {
+    //         target: form.logoMouseArea
+    //         function onClicked(mouse) {
+    //             // Open the menu programmatically here
+    //             form.logoContextMenu.popup()
+    //         }
+    //     }
     Connections {
-            target: form.btnChangeLogo
+            target: form.miEditInfo
             function onTriggered() {
-                logoFileDialog.open()
+                // Load current app data into the dialog
+                form.editInfoDialog.loadData(
+                    app.headerTitle,
+                    app.companyName,
+                    app.companyAddress,
+                    app.companyPhone,
+                    app.companyEmail,
+                    app.logoSource
+                )
+                form.editInfoDialog.open()
             }
         }
-    Connections {
-            target: form.logoMouseArea
-            function onClicked(mouse) {
-                // Open the menu programmatically here
-                form.logoContextMenu.popup()
+
+        // 2. Save Data on Dialog Accepted
+        Connections {
+            target: form.editInfoDialog
+            function onAccepted() {
+                // Update C++ / Backend app properties
+                app.headerTitle = form.editInfoDialog.headerTitle
+                app.companyName = form.editInfoDialog.companyName
+                app.companyAddress = form.editInfoDialog.address
+                app.companyPhone = form.editInfoDialog.phone
+                app.companyEmail = form.editInfoDialog.email
+
+                // Only update logo if it changed and is not empty
+                if (form.editInfoDialog.logoSource !== "" && form.editInfoDialog.logoSource !== app.logoSource) {
+                    app.logoSource = form.editInfoDialog.logoSource
+                    // Optional: Trigger saving settings to disk here if your C++ app class requires it
+                    // app.saveSettings()
+                }
+
+                root.showToast("Đã cập nhật thông tin công ty thành công")
             }
         }
     Connections {
@@ -383,11 +420,7 @@ Item {
 
         // Start streams with RTSP options
         cameraLogic.startStreams()
-        form.tfHeaderTitle.text = app.headerTitle
-        form.tfCompanyName.text = app.companyName
-        form.tfAddress.text = app.companyAddress
-        form.tfPhone.text = app.companyPhone
-        form.tfEmail.text = app.companyEmail
+
         // Set logo if it exists (requires 'qrc' or 'file' prefix handled in C++ or UI)
         if (app.logoSource !== "") form.logoSource = app.logoSource
     }
@@ -405,37 +438,11 @@ Item {
     }
 
     // 2. UI Interaction Logic (UI -> C++)
-    Connections {
-                target: form.tfHeaderTitle
-                function onEditingFinished() { app.headerTitle = form.tfHeaderTitle.text }
-                // NEW: Remove focus when Enter is pressed
-                function onAccepted() { form.tfHeaderTitle.focus = false }
-            }
-            Connections {
-                target: form.tfCompanyName
-                function onEditingFinished() { app.companyName = form.tfCompanyName.text }
-                // NEW: Remove focus when Enter is pressed
-                function onAccepted() { form.tfCompanyName.focus = false }
-            }
-            Connections {
-                target: form.tfAddress
-                function onEditingFinished() { app.companyAddress = form.tfAddress.text }
-                // NEW: Remove focus when Enter is pressed
-                function onAccepted() { form.tfAddress.focus = false }
-            }
-            Connections {
-                target: form.tfPhone
-                function onEditingFinished() { app.companyPhone = form.tfPhone.text }
-                // NEW: Remove focus when Enter is pressed
-                function onAccepted() { form.tfPhone.focus = false }
-            }
-            Connections {
-                target: form.tfEmail
-                function onEditingFinished() { app.companyEmail = form.tfEmail.text }
-                // NEW: Remove focus when Enter is pressed
-                function onAccepted() { form.tfEmail.focus = false }
-            }
-
+    Binding { target: form.tfHeaderTitle; property: "text"; value: app.headerTitle }
+        Binding { target: form.tfCompanyName; property: "text"; value: app.companyName }
+        Binding { target: form.tfAddress; property: "text"; value: app.companyAddress }
+        Binding { target: form.tfPhone; property: "text"; value: app.companyPhone }
+        Binding { target: form.tfEmail; property: "text"; value: app.companyEmail }
         // Ensure Logo updates visually when C++ property changes (e.g. on load)
         Connections {
             target: app
