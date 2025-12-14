@@ -7,7 +7,7 @@ Item {
 
     Timer {
         id: timeUpdater
-        interval: 60000 
+        interval: 60000
         running: true
         repeat: true
     }

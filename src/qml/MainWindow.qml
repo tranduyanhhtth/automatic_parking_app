@@ -323,7 +323,10 @@ Item {
     Connections {
         target: searchPage
         function onTriggerCloseChanged() {
-            if (searchPage.triggerClose) contentStack.currentIndex = 0
+            if (searchPage.triggerClose) {
+                            contentStack.currentIndex = 0
+                            searchPage.triggerClose = false // <--- ADD THIS LINE
+                        }
         }
     }
     Connections {
@@ -439,17 +442,17 @@ Item {
 
     // 2. UI Interaction Logic (UI -> C++)
     Binding { target: form.tfHeaderTitle; property: "text"; value: app.headerTitle }
-        Binding { target: form.tfCompanyName; property: "text"; value: app.companyName }
-        Binding { target: form.tfAddress; property: "text"; value: app.companyAddress }
-        Binding { target: form.tfPhone; property: "text"; value: app.companyPhone }
-        Binding { target: form.tfEmail; property: "text"; value: app.companyEmail }
-        // Ensure Logo updates visually when C++ property changes (e.g. on load)
-        Connections {
-            target: app
-            function onLogoSourceChanged() {
-                 form.logoSource = app.logoSource
-            }
+    Binding { target: form.tfCompanyName; property: "text"; value: app.companyName }
+    Binding { target: form.tfAddress; property: "text"; value: app.companyAddress }
+    Binding { target: form.tfPhone; property: "text"; value: app.companyPhone }
+    Binding { target: form.tfEmail; property: "text"; value: app.companyEmail }
+    // Ensure Logo updates visually when C++ property changes (e.g. on load)
+    Connections {
+        target: app
+        function onLogoSourceChanged() {
+            form.logoSource = app.logoSource
         }
+    }
 
     Connections {
         target: app // This connects to your ParkingController instance
@@ -465,7 +468,6 @@ Item {
     Connections {
         target: form.btnSearch
         function onClicked() {
-            // Switch StackLayout to Index 1 (Search Page)
             contentStack.currentIndex = 1
         }
     }

@@ -148,43 +148,43 @@ Item {
 
                         // Company Name
                         Text {
-                                                id: txtCompanyName
-                                                text: "AITHINGS TECHNOLOGY CO., LTD"
-                                                color: "#cccccc"
-                                                font.pixelSize: 14
-                                                font.bold: true
-                                                verticalAlignment: Text.AlignVCenter
-                                            }
+                            id: txtCompanyName
+                            text: "AITHINGS TECHNOLOGY CO., LTD"
+                            color: "#cccccc"
+                            font.pixelSize: 14
+                            font.bold: true
+                            verticalAlignment: Text.AlignVCenter
+                        }
 
                         // Address
                         Text {
-                                                id: txtAddress
-                                                text: "Address: 4th floor, Minori Office Building, 67A Truong Dinh, Hanoi"
-                                                color: "white"
-                                                font.pixelSize: 12
-                                                verticalAlignment: Text.AlignVCenter
-                                                elide: Text.ElideRight
-                                                Layout.maximumWidth: 600
-                                            }
+                            id: txtAddress
+                            text: "Address: 4th floor, Minori Office Building, 67A Truong Dinh, Hanoi"
+                            color: "white"
+                            font.pixelSize: 12
+                            verticalAlignment: Text.AlignVCenter
+                            elide: Text.ElideRight
+                            Layout.maximumWidth: 600
+                        }
 
                         // Contact Row (Phone and Email)
                         RowLayout {
                             spacing: 15
 
                             Text {
-                                                        id: txtPhone
-                                                        text: "📞 +84 38 815 6494"
-                                                        color: "white"
-                                                        font.pixelSize: 12
-                                                        verticalAlignment: Text.AlignVCenter
-                                                    }
-                                                    Text {
-                                                        id: txtEmail
-                                                        text: "📧 info@aithings.vn"
-                                                        color: "white"
-                                                        font.pixelSize: 12
-                                                        verticalAlignment: Text.AlignVCenter
-                                                    }
+                                id: txtPhone
+                                text: "📞 +84 38 815 6494"
+                                color: "white"
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            Text {
+                                id: txtEmail
+                                text: "📧 info@aithings.vn"
+                                color: "white"
+                                font.pixelSize: 12
+                                verticalAlignment: Text.AlignVCenter
+                            }
                         }
                     }
 
@@ -221,11 +221,11 @@ Item {
                         id: settingsMenu
                         y: btnSettings.height
                         MenuItem {
-                                                id: miEditInfo
-                                                text: "Chỉnh sửa thông tin"
-                                                icon.name: "document-edit"
-                                            }
-                                            MenuSeparator {}
+                            id: miEditInfo
+                            text: "Chỉnh sửa thông tin"
+                            icon.name: "document-edit"
+                        }
+                        MenuSeparator {}
                         MenuItem { id: miCamera; text: "Cấu hình Camera" }
                         MenuItem { id: miBarrier; text: "Cấu hình Barrier" }
                         MenuSeparator {}
