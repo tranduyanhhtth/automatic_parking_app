@@ -360,6 +360,7 @@ Item {
         modal: true
         focus: true
         visible: searchPage.fromTimePickerVisible
+        onClosed: searchPage.fromTimePickerVisible = false
         x: (parent ? parent.width : 800) / 2 - width / 2
         y: (parent ? parent.height : 600) / 2 - height / 2
 
@@ -416,6 +417,7 @@ Item {
         modal: true
         focus: true
         visible: searchPage.toTimePickerVisible
+        onClosed: searchPage.fromTimePickerVisible = false
         x: (parent ? parent.width : 800) / 2 - width / 2
         y: (parent ? parent.height : 600) / 2 - height / 2
 
@@ -426,7 +428,7 @@ Item {
             spacing: 10
             RowLayout {
                 spacing: 8
-                Text { text: "Giờ"; color: "black" }
+                Text { text: "Giờ"; color: "white" }
                 ComboBox {
                     id: toHourCombo
                     model: 24
@@ -434,7 +436,7 @@ Item {
                     Layout.preferredWidth: 80
                     delegate: ItemDelegate { text: (index < 10 ? "0" : "") + index }
                 }
-                Text { text: "Phút"; color: "black" }
+                Text { text: "Phút"; color: "white" }
                 ComboBox {
                     id: toMinuteCombo
                     model: 60
