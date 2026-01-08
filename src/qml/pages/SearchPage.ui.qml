@@ -51,6 +51,8 @@ Item {
     // Add aliases for date picker ComboBoxes
     property alias fromYear: fromDatePopup.fromYear
     property alias fromMonth: fromDatePopup.fromMonth
+    property alias fromTimePopup: fromTimePopup
+    property alias toTimePopup: toTimePopup
     property alias fromDay: fromDatePopup.fromDay
     property alias toYear: toDatePopup.toYear
     property alias toMonth: toDatePopup.toMonth
@@ -85,6 +87,7 @@ Item {
                 Layout.preferredWidth: 140
                 Layout.preferredHeight: 40
                 background: Rectangle {
+                    color: "#222"
                     radius: 8
                     border.color: "#222"
                 }
@@ -230,19 +233,31 @@ Item {
                     spacing: 6
                     width: Math.max(headerRow.implicitWidth, resultsScroll.width)
                     RowLayout {
-                        id: headerRow
-                        spacing: 8
-                        Text { text: "ID"; color: "white"; font.bold: true; Layout.preferredWidth: 60 }
-                        Text { text: "Biển số"; color: "white"; font.bold: true; Layout.minimumWidth: 140; Layout.fillWidth: true }
-                        Text { text: "ID thẻ"; color: "white"; font.bold: true; Layout.minimumWidth: 140; Layout.fillWidth: true }
-                        Text { text: "Giờ vào"; color: "white"; font.bold: true; Layout.minimumWidth: 160; Layout.fillWidth: true }
-                        Text { text: "Giờ ra"; color: "white"; font.bold: true; Layout.minimumWidth: 160; Layout.fillWidth: true }
-                        Text { text: "Phí"; color: "white"; font.bold: true; Layout.preferredWidth: 80 }
-                        Text { text: "TT"; color: "white"; font.bold: true; Layout.preferredWidth: 80 }
-                        Text { text: "Phương thức thanh toán"; color: "white"; font.bold: true; Layout.preferredWidth: 100 }
-                        Text { text: ""; Layout.preferredWidth: 75 } // Detail placeholder
-                        Item { Layout.preferredWidth: 0 }
-                    }
+                                            id: headerRow
+                                            spacing: 8
+                                            // FIX: Force the header to take the full width of the container
+                                            width: parent.width
+
+                                            Text { text: "ID"; color: "white"; font.bold: true; Layout.preferredWidth: 60 }
+
+                                            // Flexible Middle Columns
+                                            Text { text: "Biển số"; color: "white"; font.bold: true; Layout.minimumWidth: 140; Layout.fillWidth: true }
+                                            Text { text: "ID thẻ"; color: "white"; font.bold: true; Layout.minimumWidth: 140; Layout.fillWidth: true }
+                                            Text { text: "Giờ vào"; color: "white"; font.bold: true; Layout.minimumWidth: 160; Layout.fillWidth: true }
+                                            Text { text: "Giờ ra"; color: "white"; font.bold: true; Layout.minimumWidth: 160; Layout.fillWidth: true }
+
+                                            // Fixed Columns
+                                            Text { text: "Phí"; color: "white"; font.bold: true; Layout.preferredWidth: 80 }
+                                            Text { text: "TT"; color: "white"; font.bold: true; Layout.preferredWidth: 80 }
+
+                                            // ADJUSTED: Width set to 130px
+                                            Text { text: "Thanh toán"; color: "white"; font.bold: true; Layout.preferredWidth: 130 }
+
+                                            // ADJUSTED: Width set to 80px (Matches the button width below)
+                                            Text { text: ""; Layout.preferredWidth: 80 }
+
+                                            Item { Layout.preferredWidth: 0 }
+                                        }
                     ListModel { id: resultsModel }
                     ListView {
                         id: resultsView
@@ -254,18 +269,33 @@ Item {
                             spacing: 8
                             width: resultsView.width
                             height: 54
+
                             Text { text: idText; color: "white"; Layout.preferredWidth: 60 }
+
+                            // Flexible Middle Columns
                             Text { text: plate; color: "#ddd"; Layout.minimumWidth: 140; Layout.fillWidth: true; elide: Text.ElideRight }
                             Text { text: rfid; color: "#ddd"; Layout.minimumWidth: 140; Layout.fillWidth: true; elide: Text.ElideRight }
                             Text { text: Qt.formatDateTime(checkin, "HH:mm:ss - dd/MM/yyyy"); color: "#ccc"; Layout.minimumWidth: 160; Layout.fillWidth: true; elide: Text.ElideRight }
                             Text { text: Qt.formatDateTime(checkout, "HH:mm:ss - dd/MM/yyyy"); color: "#ccc"; Layout.minimumWidth: 160; Layout.fillWidth: true; elide: Text.ElideRight }
+
+                            // Fixed Columns
                             Text { text: fee; color: "#ddd"; Layout.preferredWidth: 80 }
                             Text { text: status; color: "#ddd"; Layout.preferredWidth: 80 }
-                            Text { text: payment_check; color: "#ddd"; Layout.preferredWidth: 110 }
-                            Image { source: thumbnail; fillMode: Image.PreserveAspectFit; width: 72; height: 48 }
+
+                            // ADJUSTED: Width set to 130px (Matches Header)
+                            Text { text: payment_check; color: "#ddd"; Layout.preferredWidth: 130 }
+
+                            // (Image Component Removed Here)
+
+                            // Button Container
                             Rectangle {
-                                width: 80; height: 28; radius: 4; color: "#2d2f33"
+                                Layout.preferredWidth: 80; // Changed to Layout.preferredWidth to match layout behavior
+                                height: 28;
+                                radius: 4;
+                                color: "#2d2f33"
+
                                 Text { anchors.centerIn: parent; text: "Chi tiết"; color: "white" }
+
                                 MouseArea {
                                     anchors.fill: parent
                                     onPressed: searchPage.selectedRowId = idText
@@ -306,6 +336,7 @@ Item {
                 ComboBox {
                     id: fromYearCombo;
                     model: 101;
+                    displayText: 2000 + currentIndex
                     delegate:
                         ItemDelegate {
                             text: 2000+index
@@ -314,9 +345,33 @@ Item {
                     currentIndex: 25
                 }
                 Text { text: "Tháng"; color: "black" }
-                ComboBox { id: fromMonthCombo; model: 12; delegate: ItemDelegate { text: (index+1)<10?"0"+(index+1):""+(index+1) } Layout.preferredWidth: 90; currentIndex: 1 }
+                ComboBox {
+                    id: fromMonthCombo;
+                    model: 12;
+
+                    // ADD THIS LINE:
+                    displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
+
+                    delegate: ItemDelegate {
+                        text: (index+1)<10?"0"+(index+1):""+(index+1)
+                    }
+                    Layout.preferredWidth: 90;
+                    currentIndex: 1
+                }
                 Text { text: "Ngày"; color: "black" }
-                ComboBox { id: fromDayCombo; model: 31; delegate: ItemDelegate { text: (index+1)<10?"0"+(index+1):""+(index+1) } Layout.preferredWidth: 90; currentIndex: 1 }
+                ComboBox {
+                    id: fromDayCombo;
+                    model: 31;
+
+                    // ADD THIS LINE:
+                    displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
+
+                    delegate: ItemDelegate {
+                        text: (index+1)<10?"0"+(index+1):""+(index+1)
+                    }
+                    Layout.preferredWidth: 90;
+                    currentIndex: 1
+                }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
@@ -340,11 +395,35 @@ Item {
             RowLayout {
                 spacing: 8
                 Text { text: "Năm"; color: "black" }
-                ComboBox { id: toYearCombo; model: 101; delegate: ItemDelegate { text: 2000+index } Layout.preferredWidth: 100; currentIndex: 25 }
+                ComboBox { id: toYearCombo; model: 101; displayText: 2000 + currentIndex; delegate: ItemDelegate { text: 2000+index } Layout.preferredWidth: 100; currentIndex: 25 }
                 Text { text: "Tháng"; color: "black" }
-                ComboBox { id: toMonthCombo; model: 12; delegate: ItemDelegate { text: (index+1)<10?"0"+(index+1):""+(index+1) } Layout.preferredWidth: 90; currentIndex: 1 }
+                ComboBox {
+                    id: toMonthCombo;
+                    model: 12;
+
+                    // ADD THIS LINE:
+                    displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
+
+                    delegate: ItemDelegate {
+                        text: (index+1)<10?"0"+(index+1):""+(index+1)
+                    }
+                    Layout.preferredWidth: 90;
+                    currentIndex: 1
+                }
                 Text { text: "Ngày"; color: "black" }
-                ComboBox { id: toDayCombo; model: 31; delegate: ItemDelegate { text: (index+1)<10?"0"+(index+1):""+(index+1) } Layout.preferredWidth: 90; currentIndex: 1 }
+                ComboBox {
+                    id: toDayCombo;
+                    model: 31;
+
+                    // ADD THIS LINE:
+                    displayText: (currentIndex + 1) < 10 ? "0" + (currentIndex + 1) : "" + (currentIndex + 1)
+
+                    delegate: ItemDelegate {
+                        text: (index+1)<10?"0"+(index+1):""+(index+1)
+                    }
+                    Layout.preferredWidth: 90;
+                    currentIndex: 1
+                }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 10
