@@ -331,21 +331,33 @@ Item {
                 if (r.setRfidCardStatus) r.setRfidCardStatus(formRfid, 'assigned');
 
                 // [FIX 2] Clear Form (only if new)
+                // [FIX 2] Clear Form (only if new)
                 if (!isExtend) {
-                // 1. Clear Basic Info
-                    if(adminPage.subUserText) adminPage.subUserText.text = '';
-                    if(adminPage.subPlate) adminPage.subPlate.text = '';
-                    if(adminPage.subRfid) adminPage.subRfid.text = '';
-                    // 2. Clear Extra Info (Phone & Card Number)
-                    if(adminPage.rfidPhoneField) adminPage.rfidPhoneField.text = '';
-                    if(adminPage.rfidCardNumberField) adminPage.rfidCardNumberField.text = '';
-                    // 3. Clear/Reset Payment & Dates
-                    if(adminPage.subPrice) adminPage.subPrice.text = '';
-                    if(adminPage.subEnd) adminPage.subEnd.text = '';
-                    if(adminPage.subStart) adminPage.subStart.text = todayIso(); // Reset start date to Today
-                    // 4. Reset internal selection state
-                    selectedSubId = -1;
-                }
+                                    // 1. Force Clear RFID Tab Fields using explicit aliases
+                                    if(adminPage.rfidNameField) adminPage.rfidNameField.text = ""
+                                    if(adminPage.rfidPlateField) adminPage.rfidPlateField.text = ""
+                                    if(adminPage.rfidTextField) adminPage.rfidTextField.text = "" // This is the RFID Code field
+                                    if(adminPage.rfidPhoneField) adminPage.rfidPhoneField.text = ""
+                                    if(adminPage.rfidCardNumberField) adminPage.rfidCardNumberField.text = ""
+
+                                    // 2. Reset Combos (Essential to show full list and hide sub panel)
+                                    if(adminPage.rfidVehicleCombo) adminPage.rfidVehicleCombo.currentIndex = 0 // Reset to "Tất cả"
+                                    if(adminPage.rfidTicketCombo) adminPage.rfidTicketCombo.currentIndex = 0 // Reset to "Tất cả"
+
+                                    // 3. Clear Subscription Panel Fields
+                                    if(adminPage.subPrice) adminPage.subPrice.text = ""
+                                    if(adminPage.subEnd) adminPage.subEnd.text = ""
+                                    if(adminPage.subStart) adminPage.subStart.text = todayIso()
+
+                                    // 4. Try to call the native resetFilters on RFID Logic (Double safety)
+                                    // This ensures the list filter logic knows the text is empty
+                                    if (adminPage.rfidLogic && adminPage.rfidLogic.resetFilters) {
+                                        adminPage.rfidLogic.resetFilters()
+                                    }
+
+                                    // 5. Reset internal state
+                                    selectedSubId = -1;
+                                }
                 // [FIX 3] Force signals to fire to update RfidCardsLogic
                 if (adminPage) {
                     adminPage.triggerSubsChanged = !adminPage.triggerSubsChanged;
@@ -359,16 +371,49 @@ Item {
             }
         }
 
-    function updateSubscription(){
-        if(selectedSubId <= 0){ msg('Chưa chọn đăng ký để cập nhật'); return; }
-        const r=rRepo();
-        if(!r || !r.updateSubscriptionPaymentDetails){ msg('Thiếu API updateSubscription'); return; }
+    function updateSubscription() {
+        if (selectedSubId <= 0) {
+            msg('Chưa chọn đăng ký để cập nhật');
+            return;
+        }
+        const r = rRepo();
+        if (!r) return;
+
+        // 1. Get current form values
+        const formName = adminPage.subUserText ? adminPage.subUserText.text : '';
+        const formPhone = (adminPage.rfidPhoneField) ? adminPage.rfidPhoneField.text : '';
+        const formPlate = (adminPage.subPlate) ? adminPage.subPlate.text : '';
+        const formRfid = (adminPage.subRfid) ? adminPage.subRfid.text : '';
+        const formCardNum = (adminPage.rfidCardNumberField) ? adminPage.rfidCardNumberField.text : '';
+
+        // 2. Update Payment Details (Existing Logic)
         const paymentRaw = adminPage.subPayment ? adminPage.subPayment.currentText : '';
         const payment = paymentRaw.toLowerCase().indexOf('sau') >= 0 ? 'postpaid' : 'prepaid';
         const paymentMethodRaw = adminPage.subPaymentMethod ? adminPage.subPaymentMethod.currentText : '';
         const paymentMethod = paymentMethodRaw.toLowerCase().indexOf('chuy') >= 0 ? 'transfer' : 'cash';
-        const ok = r.updateSubscriptionPaymentDetails(selectedSubId, payment, paymentMethod);
-        if(ok){ msg('Cập nhật đăng ký thành công'); refreshSubs(); } else { msg('Lỗi khi cập nhật đăng ký'); }
+
+        let ok = r.updateSubscriptionPaymentDetails(selectedSubId, payment, paymentMethod);
+
+        // 3. NEW: Update User and RFID Card information
+        if (ok) {
+            // Update User table
+            r.upsertUser(formName, formPhone, formRfid, formPlate, 'car');
+
+            // Update RFID Card table to sync owner name/phone
+            if (r.upsertRfidCard) {
+                const ticket = currentTicketFromRfid();
+                r.upsertRfidCard(formRfid, 'car', ticket, 'assigned', '', formName, formPlate, formPhone, formCardNum);
+            }
+
+            msg('Cập nhật thông tin thành công');
+
+            // Refresh UI
+            refreshSubs();
+            if (adminPage.rfidLogic) adminPage.rfidLogic.refresh();
+            adminPage.triggerUsersChanged = !adminPage.triggerUsersChanged;
+        } else {
+            msg('Lỗi khi cập nhật đăng ký');
+        }
     }
 
     function cancelExtend(){

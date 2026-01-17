@@ -3530,8 +3530,9 @@ QVariantMap DatabaseManager::getLatestPricing(const QString &vehicleType,
 {
     QVariantMap out;
     QSqlQuery q(DB_Connection);
+    // [CHANGE] Added start_time, end_time to SELECT query
     q.prepare(R"(
-        SELECT id, vehicle_type, ticket_type, description, base_fee, grace_period, incremental_fee, max_daily_fee
+        SELECT id, vehicle_type, ticket_type, description, base_fee, grace_period, incremental_fee, max_daily_fee, start_time, end_time
         FROM pricing
         WHERE vehicle_type = :vt AND ticket_type = :tt
         ORDER BY id DESC LIMIT 1
@@ -3545,18 +3546,22 @@ QVariantMap DatabaseManager::getLatestPricing(const QString &vehicleType,
         out.insert("ticket_type", q.value("ticket_type"));
         const QString descOrJson = q.value("description").toString();
         out.insert("description", descOrJson);
-        // For compatibility, expose as json/time_slot_text if it looks like JSON
+
         QJsonParseError perr;
         const auto doc = QJsonDocument::fromJson(descOrJson.toUtf8(), &perr);
         if (perr.error == QJsonParseError::NoError && doc.isObject())
             out.insert("json", doc.object().toVariantMap());
         else
             out.insert("json", QVariant());
+
         out.insert("time_slot_text", descOrJson);
         out.insert("base_fee", q.value("base_fee"));
         out.insert("grace_period", q.value("grace_period"));
         out.insert("incremental_fee", q.value("incremental_fee"));
         out.insert("max_daily_fee", q.value("max_daily_fee"));
+        // [CHANGE] Insert start/end time into result
+        out.insert("start_time", q.value("start_time"));
+        out.insert("end_time", q.value("end_time"));
     }
     return out;
 }

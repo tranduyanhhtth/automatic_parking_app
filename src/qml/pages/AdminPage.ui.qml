@@ -693,6 +693,18 @@ Item {
 											Layout.fillWidth: true
 										}
 										Text {
+												text: "Bắt đầu"
+												color: "white"
+												font.bold: true
+												Layout.preferredWidth: 80
+											}
+											Text {
+												text: "Kết thúc"
+												color: "white"
+												font.bold: true
+												Layout.preferredWidth: 80
+											}
+										Text {
 											text: "Giá (VND)"
 											color: "white"
 											font.bold: true
@@ -744,6 +756,62 @@ Item {
 													wrapMode: Text.Wrap
 													lineHeight: 1.2
 												}
+												TextField {
+														id: tfStartTime
+														text: start_value
+														readOnly: !pricingLogic.editMode || !is_time_editable
+														enabled: is_time_editable
+														placeholderText: "HH:mm"
+														color: "black"
+														placeholderTextColor: "#bbbbbb"
+														Layout.preferredWidth: 80
+														horizontalAlignment: TextInput.AlignHCenter
+
+														// Validate time format HH:mm
+														validator: RegularExpressionValidator { regularExpression: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/ }
+
+														background: Rectangle {
+															color: tfStartTime.readOnly ? "gray" : "white"
+															radius: 6
+															border.color: "#666666"
+														}
+													}
+
+												Connections {
+														target: tfStartTime
+														function onTextChanged() {
+															pricingLogic.onTimeChanged(ticket_type, true, tfStartTime.text)
+														}
+													}
+
+													// [CHANGE] End Time Input
+													TextField {
+														id: tfEndTime
+														text: end_value
+														readOnly: !pricingLogic.editMode || !is_time_editable
+														enabled: is_time_editable
+														placeholderText: "HH:mm"
+														color: "black"
+														placeholderTextColor: "#bbbbbb"
+														Layout.preferredWidth: 80
+														horizontalAlignment: TextInput.AlignHCenter
+
+														validator: RegularExpressionValidator { regularExpression: /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/ }
+
+														background: Rectangle {
+															color: tfEndTime.readOnly ? "gray" : "white"
+															radius: 6
+															border.color: "#666666"
+														}
+													}
+
+													Connections {
+															target: tfEndTime
+															function onTextChanged() {
+																pricingLogic.onTimeChanged(ticket_type, false, tfEndTime.text)
+															}
+														}
+
 												TextField {
 													id: tfPriceValue
 													text: price_value
@@ -920,6 +988,7 @@ Item {
 										height: 28
 										radius: 8
 										color: "#2b7"
+										visible: cbTicket.currentIndex < 8
 										Text {
 											anchors.centerIn: parent
 											text: "Lưu"
@@ -1045,6 +1114,19 @@ Item {
 												width: 90; height: 28; radius: 6; color: "#ff9800" // Orange
 												Text { anchors.centerIn: parent; text: "Gia hạn"; color: "white" }
 												MouseArea { anchors.fill: parent; onClicked: adminPage.triggerSubExtend = !adminPage.triggerSubExtend }
+											}
+											Rectangle {
+												width: 90; height: 28; radius: 6; color: "#ffc107" // Amber/Gold color
+												Text {
+													anchors.centerIn: parent;
+													text: "Cập nhật";
+													color: "black";
+													font.pixelSize: 12
+												}
+												MouseArea {
+													anchors.fill: parent;
+													onClicked: adminPage.triggerSubUpdate = !adminPage.triggerSubUpdate
+												}
 											}
 										}
 									}

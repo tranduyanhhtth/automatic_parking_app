@@ -150,6 +150,14 @@ Item {
         if (tfDesc) tfDesc.text = ""
         if (cbVehicle) cbVehicle.currentIndex = 0
         if (cbTicket) cbTicket.currentIndex = 0
+        if (adminPage) {
+                    if (adminPage.subStart) adminPage.subStart.text = ""
+                    if (adminPage.subEnd) adminPage.subEnd.text = ""
+                    if (adminPage.subPrice) adminPage.subPrice.text = ""
+                    // Reset payment combos if necessary
+                    if (adminPage.subPayment) adminPage.subPayment.currentIndex = 0
+                    if (adminPage.subPaymentMethod) adminPage.subPaymentMethod.currentIndex = 0
+                }
         scannedRfid = ""
         if (!isProgrammaticUpdate) {
             filterList()
@@ -360,6 +368,15 @@ Item {
         target: adminPage ? adminPage.tabBar : null
         function onCurrentIndexChanged(){ if (adminPage && adminPage.tabBar.currentIndex === 2) refresh() }
     }
+
+    Connections {
+            target: adminPage
+            function onTriggerSubsChangedChanged() {
+                // When the Subscription list changes (meaning a Subscribe action succeeded),
+                // we clear the form to make it clean for the next user.
+                resetFilters()
+            }
+        }
 
     // 3. LISTEN TO ALL TEXT FIELDS FOR SEARCH
 
