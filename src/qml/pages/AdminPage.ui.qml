@@ -1339,12 +1339,23 @@ Item {
 														elide: Text.ElideRight
 													}
 													Text {
-														text: vehicle_type
+														text: vehicle_type === 'car' ? "Ô tô" : (vehicle_type === 'bike' ? "Xe máy" : vehicle_type)
 														color: "white"
 														Layout.preferredWidth: 100
 													}
 													Text {
-														text: ticket_type
+														text:	ticket_type === 'hourly' ? "Vé lượt" :
+																ticket_type === 'daily_day' ? "Ngày (Sáng)" :
+																ticket_type === 'daily_night' ? "Ngày (Tối)" :
+																ticket_type === 'overnight' ? "Qua đêm" :
+																ticket_type === 'monthly' ? "Tháng" :
+																ticket_type === 'quarterly' ? "Quý" :
+																ticket_type === 'yearly' ? "Năm" :
+																ticket_type === 'morning' ? "Ca Sáng" :
+																ticket_type === 'afternoon' ? "Ca Chiều" :
+																ticket_type === 'evening' ? "Ca Tối" :
+																ticket_type
+
 														color: "white"
 														Layout.preferredWidth: 140
 													}
@@ -1354,7 +1365,11 @@ Item {
 														Layout.preferredWidth: 120
 													}
 													Text {
-														text: status
+														text: status === 'available' ? "Sẵn dùng" :
+																  status === 'assigned' ? "Đã gán" :
+																  status === 'lost' ? "Mất" :
+																  status === 'damaged' ? "Hỏng" :
+																  status
 														color: "white"
 														Layout.preferredWidth: 120
 													}
