@@ -105,20 +105,28 @@ void ParkingController::processEntranceRfid(const QString &normRfid, int laneIdx
         QString detectedPlate;
         QByteArray ann1, ann2;
         // OCR/YOLO temporarily disabled
-        // if (m_ocr)
-        // {
-        //     const QVariantMap res = m_ocr->recognizePlates(img1, img2);
-        //     detectedPlate = res.value("front").toString();
-        //     if (detectedPlate.isEmpty())
-        //         detectedPlate = res.value("rear").toString();
-        //     // HID log OCR ở cổng vào
-        //     if (auto hid = qobject_cast<QObject *>(m_reader))
-        //     {
-        //         const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
-        //                                 .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
-        //         QMetaObject::invokeMethod(hid, "debugLog", Qt::QueuedConnection, Q_ARG(QString, msg));
-        //     }
-        // }        // Always update entrance preview with raw images
+        if (m_ocr)
+        {
+            // 1. Run the recognition
+            const QVariantMap res = m_ocr->recognizePlates(img1, img2);
+
+            // 2. Extract the detected plate
+            detectedPlate = res.value("front").toString();
+            if (detectedPlate.isEmpty())
+                detectedPlate = res.value("rear").toString();
+
+            // 3. Update snapshots to the "Annotated" versions (with green boxes)
+            QByteArray ann1 = res.value("frontAnnotated").toByteArray();
+            if (!ann1.isEmpty()) img1 = ann1;
+
+            QByteArray ann2 = res.value("rearAnnotated").toByteArray();
+            if (!ann2.isEmpty()) img2 = ann2;
+
+            // 4. Debug Logging
+            const QString msg = QStringLiteral("[HID] OCR entrance RFID %1 -> plate: %2")
+                                    .arg(normRfid, detectedPlate.isEmpty() ? QStringLiteral("(none)") : detectedPlate);
+            emit debugLog(msg);
+        }
         const QString preview1 = makeDataUrlFromBytes(img1);
         const QString preview2 = makeDataUrlFromBytes(img2);
         setLanePreview(laneIdx, preview1, preview2);

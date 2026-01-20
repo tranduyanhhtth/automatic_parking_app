@@ -204,7 +204,7 @@ Item {
 		id: revenueSaveDialog
 		title: "Chọn nơi lưu file Excel"
 		nameFilters: ["Excel files (*.xlsx)", "All files (*.*)"] // Changed filter
-		onAccepted: adminPage.triggerExportExcel = !adminPage.triggerExportExcel
+		fileMode: FileDialog.SaveFile
 	}
 
 	FileDialog {

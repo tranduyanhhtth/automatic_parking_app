@@ -81,13 +81,18 @@ Item {
                         return;
                     }
 
-                    // --- CHANGED: REMOVED DIALOG OPENING ---
-                    // Instead of opening adminPage.fileSaveDialog.open(), we call export directly.
-                    // We pass an empty string "" so C++ knows to use the default Desktop path.
-                    revenueLogic.exportDataForExcel("");
+                    // 2. Open the Dialog instead of exporting immediately
+                    if (adminPage.fileSaveDialog) {
+                        // Generate a default filename based on date
+                        var today = new Date();
+                        var dateString = today.getFullYear() + "-" + ("0" + (today.getMonth() + 1)).slice(-2) + "-" + ("0" + today.getDate()).slice(-2);
+                        adminPage.fileSaveDialog.currentFile = "DoanhThu_" + dateString + ".csv";
 
-                    // --- CHANGED: Reset trigger manually ---
-                    // Since we aren't waiting for a dialog to close, we must reset this now.
+                        // Open the dialog
+                        adminPage.fileSaveDialog.open();
+                    }
+
+                    // 3. Reset trigger immediately
                     adminPage.triggerExportExcel = false;
                 }
     }

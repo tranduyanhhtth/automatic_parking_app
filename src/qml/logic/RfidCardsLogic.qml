@@ -36,6 +36,7 @@ Item {
     property bool triggerMarkLost: false
     property bool triggerMarkDamaged: false
 
+
     ListModel { id: listModel }
 
     function refresh() {
