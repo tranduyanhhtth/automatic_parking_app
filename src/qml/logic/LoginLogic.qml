@@ -4,14 +4,18 @@ Item {
     id: loginLogic
     property Item adminPage
     property var notify
-    property var allowedAccounts
+    property var authManager
 
     Connections {
         target: adminPage
         function onTriggerLoginChanged() {
             const u = adminPage.loginUserField.text || ""
             const p = adminPage.loginPassField.text || ""
-            const ok = allowedAccounts && allowedAccounts.some(a => a.username === u && a.password === p)
+            if (!authManager || !authManager.configured) {
+                adminPage.loginErrorLabel.text = 'Chưa cấu hình tài khoản quản trị'
+                return
+            }
+            const ok = authManager.authenticate(u, p)
             if (ok) {
                 // Find the root item to access its properties
                 var root = adminPage

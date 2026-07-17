@@ -19,11 +19,6 @@ Item {
     focus: true
     Keys.enabled: true
 
-    // Hardcoded accounts
-    readonly property var allowedAccounts: [
-        { username: "admin", password: "123" },
-        { username: "manager", password: "123" }
-    ]
     // Simple auth state for Admin access
     property bool isAuthenticated: false
 
@@ -298,7 +293,7 @@ Item {
             if (item) {
                 item.adminPage = adminPage
                 item.notify = (msg) => root.showToast(msg)
-                item.allowedAccounts = root.allowedAccounts
+                item.authManager = adminAuth
                 adminPage.rfidLogic = item.rfidLogic
                 adminPage.usersLogic = item.usersLogic
                 adminPage.employeeLogic = item.employeeLogic

@@ -67,6 +67,7 @@ qt_add_qml_module(appsmart_parking_system
         utils/ocr/ocrprocessor.h utils/ocr/ocrprocessor.cpp
         utils/ocr/tesseract_ocr.h utils/ocr/tesseract_ocr.cpp
         utils/ocr/yolo_onnx_detector.h utils/ocr/yolo_onnx_detector.cpp
+        security/authmanager.h security/authmanager.cpp
         controller/parkingcontroller.h controller/parkingcontroller.cpp
         domain/ports/icardreader.h
         domain/model/parkingrecord.h

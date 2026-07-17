@@ -7,7 +7,7 @@ Item {
     // References
     property Item adminPage           // AdminPage.ui.qml instance
     property var notify               // function(message)
-    property var allowedAccounts      // optional array of {username,password}
+    property var authManager          // C++ AuthManager context object
     property alias rfidLogic: rfidLogic
     property alias subsLogic: subsLogic
     property alias usersLogic: usersLogic
@@ -18,7 +18,7 @@ Item {
         id: loginLogic
         adminPage: adminLogic.adminPage
         notify: adminLogic.notify
-        allowedAccounts: adminLogic.allowedAccounts
+        authManager: adminLogic.authManager
     }
     UsersLogic {
         id: usersLogic

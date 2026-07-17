@@ -20,6 +20,7 @@
 #include "utils/io_card/windows_rawinput_router.h"
 #include "utils/io_card/hidkeyboardcardreader_device.h"
 #include "utils/ocr/ocrprocessor.h"
+#include "security/authmanager.h"
 
 int main(int argc, char *argv[])
 {
@@ -42,9 +43,11 @@ int main(int argc, char *argv[])
 
     auto db = new DatabaseManager(&app);
     db->initialize();
-    // Populate demo data on first run (no-op if data already exists)
-    // Exactly 10 days x 10 sessions = 100 session revenues; 2 subscription revenues/day
-    db->seedDemoData(10, 10, 2);
+    // Demo records are opt-in so normal startup never inserts sample financial data.
+    if (QCoreApplication::arguments().contains(QStringLiteral("--seed-demo-data")))
+        db->seedDemoData(10, 10, 2);
+
+    auto adminAuth = new AuthManager(&app);
 
     auto barrier1 = new UsbRelayBarrier(&app);
     barrier1->setBaudRate(settings->barrier1Baud());
@@ -225,6 +228,7 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty("barrier1", barrier1);
     engine.rootContext()->setContextProperty("barrier2", barrier2);
     engine.rootContext()->setContextProperty("settings", settings);
+    engine.rootContext()->setContextProperty("adminAuth", adminAuth);
 
     // Phần này là để xử lý khi QML khởi tạo, bao gồm cả Window và Item
     QQuickWindow *createdWindow = nullptr;
