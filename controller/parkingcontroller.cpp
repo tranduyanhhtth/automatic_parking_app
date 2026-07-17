@@ -681,6 +681,11 @@ bool ParkingController::approveAndOpenBarrier()
     }
     m_activeExitLane = 1;
     loadExitReview(m_lastRfid);
+    const QVariantMap sessionBefore = m_db->fetchFullOpenSession(normalizeRfid(m_lastRfid));
+    const int sessionId = sessionBefore.value(QStringLiteral("id")).toInt();
+    const int fee = sessionId > 0
+        ? m_db->computeFeeForSession(sessionId, QDateTime::currentDateTime().toString(Qt::ISODate), false)
+        : 0;
     QString coTime;
     // Chụp ảnh checkout tại cổng ra và lưu DB
     QByteArray exit1;
@@ -696,14 +701,7 @@ bool ParkingController::approveAndOpenBarrier()
         m_checkOutTime = coTime;
         emit timesChanged();
         m_db->deleteClosedSessions(normalizeRfid(m_lastRfid));
-        // Show actual fee on main display
-        int fee = -1;
-        {
-            auto before = m_db->fetchFullOpenSession(normalizeRfid(m_lastRfid));
-            const int sid = before.value("id").toInt();
-            if (sid > 0)
-                fee = m_db->computeFeeForSession(sid, coTime, false);
-        }
+        // The fee was captured while the session was still open.
         if (fee >= 0)
         {
             setLaneMoneyMessage(1,
@@ -782,8 +780,23 @@ void ParkingController::completeCheckout(const QString &rfid, const QString &pla
     QByteArray live1 = cam->captureInputSnapshot(85);
     QByteArray live2 = cam->captureOutputSnapshot(85);
 
+    // Preserve session details before checkout changes it from open to closed.
+    const QVariantMap sessionBefore = m_db->fetchFullOpenSession(rfid);
+    if (sessionBefore.isEmpty())
+    {
+        m_message = QStringLiteral("Không tìm thấy phiên gửi xe đang mở");
+        emit messageChanged();
+        return;
+    }
+    const QString checkinBefore = sessionBefore.value(QStringLiteral("checkin_time")).toString();
+    const int sessionId = sessionBefore.value(QStringLiteral("id")).toInt();
+    const bool isSub = m_db->hasActiveSubscription(rfid, plate, QString());
+    const int authoritativeFee = (!isSub && sessionId > 0)
+        ? qMax(0, m_db->computeFeeForSession(sessionId, QDateTime::currentDateTime().toString(Qt::ISODate), false))
+        : 0;
+    Q_UNUSED(fee);
+
     QString coTime;
-    // Pass the paymentMethod to the database function
     const CheckOutResult r = m_db->checkOutRfidWithImages(rfid, &coTime, live1, live2, paymentMethod);
 
     if (r == CheckOutResult::OkMatched) {
@@ -802,18 +815,12 @@ void ParkingController::completeCheckout(const QString &rfid, const QString &pla
         m_message = QStringLiteral("Check-out thành công");
         emit messageChanged();
 
-        // Re-fetch session info to get final fee and check-in time for UI display
-        QVariantMap finalSession = m_db->fetchFullOpenSession(rfid);
-        const QString checkinBefore = finalSession.value("checkin_time").toString();
-
-        bool isSub = m_db->hasActiveSubscription(rfid, plate, QString());
-
         if (isSub) {
             setLaneMoneyMessage(laneIdx, QStringLiteral("%1: Vé đăng ký - không thu phí").arg(laneLabel(laneIdx)));
         } else {
             setLaneMoneyMessage(laneIdx,
                                 QStringLiteral("%1: Đã thu %2 VND (%3)")
-                                    .arg(laneLabel(laneIdx), QLocale::system().toString(fee), paymentMethod));
+                                    .arg(laneLabel(laneIdx), QLocale::system().toString(authoritativeFee), paymentMethod));
         }
 
         m_exitCardId = rfid;

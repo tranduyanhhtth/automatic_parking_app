@@ -22,6 +22,7 @@ class DatabaseManager : public QObject, public IParkingRepository
 
 public:
     explicit DatabaseManager(QObject *parent = nullptr);
+    explicit DatabaseManager(const QString &databasePath, QObject *parent = nullptr);
 
     // Khởi tạo CSDL (tạo bảng nếu chưa có)
     bool initialize();

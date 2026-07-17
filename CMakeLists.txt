@@ -60,6 +60,7 @@ qt_add_qml_module(appsmart_parking_system
         utils/gstreamer/gstreamerplayer.h utils/gstreamer/gstreamerplayer.cpp
         utils/gstreamer/videoframeproducer.h
         utils/db/databasemanager.h utils/db/databasemanager.cpp
+        utils/db/paymentutils.h utils/db/paymentutils.cpp
         utils/config/settings.h utils/config/settings.cpp
         utils/io_card/windows_rawinput_router.h utils/io_card/windows_rawinput_router.cpp
         utils/io_card/hidkeyboardcardreader_device.h utils/io_card/hidkeyboardcardreader_device.cpp

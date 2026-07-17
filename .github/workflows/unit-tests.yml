@@ -1,0 +1,38 @@
+﻿name: Unit tests
+
+on:
+  push:
+    branches: [finale, "codex/**"]
+  pull_request:
+    branches: [finale]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Qt 6.8
+        shell: pwsh
+        run: |
+          python -m pip install --disable-pip-version-check aqtinstall
+          python -m aqt install-qt windows desktop 6.8.3 win64_msvc2022_64 -m qtmultimedia qtserialport -O C:\Qt
+
+      - name: Configure tests
+        shell: pwsh
+        run: cmake -S tests -B build-tests -DCMAKE_PREFIX_PATH=C:\Qt\6.8.3\msvc2022_64
+
+      - name: Build tests
+        run: cmake --build build-tests --config Release --parallel
+
+      - name: Run tests
+        run: ctest --test-dir build-tests --build-config Release --output-on-failure

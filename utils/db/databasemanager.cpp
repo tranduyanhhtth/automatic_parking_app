@@ -1,4 +1,5 @@
 #include "databasemanager.h"
+#include "utils/db/paymentutils.h"
 #include <QFile>
 #include <QRegularExpression>
 #include <QSqlRecord>
@@ -41,10 +42,17 @@ static qint64 getWindowOverlap(const QDateTime &sessionStart, const QDateTime &s
     return qMax<qint64>(0, seconds / 60);
 }
 
-DatabaseManager::DatabaseManager(QObject *parent) : QObject(parent)
+DatabaseManager::DatabaseManager(QObject *parent)
+    : DatabaseManager(QString(), parent)
+{
+}
+
+DatabaseManager::DatabaseManager(const QString &databasePath, QObject *parent) : QObject(parent)
 {
     DB_Connection = QSqlDatabase::addDatabase("QSQLITE");
-    const QString dbPath = QCoreApplication::applicationDirPath() + "/../../database/parking_lot.db";
+    const QString dbPath = databasePath.isEmpty()
+        ? QCoreApplication::applicationDirPath() + "/../../database/parking_lot.db"
+        : databasePath;
     dbFilePath_ = dbPath;
     qDebug() << "[DB] Expected database path:" << dbPath;
     {
@@ -2734,7 +2742,14 @@ CheckOutResult DatabaseManager::checkOutRfidWithImages(const QString &rfid,
     // Insert into revenues table if there was a fee
     if (fee > 0)
     {
-        insertRevenue(id, std::nullopt, std::nullopt, fee, "cash", "parking_session", paymentMethod);
+        const QString paymentType = PaymentUtils::normalizePaymentType(paymentMethod);
+        if (paymentType.isEmpty()
+            || insertRevenue(id, std::nullopt, std::nullopt, fee, paymentType,
+                             QStringLiteral("parking_session"), paymentMethod) <= 0)
+        {
+            DB_Connection.rollback();
+            return CheckOutResult::Error;
+        }
     }
 
     DB_Connection.commit();
